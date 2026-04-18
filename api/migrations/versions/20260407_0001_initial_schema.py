@@ -25,46 +25,40 @@ def _table_exists(conn, table: str) -> bool:
     return bool(row)
 
 
+def _column_exists(conn, table: str, column: str) -> bool:
+    row = conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND COLUMN_NAME = :column LIMIT 1"
+        ),
+        {"table": table, "column": column},
+    ).fetchone()
+    return bool(row)
+
+
 def _add_column_if_missing(table: str, column: str, definition: str) -> None:
-    op.execute(text(f"""
-        SET @q = (
-            SELECT IF(
-                EXISTS(
-                    SELECT 1
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = '{table}'
-                ) AND COUNT(*) = 0,
-                'ALTER TABLE `{table}` ADD COLUMN {column} {definition}',
-                'SELECT 1')
-            FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = '{table}'
-              AND COLUMN_NAME = '{column}'
-        );
-        PREPARE _stmt FROM @q; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
-    """))
+    conn = op.get_bind()
+    if not _table_exists(conn, table) or _column_exists(conn, table, column):
+        return
+    conn.execute(text(f"ALTER TABLE `{table}` ADD COLUMN {column} {definition}"))
+
+
+def _index_exists(conn, table: str, index_name: str) -> bool:
+    row = conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.STATISTICS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table AND INDEX_NAME = :index_name LIMIT 1"
+        ),
+        {"table": table, "index_name": index_name},
+    ).fetchone()
+    return bool(row)
 
 
 def _add_index_if_missing(table: str, index_name: str, ddl: str) -> None:
-    op.execute(text(f"""
-        SET @q = (
-            SELECT IF(
-                EXISTS(
-                    SELECT 1
-                    FROM information_schema.TABLES
-                    WHERE TABLE_SCHEMA = DATABASE()
-                      AND TABLE_NAME = '{table}'
-                ) AND COUNT(*) = 0,
-                '{ddl}',
-                'SELECT 1')
-            FROM information_schema.STATISTICS
-            WHERE TABLE_SCHEMA = DATABASE()
-              AND TABLE_NAME = '{table}'
-              AND INDEX_NAME = '{index_name}'
-        );
-        PREPARE _stmt FROM @q; EXECUTE _stmt; DEALLOCATE PREPARE _stmt;
-    """))
+    conn = op.get_bind()
+    if not _table_exists(conn, table) or _index_exists(conn, table, index_name):
+        return
+    conn.execute(text(ddl))
 
 
 def upgrade() -> None:
