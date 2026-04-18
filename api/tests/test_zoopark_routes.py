@@ -8,6 +8,8 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
+
 
 class _FakeRouter:
     def __init__(self, *args, **kwargs):
@@ -163,8 +165,8 @@ class ZooParkRouteTests(unittest.TestCase):
                 {"ok": True, "rub": 10, "usd": 2, "paw_coins": 3, "balance_seq": 17, "data_version": 0},
             )
 
-        update_calls = [call.args for call in cur.execute.call_args_list if call.args and isinstance(call.args[0], str) and call.args[0].startswith("UPDATE users SET")]
-        self.assertIn(("UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), update_calls)
+        update_calls = [call.args for call in cur.execute.call_args_list if call.args and isinstance(call.args[0], str) and call.args[0].startswith(f"UPDATE {ZOOPARK_USERS_TABLE} SET")]
+        self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), update_calls)
 
     def test_save_uses_pre_sync_balance_seq_for_non_rub_fields(self) -> None:
         module = importlib.import_module("api.app.api.routes.zoopark_core")
@@ -243,7 +245,7 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertEqual(result["usd"], 2)
         self.assertEqual(result["paw_coins"], 3)
         self.assertEqual(result["balance_seq"], cur.extra["balance_seq"])
-        self.assertIn(("UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), cur.calls)
+        self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), cur.calls)
 
     def test_bank_contract(self) -> None:
         module = importlib.import_module("api.app.api.routes.zoopark_economy")

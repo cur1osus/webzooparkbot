@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from math import trunc
 
 from api.app.zoopark.catalog import DIVERSITY_BONUS_PER_SPECIES
+from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_USERS_TABLE
 
 PACK_BASE_INCOME = 5000
 
@@ -35,10 +36,10 @@ def calc_sick_expenses(cur, user_id: int) -> int:
 
 def calc_legacy_income(cur, user_id: int) -> int:
     cur.execute(
-        """SELECT
+        f"""SELECT
                COALESCE(SUM(CAST(income AS SIGNED) * CAST(quantity AS SIGNED)), 0) AS base_income,
                COUNT(*) AS species_count
-           FROM animals
+           FROM {ZOOPARK_ANIMALS_TABLE}
            WHERE user_id=%s AND quantity>0""",
         (user_id,),
     )
@@ -76,7 +77,7 @@ def accrue_income(cur, user: dict, income_rub_per_min: int, expenses_rub_per_min
     new_seq = int(now.timestamp() * 1000)
 
     if new_rub != current_rub:
-        cur.execute("UPDATE users SET rub=%s WHERE id=%s", (new_rub, uid))
+        cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, uid))
     cur.execute(
         "UPDATE webapp_extra SET last_income_at=%s, balance_seq=%s WHERE user_id=%s",
         (now, new_seq, uid),

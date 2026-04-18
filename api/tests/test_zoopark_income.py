@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from api.app.zoopark import income as income_module
+from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
 
 
 UTC = timezone.utc
@@ -51,7 +52,7 @@ class ZooParkIncomeTests(unittest.TestCase):
             result = income_module.accrue_income(cursor, user, income_rub_per_min=120, expenses_rub_per_min=30)
 
         self.assertEqual(result["rub"], 280)
-        self.assertIn(("UPDATE users SET rub=%s WHERE id=%s", (280, 1)), cursor.calls)
+        self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (280, 1)), cursor.calls)
 
     def test_accrue_income_never_drops_below_zero(self) -> None:
         cursor = _FakeCursor({"last_income_at": _FixedDateTime.current - timedelta(minutes=1), "balance_seq": 0})
@@ -61,7 +62,7 @@ class ZooParkIncomeTests(unittest.TestCase):
             result = income_module.accrue_income(cursor, user, income_rub_per_min=0, expenses_rub_per_min=120)
 
         self.assertEqual(result["rub"], 0)
-        self.assertIn(("UPDATE users SET rub=%s WHERE id=%s", (0, 2)), cursor.calls)
+        self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (0, 2)), cursor.calls)
 
     def test_sync_passive_balance_uses_legacy_and_pack_income(self) -> None:
         cursor = _FakeCursor(None)
@@ -77,7 +78,7 @@ class ZooParkIncomeTests(unittest.TestCase):
         self.assertEqual(income_rub_per_min, 150)
         self.assertEqual(expenses_rub_per_min, 10)
         self.assertEqual(updated_user["rub"], 380)
-        self.assertIn(("UPDATE users SET rub=%s WHERE id=%s", (380, 3)), cursor.calls)
+        self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (380, 3)), cursor.calls)
 
 
 if __name__ == "__main__":

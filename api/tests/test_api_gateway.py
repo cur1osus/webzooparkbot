@@ -154,10 +154,6 @@ class ApiGatewayTests(unittest.TestCase):
         cors.CORSMiddleware = object
         sys.modules["fastapi.middleware.cors"] = cors
 
-        responses = types.ModuleType("fastapi.responses")
-        responses.JSONResponse = lambda *args, **kwargs: {"args": args, "kwargs": kwargs}
-        sys.modules["fastapi.responses"] = responses
-
         pymysql = types.ModuleType("pymysql")
         pymysql.connect = lambda **_kwargs: None
         sys.modules["pymysql"] = pymysql
@@ -167,28 +163,9 @@ class ApiGatewayTests(unittest.TestCase):
         sys.modules["pymysql.cursors"] = pymysql_cursors
         pymysql.cursors = pymysql_cursors
 
-        errors = types.ModuleType("api.app.core.errors")
-        class AppError(Exception):
-            def __init__(self, detail: str, status_code: int = 400):
-                self.detail = detail
-                self.status_code = status_code
-        errors.AppError = AppError
-        sys.modules["api.app.core.errors"] = errors
-
-        game_routes = types.ModuleType("api.app.api.routes.game")
-        game_router = _FakeRouter(prefix="/api", tags=["game"])
-        game_router.add_api_route("/api/me", lambda: None, methods=["GET"])
-        game_routes.router = game_router
-        sys.modules["api.app.api.routes.game"] = game_routes
-
-        more_routes = types.ModuleType("api.app.api.routes.more")
-        more_router = _FakeRouter(prefix="/api", tags=["more"])
-        more_router.add_api_route("/api/top", lambda: None, methods=["GET"])
-        more_routes.router = more_router
-        sys.modules["api.app.api.routes.more"] = more_routes
-
         zoopark_core_routes = types.ModuleType("api.app.api.routes.zoopark_core")
         zoopark_core_router = _FakeRouter(tags=["zoopark-core"])
+        zoopark_core_router.add_api_route("/api/health", lambda: None, methods=["GET"])
         zoopark_core_router.add_api_route("/api/me", lambda: None, methods=["GET"])
         zoopark_core_router.add_api_route("/api/save", lambda: None, methods=["POST"])
         zoopark_core_router.add_api_route("/api/register", lambda: None, methods=["POST"])
@@ -256,11 +233,12 @@ class ApiGatewayTests(unittest.TestCase):
         sys.modules.clear()
         sys.modules.update(self._saved_modules)
 
-    def test_runtime_combined_app_contains_primary_zoopark_routes_and_v2_mount(self) -> None:
+    def test_runtime_combined_app_contains_primary_zoopark_routes(self) -> None:
         app_main = importlib.import_module("api.app.main")
         app = app_main.create_app()
         route_paths = {route.path for route in app.routes}
 
+        self.assertIn("/api/health", route_paths)
         self.assertIn("/api/me", route_paths)
         self.assertIn("/api/save", route_paths)
         self.assertIn("/api/bank", route_paths)
@@ -270,7 +248,7 @@ class ApiGatewayTests(unittest.TestCase):
         self.assertIn("/api/top", route_paths)
         self.assertIn("/api/mpgame/open", route_paths)
         self.assertIn("/api/expeditions/finish", route_paths)
-        self.assertIn("/v2", route_paths)
+        self.assertNotIn("/v2", route_paths)
 
     def test_combined_app_no_longer_uses_legacy_router_module(self) -> None:
         app_main_module = importlib.import_module("api.app.main")
@@ -281,11 +259,10 @@ class ApiGatewayTests(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[2]
         source = (repo_root / "api" / "main.py").read_text(encoding="utf-8")
 
-        self.assertIn("create_combined_app", source)
-        self.assertIn("SourcelessFileLoader", source)
-        self.assertIn("legacy_main", source)
-        self.assertNotIn('Path(__file__).with_name("__pycache__") / "main.cpython-312.pyc"', source)
-        self.assertIn('getattr(_legacy_module, "app", app)', source)
+        self.assertIn("create_app", source)
+        self.assertNotIn("SourcelessFileLoader", source)
+        self.assertNotIn("legacy_main", source)
+        self.assertIn("legacy_app = app", source)
         self.assertNotIn("@app.get(", source)
         self.assertNotIn("@app.post(", source)
         self.assertFalse((repo_root / "api" / "app" / "zoopark" / "delegates.py").exists())

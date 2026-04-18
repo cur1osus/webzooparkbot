@@ -6,6 +6,7 @@ import random
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from api.app.zoopark.db_tables import ZOOPARK_ITEMS_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.profile import get_forge_items, get_user
 from api.app.zoopark.runtime import get_db
 
@@ -104,11 +105,11 @@ def api_forge_create(
                 }
             )
             cur.execute(
-                "INSERT INTO items (user_id, emoji, name, lvl, properties, rarity, is_active) VALUES (%s,%s,%s,1,%s,%s,0)",
+                f"INSERT INTO {ZOOPARK_ITEMS_TABLE} (user_id, emoji, name, lvl, properties, rarity, is_active) VALUES (%s,%s,%s,1,%s,%s,0)",
                 (user_id, item["emoji"], item["name"], properties, item["rarity"]),
             )
             item_id = cur.lastrowid
-            cur.execute("UPDATE users SET paw_coins=%s WHERE id=%s", (new_paw_coins, user_id))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=%s WHERE id=%s", (new_paw_coins, user_id))
         db.commit()
         return {
             "ok": True,
@@ -148,7 +149,7 @@ def api_forge_upgrade(
             except ValueError as exc:
                 raise HTTPException(400, "Неверный ID") from exc
 
-            cur.execute("SELECT * FROM items WHERE id=%s AND user_id=%s", (item_id, user_id))
+            cur.execute(f"SELECT * FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s AND user_id=%s", (item_id, user_id))
             item = cur.fetchone()
             if not item:
                 raise HTTPException(404, "Предмет не найден")
@@ -163,10 +164,10 @@ def api_forge_upgrade(
             properties = json.loads(item["properties"]) if item["properties"] else {}
             properties["effect_value"] = round(float(properties.get("effect_value", 0)) * 1.2, 3)
             cur.execute(
-                "UPDATE items SET lvl=%s, properties=%s WHERE id=%s",
+                f"UPDATE {ZOOPARK_ITEMS_TABLE} SET lvl=%s, properties=%s WHERE id=%s",
                 (new_level, json.dumps(properties), item_id),
             )
-            cur.execute("UPDATE users SET paw_coins=%s WHERE id=%s", (new_paw_coins, user_id))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=%s WHERE id=%s", (new_paw_coins, user_id))
         db.commit()
         return {
             "ok": True,
@@ -211,7 +212,7 @@ def api_forge_merge(
             if item_id1 == item_id2:
                 raise HTTPException(400, "Нельзя объединить предмет сам с собой")
 
-            cur.execute("SELECT * FROM items WHERE id IN (%s,%s) AND user_id=%s", (item_id1, item_id2, user_id))
+            cur.execute(f"SELECT * FROM {ZOOPARK_ITEMS_TABLE} WHERE id IN (%s,%s) AND user_id=%s", (item_id1, item_id2, user_id))
             items = cur.fetchall()
             if len(items) < 2:
                 raise HTTPException(404, "Предметы не найдены")
@@ -222,7 +223,7 @@ def api_forge_merge(
 
             new_paw_coins = paw_coins - cost
             for item in items:
-                cur.execute("DELETE FROM items WHERE id=%s", (item["id"],))
+                cur.execute(f"DELETE FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s", (item["id"],))
 
             properties = json.loads(items[0]["properties"]) if items[0]["properties"] else {}
             old_rarity = items[0]["rarity"]
@@ -237,11 +238,11 @@ def api_forge_merge(
                 }
             )
             cur.execute(
-                "INSERT INTO items (user_id, emoji, name, lvl, properties, rarity, is_active) VALUES (%s,%s,%s,1,%s,%s,0)",
+                f"INSERT INTO {ZOOPARK_ITEMS_TABLE} (user_id, emoji, name, lvl, properties, rarity, is_active) VALUES (%s,%s,%s,1,%s,%s,0)",
                 (user_id, item["emoji"], item["name"], new_properties, item["rarity"]),
             )
             new_item_id = cur.lastrowid
-            cur.execute("UPDATE users SET paw_coins=%s WHERE id=%s", (new_paw_coins, user_id))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=%s WHERE id=%s", (new_paw_coins, user_id))
         db.commit()
         return {
             "ok": True,
@@ -280,12 +281,12 @@ def api_forge_activate(
             except ValueError as exc:
                 raise HTTPException(400, "Неверный ID") from exc
 
-            cur.execute("SELECT id, is_active FROM items WHERE id=%s AND user_id=%s", (item_id, user["id"]))
+            cur.execute(f"SELECT id, is_active FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s AND user_id=%s", (item_id, user["id"]))
             item = cur.fetchone()
             if not item:
                 raise HTTPException(404, "Предмет не найден")
 
-            cur.execute("UPDATE items SET is_active=%s WHERE id=%s", (0 if item["is_active"] else 1, item_id))
+            cur.execute(f"UPDATE {ZOOPARK_ITEMS_TABLE} SET is_active=%s WHERE id=%s", (0 if item["is_active"] else 1, item_id))
         db.commit()
         return {"ok": True}
     finally:

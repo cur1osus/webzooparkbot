@@ -3,10 +3,88 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from api.app.zoopark.catalog import ANIMALS, AVIARIES
+from api.app.zoopark.db_tables import (
+    ZOOPARK_ANIMALS_TABLE,
+    ZOOPARK_AVIARIES_TABLE,
+    ZOOPARK_ITEMS_TABLE,
+    ZOOPARK_UNITY_TABLE,
+    ZOOPARK_USERS_TABLE,
+)
 from api.app.zoopark.runtime import get_db
 
 
 CREATE_TABLES_SQL: Sequence[str] = (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_USERS_TABLE} (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_user BIGINT NOT NULL UNIQUE,
+        nickname VARCHAR(64) NOT NULL,
+        date_reg DATETIME NOT NULL,
+        paw_coins BIGINT NOT NULL DEFAULT 0,
+        rub BIGINT NOT NULL DEFAULT 0,
+        usd BIGINT NOT NULL DEFAULT 0,
+        sub_on_chat TINYINT(1) NOT NULL DEFAULT 0,
+        sub_on_channel TINYINT(1) NOT NULL DEFAULT 0,
+        bonus TINYINT(1) NOT NULL DEFAULT 1,
+        unity_id INT NULL,
+        is_banned TINYINT(1) NOT NULL DEFAULT 0,
+        balance_seq INT NOT NULL DEFAULT 0,
+        data_version BIGINT NOT NULL DEFAULT 0,
+        bonus_notify_msg_id BIGINT NULL DEFAULT NULL,
+        INDEX (unity_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_ANIMALS_TABLE} (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        animal_info_id INT NOT NULL,
+        quantity INT NOT NULL DEFAULT 0,
+        income BIGINT NOT NULL DEFAULT 0,
+        price BIGINT NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_user_animal (user_id, animal_info_id),
+        INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_AVIARIES_TABLE} (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        aviary_info_id INT NOT NULL,
+        price BIGINT NOT NULL DEFAULT 0,
+        size INT NOT NULL DEFAULT 0,
+        quantity INT NOT NULL DEFAULT 0,
+        buy_count INT NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_user_aviary (user_id, aviary_info_id),
+        INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_ITEMS_TABLE} (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        emoji VARCHAR(20) NOT NULL,
+        name VARCHAR(64) NOT NULL,
+        lvl INT NOT NULL DEFAULT 1,
+        properties LONGTEXT NULL,
+        rarity VARCHAR(20) NOT NULL DEFAULT 'common',
+        is_active TINYINT(1) NOT NULL DEFAULT 0,
+        INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_UNITY_TABLE} (
+        idpk INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id BIGINT NOT NULL UNIQUE,
+        name VARCHAR(64) NOT NULL UNIQUE,
+        level INT NOT NULL DEFAULT 1,
+        owner_id INT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    """CREATE TABLE IF NOT EXISTS animals_info (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(64) NOT NULL,
+        price BIGINT NOT NULL,
+        income BIGINT NOT NULL,
+        UNIQUE KEY uq_animals_info_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    """CREATE TABLE IF NOT EXISTS aviaries_info (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(64) NOT NULL,
+        price BIGINT NOT NULL,
+        size INT NOT NULL,
+        UNIQUE KEY uq_aviaries_info_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
     """CREATE TABLE IF NOT EXISTS webapp_extra (
         user_id INT NOT NULL UNIQUE,
         balance_seq INT NOT NULL DEFAULT 0,
@@ -110,6 +188,73 @@ MISSING_COLUMN_SQL: Sequence[str] = (
     "ALTER TABLE webapp_extra ADD COLUMN last_income_at DATETIME NULL",
 )
 
+COPY_COMPAT_TABLES: Sequence[tuple[str, str, tuple[str, ...], tuple[str, ...]]] = (
+    (
+        "users",
+        ZOOPARK_USERS_TABLE,
+        ("id", "id_user", "nickname", "date_reg", "paw_coins", "rub", "usd", "sub_on_chat", "sub_on_channel", "bonus"),
+        ("unity_id", "is_banned", "balance_seq", "data_version", "bonus_notify_msg_id"),
+    ),
+    (
+        "animals",
+        ZOOPARK_ANIMALS_TABLE,
+        ("id", "user_id", "animal_info_id", "quantity", "income", "price"),
+        (),
+    ),
+    (
+        "aviaries",
+        ZOOPARK_AVIARIES_TABLE,
+        ("id", "user_id", "aviary_info_id", "price", "size", "quantity", "buy_count"),
+        (),
+    ),
+    (
+        "items",
+        ZOOPARK_ITEMS_TABLE,
+        ("id", "user_id", "emoji", "name", "lvl", "properties", "rarity", "is_active"),
+        (),
+    ),
+    (
+        "unity",
+        ZOOPARK_UNITY_TABLE,
+        ("idpk", "id", "name", "level", "owner_id"),
+        (),
+    ),
+)
+
+
+def _table_exists(cur, table: str) -> bool:
+    cur.execute(
+        "SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=%s LIMIT 1",
+        (table,),
+    )
+    return cur.fetchone() is not None
+
+
+def _available_columns(cur, table: str) -> set[str]:
+    cur.execute(
+        "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=%s",
+        (table,),
+    )
+    return {str(row["COLUMN_NAME"]) for row in cur.fetchall()}
+
+
+def _copy_compat_table(cur, source_table: str, target_table: str, required: Sequence[str], optional: Sequence[str]) -> None:
+    if source_table == target_table or not _table_exists(cur, source_table) or not _table_exists(cur, target_table):
+        return
+
+    target_columns = _available_columns(cur, target_table)
+    source_columns = _available_columns(cur, source_table)
+    if not set(required).issubset(target_columns) or not set(required).issubset(source_columns):
+        return
+
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM {target_table}")
+    if int((cur.fetchone() or {}).get("cnt") or 0) > 0:
+        return
+
+    columns = [column for column in [*required, *optional] if column in target_columns and column in source_columns]
+    column_sql = ", ".join(columns)
+    cur.execute(f"INSERT INTO {target_table} ({column_sql}) SELECT {column_sql} FROM {source_table}")
+
 
 def seed_catalogue(cur) -> None:
     cur.execute("SELECT COUNT(*) AS cnt FROM animals_info")
@@ -137,6 +282,8 @@ def init_schema() -> None:
         with db.cursor() as cur:
             for sql in CREATE_TABLES_SQL:
                 cur.execute(sql)
+            for source_table, target_table, required, optional in COPY_COMPAT_TABLES:
+                _copy_compat_table(cur, source_table, target_table, required, optional)
             seed_catalogue(cur)
             for sql in MISSING_COLUMN_SQL:
                 try:

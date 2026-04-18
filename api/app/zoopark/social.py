@@ -6,6 +6,7 @@ import string
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_UNITY_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import get_db
@@ -30,11 +31,11 @@ def api_top(tg_id: int):
     try:
         with db.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 SELECT u.id, u.id_user, u.nickname,
                     COALESCE(SUM(CAST(ai.income AS SIGNED) * CAST(a.quantity AS SIGNED)), 0) AS income
-                FROM users u
-                LEFT JOIN animals a ON a.user_id=u.id AND a.quantity>0
+                FROM {ZOOPARK_USERS_TABLE} u
+                LEFT JOIN {ZOOPARK_ANIMALS_TABLE} a ON a.user_id=u.id AND a.quantity>0
                 LEFT JOIN animals_info ai ON ai.id=a.animal_info_id
                 GROUP BY u.id
                 ORDER BY income DESC
@@ -42,7 +43,7 @@ def api_top(tg_id: int):
                 """
             )
             rows = cur.fetchall()
-            cur.execute("SELECT id FROM users WHERE id_user=%s", (tg_id,))
+            cur.execute(f"SELECT id FROM {ZOOPARK_USERS_TABLE} WHERE id_user=%s", (tg_id,))
             me = cur.fetchone()
             me_id = me["id"] if me else None
 
@@ -71,19 +72,19 @@ def api_clan_list(tg_id: int):
     db = get_db()
     try:
         with db.cursor() as cur:
-            cur.execute("SELECT * FROM users WHERE id_user=%s", (tg_id,))
+            cur.execute(f"SELECT * FROM {ZOOPARK_USERS_TABLE} WHERE id_user=%s", (tg_id,))
             me = cur.fetchone()
             my_unity = me["unity_id"] if me else None
             my_user_id = me["id"] if me else None
 
             cur.execute(
-                """
+                f"""
                 SELECT c.idpk, c.name, c.level, c.owner_id,
                     COUNT(u2.id) AS member_count,
                     u3.nickname AS owner_nickname
-                FROM unity c
-                LEFT JOIN users u2 ON u2.unity_id=c.idpk
-                LEFT JOIN users u3 ON u3.id=c.owner_id
+                FROM {ZOOPARK_UNITY_TABLE} c
+                LEFT JOIN {ZOOPARK_USERS_TABLE} u2 ON u2.unity_id=c.idpk
+                LEFT JOIN {ZOOPARK_USERS_TABLE} u3 ON u3.id=c.owner_id
                 GROUP BY c.idpk ORDER BY c.level DESC LIMIT 20
                 """
             )
@@ -129,14 +130,14 @@ def api_clan_create(
             if int(user["usd"]) < 1:
                 raise HTTPException(400, "Нужен $1 для создания клана")
 
-            cur.execute("SELECT idpk FROM unity WHERE name=%s", (name,))
+            cur.execute(f"SELECT idpk FROM {ZOOPARK_UNITY_TABLE} WHERE name=%s", (name,))
             if cur.fetchone():
                 raise HTTPException(400, "Клан уже существует")
 
             clan_id = random.randint(100000, 999999)
-            cur.execute("INSERT INTO unity (id, name, level, owner_id) VALUES (%s,%s,1,%s)", (clan_id, name, user["id"]))
+            cur.execute(f"INSERT INTO {ZOOPARK_UNITY_TABLE} (id, name, level, owner_id) VALUES (%s,%s,1,%s)", (clan_id, name, user["id"]))
             idpk = cur.lastrowid
-            cur.execute("UPDATE users SET unity_id=%s, usd=usd-1 WHERE id=%s", (idpk, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET unity_id=%s, usd=usd-1 WHERE id=%s", (idpk, user["id"]))
         db.commit()
         return {"ok": True, "message": f"Клан «{name}» создан!"}
     finally:
@@ -156,12 +157,12 @@ def api_clan_request(
             if user["unity_id"]:
                 raise HTTPException(400, "Ты уже в клане")
 
-            cur.execute("SELECT idpk, name FROM unity WHERE idpk=%s", (body.clan_id,))
+            cur.execute(f"SELECT idpk, name FROM {ZOOPARK_UNITY_TABLE} WHERE idpk=%s", (body.clan_id,))
             clan = cur.fetchone()
             if not clan:
                 raise HTTPException(404, "Клан не найден")
 
-            cur.execute("UPDATE users SET unity_id=%s WHERE id=%s", (body.clan_id, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET unity_id=%s WHERE id=%s", (body.clan_id, user["id"]))
         db.commit()
         return {"ok": True, "message": f"Вступил в клан «{clan['name']}»"}
     finally:
@@ -180,12 +181,12 @@ def api_clan_leave(tg_id: int):
 
             user_id = user["id"]
             unity_id = user["unity_id"]
-            cur.execute("SELECT owner_id FROM unity WHERE idpk=%s", (unity_id,))
+            cur.execute(f"SELECT owner_id FROM {ZOOPARK_UNITY_TABLE} WHERE idpk=%s", (unity_id,))
             clan = cur.fetchone()
-            cur.execute("UPDATE users SET unity_id=NULL WHERE id=%s", (user_id,))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET unity_id=NULL WHERE id=%s", (user_id,))
             if clan and clan["owner_id"] == user_id:
-                cur.execute("UPDATE users SET unity_id=NULL WHERE unity_id=%s", (unity_id,))
-                cur.execute("DELETE FROM unity WHERE idpk=%s", (unity_id,))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET unity_id=NULL WHERE unity_id=%s", (unity_id,))
+                cur.execute(f"DELETE FROM {ZOOPARK_UNITY_TABLE} WHERE idpk=%s", (unity_id,))
         db.commit()
         return {"ok": True, "message": "Покинул клан"}
     finally:
@@ -200,7 +201,7 @@ def api_referrals(tg_id: int):
             if not user:
                 raise HTTPException(404, "Нет игрока")
             cur.execute(
-                "SELECT u.nickname FROM referrals r JOIN users u ON u.id=r.referral_id WHERE r.user_id=%s",
+                f"SELECT u.nickname FROM referrals r JOIN {ZOOPARK_USERS_TABLE} u ON u.id=r.referral_id WHERE r.user_id=%s",
                 (user["id"],),
             )
             referred = [row["nickname"] or "—" for row in cur.fetchall()]
@@ -235,7 +236,7 @@ def api_transfers_create(
                 "INSERT INTO transfer_links (link_key, creator_id, total_amount, rub_per_claim, max_claims) VALUES (%s,%s,%s,%s,%s)",
                 (key, user["id"], total, rub_per_claim, max_claims),
             )
-            cur.execute("UPDATE users SET rub=rub-%s WHERE id=%s", (total, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (total, user["id"]))
         db.commit()
         return {"key": key}
     finally:

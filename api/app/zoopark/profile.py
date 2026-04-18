@@ -5,10 +5,17 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from api.app.zoopark.catalog import ANIMAL_BY_DB_ID, AVIARY_BY_DB_ID, DIVERSITY_BONUS_PER_SPECIES
+from api.app.zoopark.db_tables import (
+    ZOOPARK_ANIMALS_TABLE,
+    ZOOPARK_AVIARIES_TABLE,
+    ZOOPARK_ITEMS_TABLE,
+    ZOOPARK_UNITY_TABLE,
+    ZOOPARK_USERS_TABLE,
+)
 
 
 def get_user(cur, tg_id: int):
-    cur.execute("SELECT * FROM users WHERE id_user=%s", (tg_id,))
+    cur.execute(f"SELECT * FROM {ZOOPARK_USERS_TABLE} WHERE id_user=%s", (tg_id,))
     return cur.fetchone()
 
 
@@ -36,7 +43,7 @@ def bump_data_version(cur, user_id: int) -> int:
 
 def get_animals(cur, user_id: int) -> list[dict]:
     cur.execute(
-        "SELECT animal_info_id, quantity FROM animals WHERE user_id=%s AND quantity>0",
+        f"SELECT animal_info_id, quantity FROM {ZOOPARK_ANIMALS_TABLE} WHERE user_id=%s AND quantity>0",
         (user_id,),
     )
     result: list[dict] = []
@@ -49,7 +56,7 @@ def get_animals(cur, user_id: int) -> list[dict]:
 
 def get_aviaries(cur, user_id: int) -> list[dict]:
     cur.execute(
-        "SELECT aviary_info_id, quantity FROM aviaries WHERE user_id=%s AND quantity>0",
+        f"SELECT aviary_info_id, quantity FROM {ZOOPARK_AVIARIES_TABLE} WHERE user_id=%s AND quantity>0",
         (user_id,),
     )
     result: list[dict] = []
@@ -73,7 +80,7 @@ def get_sick(cur, user_id: int) -> list[dict]:
 
 
 def get_forge_items(cur, user_id: int) -> list[dict]:
-    cur.execute("SELECT id, emoji, name, lvl, properties, rarity, is_active FROM items WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT id, emoji, name, lvl, properties, rarity, is_active FROM {ZOOPARK_ITEMS_TABLE} WHERE user_id=%s", (user_id,))
     result: list[dict] = []
     for row in cur.fetchall():
         try:
@@ -100,11 +107,11 @@ def get_forge_items(cur, user_id: int) -> list[dict]:
 def get_clan(cur, user_id: int, unity_id) -> dict | None:
     if not unity_id:
         return None
-    cur.execute("SELECT * FROM unity WHERE idpk=%s", (unity_id,))
+    cur.execute(f"SELECT * FROM {ZOOPARK_UNITY_TABLE} WHERE idpk=%s", (unity_id,))
     clan = cur.fetchone()
     if not clan:
         return None
-    cur.execute("SELECT COUNT(*) AS cnt FROM users WHERE unity_id=%s", (unity_id,))
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM {ZOOPARK_USERS_TABLE} WHERE unity_id=%s", (unity_id,))
     count = int(cur.fetchone()["cnt"])
     return {
         "id": clan["idpk"],

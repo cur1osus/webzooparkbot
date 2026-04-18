@@ -5,6 +5,7 @@ import random
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
+from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import auth, get_db
@@ -42,15 +43,15 @@ def claim_bonus(
 
             if btype == "rub":
                 amount = random.randint(100, 10000)
-                cur.execute("UPDATE users SET rub=%s, bonus=0 WHERE id=%s", (rub + amount, uid))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s, bonus=0 WHERE id=%s", (rub + amount, uid))
                 res.update(amount=amount, new_rub=rub + amount, message=f"Получено {amount} ₽")
             elif btype == "usd":
                 amount = random.randint(1, 10)
-                cur.execute("UPDATE users SET usd=%s, bonus=0 WHERE id=%s", (usd + amount, uid))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s, bonus=0 WHERE id=%s", (usd + amount, uid))
                 res.update(amount=amount, new_usd=usd + amount, message=f"Получено ${amount}")
             else:
                 amount = random.randint(1, 5)
-                cur.execute("UPDATE users SET paw_coins=%s, bonus=0 WHERE id=%s", (paw + amount, uid))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=%s, bonus=0 WHERE id=%s", (paw + amount, uid))
                 res.update(amount=amount, new_paw_coins=paw + amount, message=f"Получено {amount} 🐾")
         db.commit()
         return res
@@ -80,7 +81,7 @@ def cure_animal(
             if paw < cost:
                 raise HTTPException(400, f"Нужно {cost} 🐾")
             new_paw = paw - cost
-            cur.execute("UPDATE users SET paw_coins=%s WHERE id=%s", (new_paw, uid))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=%s WHERE id=%s", (new_paw, uid))
             cur.execute("DELETE FROM sick_events WHERE user_id=%s AND animal_id=%s", (uid, body.animal_id))
         db.commit()
         return {"ok": True, "cost_paw_coins": cost, "new_paw_coins": new_paw}

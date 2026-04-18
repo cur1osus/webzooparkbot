@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import pack_animal_income, sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import get_db
@@ -239,7 +240,7 @@ def api_packs_open(tg_id: int):
                 raise HTTPException(400, f"Недостаточно ₽ (нужно {price})")
 
             if price > 0:
-                cur.execute("UPDATE users SET rub=%s WHERE id=%s", (rub - price, user["id"]))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (rub - price, user["id"]))
 
             props = roll_pack_animal()
             dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[props["survival"]])
@@ -355,7 +356,7 @@ def api_buy_locality(
                 raise HTTPException(400, f"Недостаточно ₽ (нужно {price:,})")
 
             if price > 0:
-                cur.execute("UPDATE users SET rub=%s WHERE id=%s", (rub - price, user["id"]))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (rub - price, user["id"]))
 
             cur.execute("INSERT INTO player_localities (user_id, habitat) VALUES (%s,%s)", (user["id"], body.habitat))
             locality_id = cur.lastrowid

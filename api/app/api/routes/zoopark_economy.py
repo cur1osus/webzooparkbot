@@ -4,6 +4,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from api.app.zoopark.catalog import ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID, AVIARY_STRING_TO_DB, RUB_PER_USD
+from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_AVIARIES_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
 from api.app.zoopark.runtime import auth, get_db
@@ -60,16 +61,16 @@ def buy_animal(
                 raise HTTPException(400, f"Нет мест в вольерах (нужно {qty}, свободно {total_seats - occupied})")
 
             new_rub = int(user["rub"]) - cost
-            cur.execute("UPDATE users SET rub=%s WHERE id=%s", (new_rub, uid))
-            cur.execute("SELECT id, quantity FROM animals WHERE user_id=%s AND animal_info_id=%s", (uid, db_id))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, uid))
+            cur.execute(f"SELECT id, quantity FROM {ZOOPARK_ANIMALS_TABLE} WHERE user_id=%s AND animal_info_id=%s", (uid, db_id))
             existing = cur.fetchone()
             if existing:
                 new_qty = int(existing["quantity"]) + qty
-                cur.execute("UPDATE animals SET quantity=%s WHERE user_id=%s AND animal_info_id=%s", (new_qty, uid, db_id))
+                cur.execute(f"UPDATE {ZOOPARK_ANIMALS_TABLE} SET quantity=%s WHERE user_id=%s AND animal_info_id=%s", (new_qty, uid, db_id))
             else:
                 new_qty = qty
                 cur.execute(
-                    "INSERT INTO animals (user_id, animal_info_id, quantity, income, price) VALUES (%s,%s,%s,%s,%s)",
+                    f"INSERT INTO {ZOOPARK_ANIMALS_TABLE} (user_id, animal_info_id, quantity, income, price) VALUES (%s,%s,%s,%s,%s)",
                     (uid, db_id, qty, animal_def["income"], animal_def["price"]),
                 )
             bump_data_version(cur, uid)
@@ -109,19 +110,19 @@ def buy_aviary(
                 raise HTTPException(400, "Недостаточно рублей")
 
             new_rub = int(user["rub"]) - aviary_def["price"]
-            cur.execute("UPDATE users SET rub=%s WHERE id=%s", (new_rub, uid))
-            cur.execute("SELECT id, quantity FROM aviaries WHERE user_id=%s AND aviary_info_id=%s", (uid, db_id))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, uid))
+            cur.execute(f"SELECT id, quantity FROM {ZOOPARK_AVIARIES_TABLE} WHERE user_id=%s AND aviary_info_id=%s", (uid, db_id))
             existing = cur.fetchone()
             if existing:
                 new_count = int(existing["quantity"]) + 1
                 cur.execute(
-                    "UPDATE aviaries SET quantity=%s, buy_count=buy_count+1 WHERE user_id=%s AND aviary_info_id=%s",
+                    f"UPDATE {ZOOPARK_AVIARIES_TABLE} SET quantity=%s, buy_count=buy_count+1 WHERE user_id=%s AND aviary_info_id=%s",
                     (new_count, uid, db_id),
                 )
             else:
                 new_count = 1
                 cur.execute(
-                    "INSERT INTO aviaries (user_id, aviary_info_id, price, size, quantity, buy_count) VALUES (%s,%s,%s,%s,1,1)",
+                    f"INSERT INTO {ZOOPARK_AVIARIES_TABLE} (user_id, aviary_info_id, price, size, quantity, buy_count) VALUES (%s,%s,%s,%s,1,1)",
                     (uid, db_id, aviary_def["price"], aviary_def["seats"]),
                 )
 
@@ -194,7 +195,7 @@ def bank_exchange(
                     raise HTTPException(400, "Недостаточно долларов")
                 new_rub, new_usd = rub + int(amount * RUB_PER_USD), usd - cost
 
-            cur.execute("UPDATE users SET rub=%s, usd=%s WHERE id=%s", (new_rub, new_usd, uid))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s, usd=%s WHERE id=%s", (new_rub, new_usd, uid))
         db.commit()
         return {"ok": True, "new_rub": new_rub, "new_usd": new_usd}
     finally:

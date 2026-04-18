@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from api.app.zoopark.catalog import STARS_TO_PAW
+from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import BOT_TOKEN, get_db
@@ -37,9 +38,9 @@ def api_mpgame_open():
     try:
         with db.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 SELECT g.*, u.nickname AS creator_nickname
-                FROM mp_games_new g JOIN users u ON u.id=g.creator_id
+                FROM mp_games_new g JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
                 WHERE g.status='open' ORDER BY g.created_at DESC LIMIT 20
                 """
             )
@@ -82,7 +83,7 @@ def api_mpgame_create(
                 (body.game_type, bet_rub, user["id"]),
             )
             game_id = cur.lastrowid
-            cur.execute("UPDATE users SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
         db.commit()
         return {
             "ok": True,
@@ -136,11 +137,11 @@ def api_mpgame_join(
                 "UPDATE mp_games_new SET opponent_id=%s, status='finished', creator_score=%s, opponent_score=%s, winner_id=%s WHERE id=%s",
                 (user["id"], creator_score, opponent_score, winner_id, game_id),
             )
-            cur.execute("UPDATE users SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
-            cur.execute("UPDATE users SET rub=rub+%s WHERE id=%s", (bet_rub * 2, winner_id))
-            cur.execute("SELECT nickname FROM users WHERE id=%s", (winner_id,))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub+%s WHERE id=%s", (bet_rub * 2, winner_id))
+            cur.execute(f"SELECT nickname FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (winner_id,))
             winner = cur.fetchone()
-            cur.execute("SELECT nickname FROM users WHERE id=%s", (game["creator_id"],))
+            cur.execute(f"SELECT nickname FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (game["creator_id"],))
             creator = cur.fetchone()
         db.commit()
         return {
@@ -166,11 +167,11 @@ def api_mpgame_throw(
     try:
         with db.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 SELECT g.*, u.nickname AS creator_nickname, u2.nickname AS winner_nickname
                 FROM mp_games_new g
-                JOIN users u ON u.id=g.creator_id
-                LEFT JOIN users u2 ON u2.id=g.winner_id
+                JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
+                LEFT JOIN {ZOOPARK_USERS_TABLE} u2 ON u2.id=g.winner_id
                 WHERE g.id=%s
                 """,
                 (game_id,),
@@ -213,7 +214,7 @@ def api_start_solo_game(
             won = score >= 50
             rub_delta = bet_rub if won else -bet_rub
             new_rub = int(user["rub"]) + rub_delta
-            cur.execute("UPDATE users SET rub=%s WHERE id=%s", (new_rub, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, user["id"]))
             cur.execute(
                 "INSERT INTO solo_stats (user_id, games_played, wins, losses, total_won, total_lost) "
                 "VALUES (%s,1,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE "
@@ -358,8 +359,8 @@ def api_cocktail_guess(tg_id: int, fruits: list[str]):
             }
             if won:
                 reward = 5
-                cur.execute("UPDATE users SET paw_coins=paw_coins+%s WHERE id=%s", (reward, user["id"]))
-                cur.execute("SELECT paw_coins FROM users WHERE id=%s", (user["id"],))
+                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=paw_coins+%s WHERE id=%s", (reward, user["id"]))
+                cur.execute(f"SELECT paw_coins FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (user["id"],))
                 paw_row = cur.fetchone()
                 result["reward_paw"] = reward
                 result["new_paw_coins"] = int(paw_row["paw_coins"])

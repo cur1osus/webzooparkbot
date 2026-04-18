@@ -163,7 +163,7 @@ for _ in $(seq 1 20); do
     sleep 1
 done
 for _ in $(seq 1 20); do
-    if curl -fsS http://127.0.0.1:8001/v2/api/health >/dev/null 2>&1; then
+    if curl -fsS http://127.0.0.1:8001/api/health >/dev/null 2>&1; then
         exit 0
     fi
     sleep 1
@@ -192,10 +192,6 @@ http://DOMAIN_PLACEHOLDER {
 
 DOMAIN_PLACEHOLDER:8443 {
 	tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
-
-	handle /v2/api/* {
-		reverse_proxy API_UPSTREAM_PLACEHOLDER
-	}
 
 	handle /api/* {
 		reverse_proxy API_UPSTREAM_PLACEHOLDER
@@ -237,7 +233,7 @@ systemctl is-active caddy
 ENDSSH
 
 echo "[8/8] Verify public routes"
-response="$(curl -kfsS "https://${DOMAIN}:8443/v2/api/health")"
+response="$(curl -kfsS "https://${DOMAIN}:8443/api/health")"
 python3 - "$response" <<'PY'
 import json
 import sys
@@ -250,4 +246,4 @@ PY
 echo ""
 echo "Done!"
 echo "  App:  https://${DOMAIN}:8443"
-echo "  API:  https://${DOMAIN}:8443/v2/api/health"
+echo "  API:  https://${DOMAIN}:8443/api/health"

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID
+from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
 from api.app.zoopark.runtime import get_db
@@ -71,25 +72,25 @@ def do_merchant_buy(tg_id: int, slot: int) -> dict:
                 raise HTTPException(400, "Нет мест")
 
             new_rub = int(user["rub"]) - cost
-            cur.execute("UPDATE users SET rub=%s WHERE id=%s", (new_rub, user_id))
+            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, user_id))
             cur.execute(
                 "UPDATE merchants SET first_offer_bought=1 WHERE user_id=%s AND animal_info_id=%s",
                 (user_id, offer["animal_info_id"]),
             )
 
             db_id = ANIMAL_STRING_TO_DB[animal_def["id"]]
-            cur.execute("SELECT id, quantity FROM animals WHERE user_id=%s AND animal_info_id=%s", (user_id, db_id))
+            cur.execute(f"SELECT id, quantity FROM {ZOOPARK_ANIMALS_TABLE} WHERE user_id=%s AND animal_info_id=%s", (user_id, db_id))
             existing = cur.fetchone()
             if existing:
                 new_quantity = int(existing["quantity"]) + quantity
                 cur.execute(
-                    "UPDATE animals SET quantity=%s WHERE user_id=%s AND animal_info_id=%s",
+                    f"UPDATE {ZOOPARK_ANIMALS_TABLE} SET quantity=%s WHERE user_id=%s AND animal_info_id=%s",
                     (new_quantity, user_id, db_id),
                 )
             else:
                 new_quantity = quantity
                 cur.execute(
-                    "INSERT INTO animals (user_id, animal_info_id, quantity, income, price) VALUES (%s,%s,%s,%s,%s)",
+                    f"INSERT INTO {ZOOPARK_ANIMALS_TABLE} (user_id, animal_info_id, quantity, income, price) VALUES (%s,%s,%s,%s,%s)",
                     (user_id, db_id, quantity, animal_def["income"], animal_def["price"]),
                 )
 
