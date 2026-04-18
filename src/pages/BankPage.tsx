@@ -1,0 +1,165 @@
+import { useEffect, useState } from 'react';
+import { fmt } from '../utils/format';
+import type { BankInfo, GameState } from '../types';
+import { apiGetBank, apiExchange } from '../api';
+
+export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const [bankInfo, setBankInfo] = useState<BankInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [amount, setAmount] = useState('');
+  const [exchLoading, setExchLoading] = useState(false);
+  const [exchResult, setExchResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGetBank()
+      .then(setBankInfo)
+      .catch(e => setError((e as Error).message ?? 'Ошибка загрузки'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleExchange = async (all: boolean) => {
+    const n = all ? gs.rub : parseFloat(amount);
+    if (!n || n <= 0) return;
+    setExchLoading(true);
+    setExchResult(null);
+    try {
+      const res = await apiExchange('rub', n);
+      if (res.ok) {
+        setExchResult('Обмен выполнен!');
+        onRefresh();
+      } else {
+        setExchResult(res.message ?? 'Ошибка');
+      }
+    } catch (e) {
+      setExchResult(e instanceof Error ? e.message : 'Ошибка');
+    } finally {
+      setExchLoading(false);
+    }
+  };
+
+  const rate = bankInfo?.rub_rate ?? 0;
+  const minExchange = bankInfo?.min_exchange_rub ?? 0;
+  const previewAmount = rate && amount ? parseFloat(amount) / rate : null;
+
+  const quickAmounts = [
+    minExchange,
+    Math.min(1000, gs.rub),
+    Math.min(1000000, gs.rub),
+  ].filter((v, i, a) => a.indexOf(v) === i && v > 0 && v <= gs.rub);
+
+  return (
+    <div className="px-[14px] pt-4 flex flex-col gap-3">
+      <p className="m-0 text-[13px] text-tg-hint">Обмен рублей на доллары по текущему курсу</p>
+
+      {/* Balance tiles */}
+      <div className="flex gap-2">
+        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(52,199,89,0.3)' }}>
+          <p className="m-0 text-[11px] text-tg-hint">Рубли</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[#34c759]">₽ {fmt(gs.rub)}</p>
+        </div>
+        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(10,132,255,0.3)' }}>
+          <p className="m-0 text-[11px] text-tg-hint">Доллары</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[#0a84ff]">$ {fmt(gs.usd)}</p>
+        </div>
+        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(255,107,61,0.3)' }}>
+          <p className="m-0 text-[11px] text-tg-hint">Обновление через</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[#ff6b3d]">57с</p>
+        </div>
+      </div>
+
+      {/* Rate card */}
+      {bankInfo && (
+        <div className="card">
+          <p className="m-0 mb-2 text-[13px] text-tg-hint">Твой курс</p>
+          <p className="m-0 mb-3 text-[28px] font-extrabold text-[#0a84ff]">1$ = ₽ {fmt(rate)}</p>
+          
+          <div className="flex gap-2">
+            <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(10,132,255,0.1)]">
+              <p className="m-0 text-[10px] text-tg-hint">Хранилище банка</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[#0a84ff]">$ {fmt(1000000000)}</p>
+            </div>
+            <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(255,107,61,0.1)]">
+              <p className="m-0 text-[10px] text-tg-hint">Комиссия банка</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[#ff6b3d]">1%</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Exchange section */}
+      {loading && <p className="text-center text-tg-hint">Загрузка курса...</p>}
+      {error && <p className="text-[#ff6b63]">⚠️ {error}</p>}
+
+      {bankInfo && (
+        <div className="flex flex-col gap-3">
+          <div>
+            <p className="m-0 mb-1 text-[15px] font-bold">Обменять рубли</p>
+            <p className="m-0 text-[12px] text-tg-hint">Минимальная сумма для обмена: ₽ {fmt(minExchange)}</p>
+          </div>
+
+          {/* Quick buttons */}
+          <div className="flex gap-2 flex-wrap">
+            {quickAmounts.map(v => (
+              <button
+                key={v}
+                onClick={() => setAmount(String(v))}
+                className="px-3 py-2 rounded-lg border border-white/[0.12] bg-transparent text-white text-[13px] font-medium cursor-pointer"
+              >
+                ₽ {fmt(v)}
+              </button>
+            ))}
+            {gs.rub > 0 && (
+              <button
+                onClick={() => setAmount(String(gs.rub))}
+                className="px-3 py-2 rounded-lg border-none bg-[rgba(52,199,89,0.15)] text-[#34c759] text-[13px] font-bold cursor-pointer"
+              >
+                Всё
+              </button>
+            )}
+          </div>
+
+          {/* Input */}
+          <input
+            type="number"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            placeholder="Сумма в рублях"
+            className="w-full px-3 py-[10px] rounded-[10px] border border-white/[0.12] bg-black/20 text-white text-sm"
+          />
+
+          {previewAmount != null && (
+            <p className="m-0 text-[13px] text-tg-hint">
+              Получите: $ {fmt(previewAmount)}
+            </p>
+          )}
+
+          {exchResult && (
+            <p className={`m-0 text-[13px] ${exchResult === 'Обмен выполнен!' ? 'text-[#34c759]' : 'text-[#ff6b63]'}`}>
+              {exchResult}
+            </p>
+          )}
+
+          {/* Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => void handleExchange(true)}
+              disabled={exchLoading || gs.rub <= 0}
+              className="flex-1 py-3 rounded-[10px] border-none cursor-pointer bg-[#34c759] text-white font-bold text-sm disabled:opacity-60"
+            >
+              {exchLoading ? 'Обмен...' : 'Обменять всё'}
+            </button>
+            <button
+              onClick={() => void handleExchange(false)}
+              disabled={exchLoading || !amount || parseFloat(amount) < minExchange}
+              className="flex-1 py-3 rounded-[10px] border border-white/[0.12] bg-transparent text-tg-hint font-bold text-sm disabled:opacity-40 cursor-pointer"
+            >
+              Обменять
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

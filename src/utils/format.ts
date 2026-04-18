@@ -1,0 +1,75 @@
+const SUFFIXES = [
+  { v: 1e63, s: 'Vi' },
+  { v: 1e60, s: 'No' },
+  { v: 1e57, s: 'Oc' },
+  { v: 1e54, s: 'Sp' },
+  { v: 1e51, s: 'Sx' },
+  { v: 1e48, s: 'Qn' },
+  { v: 1e45, s: 'Qd' },
+  { v: 1e42, s: 'Td' },
+  { v: 1e39, s: 'Dd' },
+  { v: 1e36, s: 'Ud' },
+  { v: 1e33, s: 'Dc' },
+  { v: 1e30, s: 'No' },
+  { v: 1e27, s: 'Oc' },
+  { v: 1e24, s: 'Sp' },
+  { v: 1e21, s: 'Sx' },
+  { v: 1e18, s: 'Qn' },
+  { v: 1e15, s: 'Qd' },
+  { v: 1e12, s: 'T' },
+  { v: 1e9, s: 'B' },
+  { v: 1e6, s: 'M' },
+  { v: 1e3, s: 'K' },
+];
+
+export function fmt(value: number | string): string {
+  const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (!Number.isFinite(n)) return String(value);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  for (const { v, s } of SUFFIXES) {
+    if (abs >= v) {
+      const divided = Math.floor(abs / v);
+      return `${sign}${divided}${s}`;
+    }
+  }
+  return `${sign}${Math.round(abs)}`;
+}
+
+export function fmtRub(value: number | string): string {
+  return `₽ ${fmt(value)}`;
+}
+
+export function fmtUsd(value: number | string): string {
+  return `$ ${fmt(value)}`;
+}
+
+export function fmtPaw(value: number | string): string {
+  return `${fmt(value)}`;
+}
+
+export function fmtMin(value: number | string): string {
+  const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (n >= 0) return `+${fmt(n)}`;
+  return fmt(n);
+}
+
+export function formatDate(isoStr: string): string {
+  const d = new Date(isoStr);
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export function formatDateShort(isoStr: string): string {
+  const d = new Date(isoStr);
+  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).replace(' г.', '');
+}
+
+export function formatCountdown(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86400);
+  const h = String(Math.floor((s % 86400) / 3600)).padStart(2, '0');
+  const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  if (d > 0) return `${d}д ${h}:${m}:${sec}`;
+  return `${h}:${m}:${sec}`;
+}

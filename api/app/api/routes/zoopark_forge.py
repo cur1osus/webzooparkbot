@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Header
+
+from api.app.zoopark.forge import ForgeActivateBody, ForgeCreateBody, ForgeItemIdBody, ForgeMergeBody, api_forge_activate, api_forge_create, api_forge_items, api_forge_merge, api_forge_upgrade
+from api.app.zoopark.runtime import auth
+
+
+router = APIRouter(tags=["zoopark-forge"])
+
+
+@router.get("/api/forge/items")
+def forge_items(
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_items(auth(x_init_data, x_dev_user_id))
+
+
+@router.post("/api/forge/create")
+def forge_create(
+    body: ForgeCreateBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_create(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/upgrade")
+def forge_upgrade(
+    body: ForgeItemIdBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_upgrade(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/merge")
+def forge_merge(
+    body: ForgeMergeBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_merge(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/activate")
+def forge_activate(
+    body: ForgeActivateBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_activate(auth(x_init_data, x_dev_user_id), body)
