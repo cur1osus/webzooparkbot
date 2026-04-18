@@ -14,11 +14,14 @@ class _FakeCursor:
     def __init__(self, row: dict | None) -> None:
         self._row = row
         self.calls: list[tuple[str, tuple]] = []
+        self.fetchone_queue: list[dict | None] = []
 
     def execute(self, sql: str, params: tuple) -> None:
         self.calls.append((sql, params))
 
     def fetchone(self):
+        if self.fetchone_queue:
+            return self.fetchone_queue.pop(0)
         return self._row
 
 
@@ -33,6 +36,13 @@ class _FixedDateTime:
 
 
 class ZooParkIncomeTests(unittest.TestCase):
+    def test_calc_legacy_income_applies_diversity_bonus(self) -> None:
+        cursor = _FakeCursor({"base_income": 1000, "species_count": 3})
+
+        result = income_module.calc_legacy_income(cursor, user_id=7)
+
+        self.assertEqual(result, 1030)
+
     def test_accrue_income_uses_net_income(self) -> None:
         cursor = _FakeCursor({"last_income_at": _FixedDateTime.current - timedelta(minutes=2), "balance_seq": 0})
         user = {"id": 1, "rub": 100}
@@ -52,6 +62,22 @@ class ZooParkIncomeTests(unittest.TestCase):
 
         self.assertEqual(result["rub"], 0)
         self.assertIn(("UPDATE users SET rub=%s WHERE id=%s", (0, 2)), cursor.calls)
+
+    def test_sync_passive_balance_uses_legacy_and_pack_income(self) -> None:
+        cursor = _FakeCursor(None)
+        cursor.fetchone_queue = [{"last_income_at": _FixedDateTime.current - timedelta(minutes=2), "balance_seq": 0}]
+        user = {"id": 3, "rub": 100}
+
+        with patch.object(income_module, "datetime", _FixedDateTime), \
+             patch.object(income_module, "calc_legacy_income", return_value=100), \
+             patch.object(income_module, "calc_pack_income", return_value=50), \
+             patch.object(income_module, "calc_sick_expenses", return_value=10):
+            updated_user, income_rub_per_min, expenses_rub_per_min = income_module.sync_passive_balance(cursor, user)
+
+        self.assertEqual(income_rub_per_min, 150)
+        self.assertEqual(expenses_rub_per_min, 10)
+        self.assertEqual(updated_user["rub"], 380)
+        self.assertIn(("UPDATE users SET rub=%s WHERE id=%s", (380, 3)), cursor.calls)
 
 
 if __name__ == "__main__":

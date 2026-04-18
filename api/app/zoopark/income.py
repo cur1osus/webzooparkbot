@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from math import trunc
 
+from api.app.zoopark.catalog import DIVERSITY_BONUS_PER_SPECIES
+
 PACK_BASE_INCOME = 5000
 
 PACK_INCOME_MULT = {
@@ -29,6 +31,25 @@ def calc_sick_expenses(cur, user_id: int) -> int:
     )
     row = cur.fetchone() or {}
     return int(row.get("total") or 0)
+
+
+def calc_legacy_income(cur, user_id: int) -> int:
+    cur.execute(
+        """SELECT
+               COALESCE(SUM(CAST(income AS SIGNED) * CAST(quantity AS SIGNED)), 0) AS base_income,
+               COUNT(*) AS species_count
+           FROM animals
+           WHERE user_id=%s AND quantity>0""",
+        (user_id,),
+    )
+    row = cur.fetchone() or {}
+    base_income = int(row.get("base_income") or 0)
+    species_count = int(row.get("species_count") or 0)
+    if base_income <= 0 or species_count <= 0:
+        return 0
+
+    diversity_multiplier = 1 + (species_count * DIVERSITY_BONUS_PER_SPECIES)
+    return int(base_income * diversity_multiplier)
 
 
 def accrue_income(cur, user: dict, income_rub_per_min: int, expenses_rub_per_min: int = 0) -> dict:
@@ -85,6 +106,6 @@ def calc_pack_income(cur, user_id: int) -> int:
 
 
 def sync_passive_balance(cur, user: dict) -> tuple[dict, int, int]:
-    income_rub_per_min = calc_pack_income(cur, user["id"])
+    income_rub_per_min = calc_legacy_income(cur, user["id"]) + calc_pack_income(cur, user["id"])
     expenses_rub_per_min = calc_sick_expenses(cur, user["id"])
     return accrue_income(cur, user, income_rub_per_min, expenses_rub_per_min), income_rub_per_min, expenses_rub_per_min
