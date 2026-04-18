@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from api.app.zoopark.catalog import STARS_TO_PAW
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import BOT_TOKEN, get_db
 
@@ -72,6 +73,7 @@ def api_mpgame_create(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
             if int(user["rub"]) < bet_rub:
                 raise HTTPException(400, "Недостаточно рублей")
 
@@ -108,6 +110,7 @@ def api_mpgame_join(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
 
             cur.execute("SELECT * FROM mp_games_new WHERE id=%s", (game_id,))
             game = cur.fetchone()
@@ -202,6 +205,7 @@ def api_start_solo_game(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
             if int(user["rub"]) < bet_rub:
                 raise HTTPException(400, "Недостаточно рублей")
 

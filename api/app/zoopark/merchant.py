@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
 from api.app.zoopark.runtime import get_db
 
@@ -42,6 +43,7 @@ def do_merchant_buy(tg_id: int, slot: int) -> dict:
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
 
             user_id = user["id"]
             animals = get_animals(cur, user_id)

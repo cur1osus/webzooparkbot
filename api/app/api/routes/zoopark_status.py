@@ -5,6 +5,7 @@ import random
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import auth, get_db
 
@@ -28,6 +29,7 @@ def claim_bonus(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
             if not user["bonus"]:
                 raise HTTPException(400, "Бонус уже получен сегодня")
 

@@ -3,6 +3,7 @@ import { useZooStore } from './store';
 import { TabBar, type RootTab } from './components/TabBar';
 import { PageSkeleton, Skeleton } from './components/Skeleton';
 import { apiRegister, isDevMode, setDevUserId, clearDevUserId, apiBuyAviary } from './api';
+import { useLiveGameState } from './hooks/useLiveGameState';
 import { inTma, hapticImpact, hapticNotification } from './tma';
 import type { GameState } from './types';
 
@@ -170,12 +171,12 @@ function PageFallback() {
 
 export default function App() {
   const { state, loading, error, errorStatus, loadFromServer, persistStateSilently, setGameState, patchState } = useZooStore();
+  const displayState = useLiveGameState(state);
   const [tab, setTab] = useState<RootTab>('zoo');
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const incomeRemainderRef = useRef(0);
 
   const showToast = useCallback((kind: 'ok' | 'err', text: string) => {
     setToast({ kind, text });
@@ -193,23 +194,6 @@ export default function App() {
     }, AUTOSAVE_MS);
     return () => { if (autosaveRef.current) clearInterval(autosaveRef.current); };
   }, [persistStateSilently]);
-
-  // Passive income tick — runs every second, pauses when tab is hidden
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (document.hidden) return;
-      const { state: s, patchState: patch } = useZooStore.getState();
-      if (!s) return;
-      const net = s.income_rub_per_min - s.expenses_rub_per_min;
-      if (net === 0) return;
-      const raw = net / 60 + incomeRemainderRef.current;
-      const delta = Math.trunc(raw);
-      incomeRemainderRef.current = raw - delta;
-      if (delta === 0) return;
-      patch({ rub: Math.max(0, s.rub + delta), balance_seq: Date.now() });
-    }, 1_000);
-    return () => clearInterval(id);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Flush on page hide
   useEffect(() => {
@@ -328,7 +312,7 @@ export default function App() {
       )}
 
       {/* Main app */}
-      {state && (
+      {state && displayState && (
         <div
           className={`app-shell max-w-[480px] mx-auto relative ${!inTma ? 'pt-12' : ''}`}
           style={inTma ? { paddingTop: 'var(--safe-top)' } : undefined}
@@ -336,22 +320,22 @@ export default function App() {
           <div key={tab} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
-                <ZooPage gs={state} onRefresh={() => void loadFromServer()} />
+                <ZooPage gs={displayState} onRefresh={() => void loadFromServer()} />
               )}
               {tab === 'shop' && (
                 <ShopPage
-                  gs={state}
+                  gs={displayState}
                   onBuyAviary={id => void handleBuyAviary(id)}
                 />
               )}
               {tab === 'lab' && (
-                <LabPage gs={state} />
+                <LabPage gs={displayState} />
               )}
               {tab === 'games' && (
-                <GamesPage gs={state} />
+                <GamesPage gs={displayState} />
               )}
               {tab === 'more' && (
-                <MorePage gs={state} onRefresh={() => void loadFromServer()} />
+                <MorePage gs={displayState} onRefresh={() => void loadFromServer()} />
               )}
             </Suspense>
           </div>

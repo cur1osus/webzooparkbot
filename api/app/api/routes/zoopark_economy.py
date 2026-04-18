@@ -4,6 +4,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from api.app.zoopark.catalog import ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID, AVIARY_STRING_TO_DB, RUB_PER_USD
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
 from api.app.zoopark.runtime import auth, get_db
 
@@ -46,6 +47,7 @@ def buy_animal(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
             uid = user["id"]
             if int(user["rub"]) < cost:
                 raise HTTPException(400, "Недостаточно рублей")
@@ -101,6 +103,7 @@ def buy_aviary(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
             uid = user["id"]
             if int(user["rub"]) < aviary_def["price"]:
                 raise HTTPException(400, "Недостаточно рублей")
@@ -172,6 +175,7 @@ def bank_exchange(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
             uid = user["id"]
             rub = int(user["rub"])
             usd = int(user["usd"])

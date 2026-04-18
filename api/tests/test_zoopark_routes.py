@@ -121,7 +121,7 @@ class ZooParkRouteTests(unittest.TestCase):
         with patch.object(module, "auth", return_value=1), \
              patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
-             patch.object(module, "calc_pack_income", return_value=123), \
+             patch.object(module, "sync_passive_balance", return_value=(user, 123, 17)), \
              patch.object(module, "build_state", return_value=state):
             self.assertEqual(module.me(), state)
 
@@ -135,7 +135,6 @@ class ZooParkRouteTests(unittest.TestCase):
         with patch.object(module, "auth", return_value=99), \
              patch.object(module, "get_db", side_effect=[db, db2]), \
              patch.object(module, "get_user", return_value=None), \
-             patch.object(module, "calc_pack_income", return_value=0), \
              patch.object(module, "build_state", return_value={"tg_id": 99}):
             result = module.register(module.RegisterBody(nickname="neo"))
         self.assertEqual(result, {"ok": True, "game_state": {"tg_id": 99}})
@@ -157,8 +156,87 @@ class ZooParkRouteTests(unittest.TestCase):
         with patch.object(module, "auth", return_value=1), \
              patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
+             patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)), \
              patch.object(module, "get_extra", return_value={"balance_seq": 0, "data_version": 0}):
             self.assertEqual(module.save(body), {"ok": True})
+
+        update_calls = [call.args for call in cur.execute.call_args_list if call.args and isinstance(call.args[0], str) and call.args[0].startswith("UPDATE users SET")]
+        self.assertIn(("UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), update_calls)
+
+    def test_save_uses_pre_sync_balance_seq_for_non_rub_fields(self) -> None:
+        module = importlib.import_module("api.app.api.routes.zoopark_core")
+        income_module = importlib.import_module("api.app.zoopark.income")
+
+        class _StatefulCursor:
+            def __init__(self) -> None:
+                self.extra = {
+                    "user_id": 1,
+                    "balance_seq": 5,
+                    "data_version": 0,
+                    "profile_emoji": None,
+                    "last_income_at": datetime(2026, 1, 1, 0, 0, 0),
+                }
+                self.last_sql = ""
+                self.calls: list[tuple[str, tuple]] = []
+
+            def execute(self, sql: str, params: tuple) -> None:
+                self.last_sql = sql
+                self.calls.append((sql, params))
+                if sql.startswith("UPDATE webapp_extra SET last_income_at=%s, balance_seq=%s WHERE user_id=%s"):
+                    self.extra["last_income_at"] = params[0]
+                    self.extra["balance_seq"] = params[1]
+
+            def fetchone(self):
+                if self.last_sql.startswith("SELECT * FROM webapp_extra WHERE user_id=%s"):
+                    return dict(self.extra)
+                if self.last_sql.startswith("SELECT last_income_at, balance_seq FROM webapp_extra WHERE user_id=%s"):
+                    return {
+                        "last_income_at": self.extra["last_income_at"],
+                        "balance_seq": self.extra["balance_seq"],
+                    }
+                return None
+
+        class _StatefulDb:
+            def __init__(self, cursor: _StatefulCursor) -> None:
+                self._cursor = cursor
+
+            def cursor(self):
+                return self
+
+            def __enter__(self):
+                return self._cursor
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def commit(self) -> None:
+                return None
+
+            def close(self) -> None:
+                return None
+
+        cur = _StatefulCursor()
+        db = _StatefulDb(cur)
+        user = {"id": 1, "rub": 10}
+        body = module.SavePayload(
+            rub=10,
+            usd=2,
+            paw_coins=3,
+            animals=[],
+            aviaries=[],
+            balance_seq=5,
+            data_version=0,
+        )
+
+        with patch.object(module, "auth", return_value=1), \
+             patch.object(module, "get_db", return_value=db), \
+             patch.object(module, "get_user", return_value=user), \
+             patch.object(income_module, "calc_pack_income", return_value=0), \
+             patch.object(income_module, "calc_sick_expenses", return_value=0):
+            self.assertEqual(module.save(body), {"ok": True})
+
+        self.assertGreater(cur.extra["balance_seq"], 5)
+        self.assertIn(("UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), cur.calls)
 
     def test_bank_contract(self) -> None:
         module = importlib.import_module("api.app.api.routes.zoopark_economy")
@@ -177,7 +255,8 @@ class ZooParkRouteTests(unittest.TestCase):
         body = types.SimpleNamespace(from_="rub", amount=180)
         with patch.object(module, "auth", return_value=1), \
              patch.object(module, "get_db", return_value=db), \
-             patch.object(module, "get_user", return_value=user):
+             patch.object(module, "get_user", return_value=user), \
+             patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)):
             result = module.bank_exchange(body)
         self.assertEqual(result, {"ok": True, "new_rub": 320, "new_usd": 3})
 
@@ -188,6 +267,7 @@ class ZooParkRouteTests(unittest.TestCase):
         with patch.object(module, "auth", return_value=1), \
              patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
+             patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)), \
              patch.object(module.random, "choice", return_value="rub"), \
              patch.object(module.random, "randint", return_value=500):
             result = module.claim_bonus()
@@ -271,7 +351,8 @@ class ZooParkRouteTests(unittest.TestCase):
             {"cnt": 1, "taken": "forest"},
         ]
         with patch.object(module, "get_db", return_value=db), \
-             patch.object(module, "get_user", return_value=user):
+             patch.object(module, "get_user", return_value=user), \
+             patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)):
             result = module.api_buy_locality(1, module.BuyLocalityBody(habitat="desert"))
         self.assertEqual(result, {"ok": True, "id": 1, "habitat": "desert", "price_paid": 50000, "new_rub": 70000})
 
@@ -340,6 +421,7 @@ class ZooParkRouteTests(unittest.TestCase):
         ]
         with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value={"id": 9, "rub": 500, "nickname": "guest"}), \
+             patch.object(module, "sync_passive_balance", return_value=({"id": 9, "rub": 500, "nickname": "guest"}, 0, 0)), \
              patch.object(module.random, "randint", side_effect=[6, 2]):
             result = module.api_mpgame_join(77, 5)
         self.assertEqual(result["game"]["status"], "finished")

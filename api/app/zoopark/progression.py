@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from api.app.zoopark.income import pack_animal_income
+from api.app.zoopark.income import pack_animal_income, sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import get_db
 
@@ -230,6 +230,7 @@ def api_packs_open(tg_id: int):
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
 
             rub = int(user["rub"])
             packs_today, date_is_today = get_pack_state(cur, user["id"])
@@ -333,6 +334,7 @@ def api_buy_locality(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
 
             rub = int(user["rub"])
             cur.execute(

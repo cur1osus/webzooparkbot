@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from api.app.zoopark.income import accrue_income, calc_pack_income
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import build_state, get_extra, get_user
 from api.app.zoopark.runtime import BOT_USERNAME, auth, get_db
 from api.app.zoopark.catalog import ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID, AVIARY_STRING_TO_DB
@@ -40,8 +40,7 @@ def me(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Пользователь не найден")
-            income = calc_pack_income(cur, user["id"])
-            user = accrue_income(cur, user, income)
+            user, income, _expenses = sync_passive_balance(cur, user)
             result = build_state(cur, user, income)
         db.commit()
         return result
@@ -64,11 +63,12 @@ def save(
                 return {"ok": False}
             uid = user["id"]
             extra = get_extra(cur, uid)
+            user, _income, _expenses = sync_passive_balance(cur, user)
 
             if body.balance_seq >= int(extra.get("balance_seq", 0)):
                 cur.execute(
-                    "UPDATE users SET rub=%s, usd=%s, paw_coins=%s WHERE id=%s",
-                    (int(body.rub), int(body.usd), int(body.paw_coins), uid),
+                    "UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s",
+                    (int(body.usd), int(body.paw_coins), uid),
                 )
 
             if body.data_version >= int(extra.get("data_version", 0)):
@@ -139,7 +139,7 @@ def register(
         db2 = get_db()
         try:
             with db2.cursor() as cur2:
-                gs = build_state(cur2, user, calc_pack_income(cur2, user["id"]))
+                gs = build_state(cur2, user, 0)
         finally:
             db2.close()
         return {"ok": True, "game_state": gs}

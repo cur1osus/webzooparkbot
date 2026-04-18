@@ -6,6 +6,7 @@ import string
 from fastapi import HTTPException
 from pydantic import BaseModel
 
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import get_db
 
@@ -218,6 +219,7 @@ def api_transfers_create(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Нет игрока")
+            user, _income, _expenses = sync_passive_balance(cur, user)
 
             total = int(body.total_rub)
             max_claims = max(1, body.max_claims)

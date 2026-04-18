@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from math import trunc
 
 PACK_BASE_INCOME = 5000
 
@@ -21,8 +22,17 @@ def pack_animal_income(animal: dict, habitat_bonus: float = 1.0) -> int:
     )
 
 
-def accrue_income(cur, user: dict, income_rub_per_min: int) -> dict:
-    """Add elapsed passive income to user balance. Returns updated user dict."""
+def calc_sick_expenses(cur, user_id: int) -> int:
+    cur.execute(
+        "SELECT COALESCE(SUM(penalty_rub_per_min), 0) AS total FROM sick_events WHERE user_id=%s",
+        (user_id,),
+    )
+    row = cur.fetchone() or {}
+    return int(row.get("total") or 0)
+
+
+def accrue_income(cur, user: dict, income_rub_per_min: int, expenses_rub_per_min: int = 0) -> dict:
+    """Add elapsed passive net income to user balance. Returns updated user dict."""
     uid = user["id"]
     cur.execute("SELECT last_income_at, balance_seq FROM webapp_extra WHERE user_id=%s", (uid,))
     row = cur.fetchone()
@@ -31,18 +41,20 @@ def accrue_income(cur, user: dict, income_rub_per_min: int) -> dict:
 
     now = datetime.now(timezone.utc)
     last_income_at = row.get("last_income_at")
+    net_rub_per_min = income_rub_per_min - expenses_rub_per_min
 
     accrued = 0
-    if last_income_at is not None and income_rub_per_min > 0:
+    if last_income_at is not None and net_rub_per_min != 0:
         if hasattr(last_income_at, "tzinfo") and last_income_at.tzinfo is None:
             last_income_at = last_income_at.replace(tzinfo=timezone.utc)
         elapsed_mins = (now - last_income_at).total_seconds() / 60.0
-        accrued = int(elapsed_mins * income_rub_per_min)
+        accrued = trunc(elapsed_mins * net_rub_per_min)
 
-    new_rub = int(user["rub"]) + accrued
+    current_rub = int(user["rub"])
+    new_rub = max(0, current_rub + accrued)
     new_seq = int(now.timestamp() * 1000)
 
-    if accrued > 0:
+    if new_rub != current_rub:
         cur.execute("UPDATE users SET rub=%s WHERE id=%s", (new_rub, uid))
     cur.execute(
         "UPDATE webapp_extra SET last_income_at=%s, balance_seq=%s WHERE user_id=%s",
@@ -51,6 +63,7 @@ def accrue_income(cur, user: dict, income_rub_per_min: int) -> dict:
 
     user = dict(user)
     user["rub"] = new_rub
+    user["balance_seq"] = new_seq
     return user
 
 
@@ -69,3 +82,9 @@ def calc_pack_income(cur, user_id: int) -> int:
         bonus = 1.5 if row["locality_habitat"] and row["locality_habitat"] == row["animal_habitat"] else 1.0
         total += pack_animal_income(row, bonus)
     return total
+
+
+def sync_passive_balance(cur, user: dict) -> tuple[dict, int, int]:
+    income_rub_per_min = calc_pack_income(cur, user["id"])
+    expenses_rub_per_min = calc_sick_expenses(cur, user["id"])
+    return accrue_income(cur, user, income_rub_per_min, expenses_rub_per_min), income_rub_per_min, expenses_rub_per_min
