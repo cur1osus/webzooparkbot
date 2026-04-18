@@ -175,6 +175,7 @@ export default function App() {
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const incomeRemainderRef = useRef(0);
 
   const showToast = useCallback((kind: 'ok' | 'err', text: string) => {
     setToast({ kind, text });
@@ -192,6 +193,23 @@ export default function App() {
     }, AUTOSAVE_MS);
     return () => { if (autosaveRef.current) clearInterval(autosaveRef.current); };
   }, [persistStateSilently]);
+
+  // Passive income tick — runs every second, pauses when tab is hidden
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.hidden) return;
+      const { state: s, patchState: patch } = useZooStore.getState();
+      if (!s) return;
+      const net = s.income_rub_per_min - s.expenses_rub_per_min;
+      if (net === 0) return;
+      const raw = net / 60 + incomeRemainderRef.current;
+      const delta = Math.trunc(raw);
+      incomeRemainderRef.current = raw - delta;
+      if (delta === 0) return;
+      patch({ rub: Math.max(0, s.rub + delta), balance_seq: Date.now() });
+    }, 1_000);
+    return () => clearInterval(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Flush on page hide
   useEffect(() => {
