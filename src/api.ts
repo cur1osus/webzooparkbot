@@ -27,6 +27,7 @@ import type {
   PackOpenResult,
   ReferralResponse,
   RegisterResponse,
+  SaveResponse,
   SoloStats,
   TopResponse,
   TransferOut,
@@ -99,7 +100,7 @@ async function req<T>(path: string, init?: RequestInit, keepalive = false): Prom
 
 export const apiMe = () => req<GameState>('/me');
 export const apiSave = (payload: object, keepalive = false) =>
-  req<{ ok: boolean }>('/save', { method: 'POST', body: JSON.stringify(payload) }, keepalive);
+  req<SaveResponse>('/save', { method: 'POST', body: JSON.stringify(payload) }, keepalive);
 export const apiRegister = (nickname: string) =>
   req<RegisterResponse>('/register', { method: 'POST', body: JSON.stringify({ nickname }) });
 export const apiConfig = () => req<AppConfig>('/config');

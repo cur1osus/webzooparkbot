@@ -105,6 +105,17 @@ export interface SavePayload {
   data_version: number;
 }
 
+export type SaveResponse =
+  | { ok: false }
+  | {
+      ok: true;
+      rub: number;
+      usd: number;
+      paw_coins: number;
+      balance_seq: number;
+      data_version: number;
+    };
+
 // ─── Shop ─────────────────────────────────────────────────────────────────────
 
 export interface BuyAnimalResponse {

@@ -5,6 +5,13 @@ import type { GameState } from './types';
 
 const IDB_KEY = 'zooparkbot-v8';
 
+let persistRequestSeq = 0;
+
+interface PersistOptions {
+  keepalive?: boolean;
+  snapshot?: GameState;
+}
+
 interface ZooStore {
   state: GameState | null;
   loading: boolean;
@@ -13,7 +20,7 @@ interface ZooStore {
   lastSaved: number;
 
   loadFromServer: () => Promise<void>;
-  persistStateSilently: (keepalive?: boolean) => Promise<void>;
+  persistStateSilently: (options?: PersistOptions) => Promise<void>;
   setGameState: (gs: GameState) => void;
   patchState: (patch: Partial<GameState>) => void;
 }
@@ -50,22 +57,44 @@ export const useZooStore = create<ZooStore>((set, get) => ({
     }
   },
 
-  persistStateSilently: async (keepalive = false) => {
+  persistStateSilently: async (options) => {
     const { state } = get();
-    if (!state) return;
+    const baseState = state;
+    const snapshot = options?.snapshot ?? baseState;
+    if (!baseState || !snapshot) return;
+
+    const requestSeq = ++persistRequestSeq;
     try {
       const payload = {
-        rub: state.rub,
-        usd: state.usd,
-        paw_coins: state.paw_coins,
-        animals: state.animals,
-        aviaries: state.aviaries,
-        balance_seq: state.balance_seq,
-        data_version: state.data_version,
+        rub: snapshot.rub,
+        usd: snapshot.usd,
+        paw_coins: snapshot.paw_coins,
+        animals: snapshot.animals,
+        aviaries: snapshot.aviaries,
+        balance_seq: snapshot.balance_seq,
+        data_version: snapshot.data_version,
       };
-      await apiSave(payload, keepalive);
-      await idbSet(IDB_KEY, state).catch(() => {});
-      set({ lastSaved: Date.now() });
+      const result = await apiSave(payload, options?.keepalive ?? false);
+      if (!result.ok) return;
+
+      const latestState = get().state ?? baseState;
+      if (requestSeq !== persistRequestSeq || latestState.balance_seq > result.balance_seq) {
+        return;
+      }
+
+      const rubChangedSinceRequest = latestState.rub !== baseState.rub;
+      const usdChangedSinceRequest = latestState.usd !== baseState.usd;
+      const pawCoinsChangedSinceRequest = latestState.paw_coins !== baseState.paw_coins;
+      const nextState: GameState = {
+        ...latestState,
+        rub: rubChangedSinceRequest ? latestState.rub : result.rub,
+        usd: usdChangedSinceRequest ? latestState.usd : result.usd,
+        paw_coins: pawCoinsChangedSinceRequest ? latestState.paw_coins : result.paw_coins,
+        balance_seq: Math.max(latestState.balance_seq, result.balance_seq),
+        data_version: Math.max(latestState.data_version, result.data_version),
+      };
+      await idbSet(IDB_KEY, nextState).catch(() => {});
+      set({ state: nextState, lastSaved: Date.now() });
     } catch {
       // silent
     }

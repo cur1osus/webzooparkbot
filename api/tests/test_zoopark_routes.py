@@ -143,7 +143,7 @@ class ZooParkRouteTests(unittest.TestCase):
         module = importlib.import_module("api.app.api.routes.zoopark_core")
         db, cur = self._fake_db()
         cur.fetchone.side_effect = [None, None]
-        user = {"id": 1}
+        user = {"id": 1, "rub": 10, "usd": 0, "paw_coins": 0, "balance_seq": 17}
         body = module.SavePayload(
             rub=10,
             usd=2,
@@ -158,7 +158,10 @@ class ZooParkRouteTests(unittest.TestCase):
              patch.object(module, "get_user", return_value=user), \
              patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)), \
              patch.object(module, "get_extra", return_value={"balance_seq": 0, "data_version": 0}):
-            self.assertEqual(module.save(body), {"ok": True})
+            self.assertEqual(
+                module.save(body),
+                {"ok": True, "rub": 10, "usd": 2, "paw_coins": 3, "balance_seq": 17, "data_version": 0},
+            )
 
         update_calls = [call.args for call in cur.execute.call_args_list if call.args and isinstance(call.args[0], str) and call.args[0].startswith("UPDATE users SET")]
         self.assertIn(("UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), update_calls)
@@ -217,7 +220,7 @@ class ZooParkRouteTests(unittest.TestCase):
 
         cur = _StatefulCursor()
         db = _StatefulDb(cur)
-        user = {"id": 1, "rub": 10}
+        user = {"id": 1, "rub": 10, "usd": 0, "paw_coins": 0}
         body = module.SavePayload(
             rub=10,
             usd=2,
@@ -233,9 +236,13 @@ class ZooParkRouteTests(unittest.TestCase):
              patch.object(module, "get_user", return_value=user), \
              patch.object(income_module, "calc_pack_income", return_value=0), \
              patch.object(income_module, "calc_sick_expenses", return_value=0):
-            self.assertEqual(module.save(body), {"ok": True})
+            result = module.save(body)
 
         self.assertGreater(cur.extra["balance_seq"], 5)
+        self.assertEqual(result["rub"], 10)
+        self.assertEqual(result["usd"], 2)
+        self.assertEqual(result["paw_coins"], 3)
+        self.assertEqual(result["balance_seq"], cur.extra["balance_seq"])
         self.assertIn(("UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), cur.calls)
 
     def test_bank_contract(self) -> None:

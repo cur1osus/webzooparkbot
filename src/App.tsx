@@ -174,6 +174,7 @@ export default function App() {
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useState<RootTab>('zoo');
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const displayStateRef = useRef<GameState | null>(null);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -184,23 +185,35 @@ export default function App() {
     toastRef.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
+  useEffect(() => {
+    displayStateRef.current = displayState;
+  }, [displayState]);
+
+  const persistDisplayedStateSilently = useCallback((keepalive = false) => {
+    void persistStateSilently({ keepalive, snapshot: displayStateRef.current ?? undefined });
+  }, [persistStateSilently]);
+
+  const reloadFromServer = useCallback(() => {
+    void loadFromServer();
+  }, [loadFromServer]);
+
   // Initial load
   useEffect(() => { void loadFromServer(); }, [loadFromServer]);
 
   // Autosave every 15s
   useEffect(() => {
     autosaveRef.current = setInterval(() => {
-      void persistStateSilently();
+      persistDisplayedStateSilently();
     }, AUTOSAVE_MS);
     return () => { if (autosaveRef.current) clearInterval(autosaveRef.current); };
-  }, [persistStateSilently]);
+  }, [persistDisplayedStateSilently]);
 
   // Flush on page hide
   useEffect(() => {
-    const onHide = () => { void persistStateSilently(true); };
+    const onHide = () => { persistDisplayedStateSilently(true); };
     window.addEventListener('pagehide', onHide);
     return () => window.removeEventListener('pagehide', onHide);
-  }, [persistStateSilently]);
+  }, [persistDisplayedStateSilently]);
 
   // Reload if hidden > 30s
   useEffect(() => {
@@ -208,12 +221,12 @@ export default function App() {
       if (document.visibilityState === 'hidden') {
         hiddenAtRef.current = Date.now();
       } else if (hiddenAtRef.current && Date.now() - hiddenAtRef.current > HIDDEN_RELOAD_MS) {
-        void loadFromServer();
+        reloadFromServer();
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [loadFromServer]);
+  }, [reloadFromServer]);
 
   // BroadcastChannel sync
   useEffect(() => {
@@ -297,7 +310,7 @@ export default function App() {
             <p className="m-0 mb-[6px] text-lg font-bold">⚠️ Ошибка загрузки</p>
             <p className="m-0 mb-[14px] text-tg-hint text-[13px]">{error}</p>
             <button
-              onClick={() => void loadFromServer()}
+              onClick={reloadFromServer}
               className="w-full py-3 rounded-xl border-none bg-[#0a84ff] text-white cursor-pointer font-bold"
             >
               Повторить
@@ -320,7 +333,7 @@ export default function App() {
           <div key={tab} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
-                <ZooPage gs={displayState} onRefresh={() => void loadFromServer()} />
+                <ZooPage gs={displayState} onRefresh={reloadFromServer} />
               )}
               {tab === 'shop' && (
                 <ShopPage
@@ -335,7 +348,7 @@ export default function App() {
                 <GamesPage gs={displayState} />
               )}
               {tab === 'more' && (
-                <MorePage gs={displayState} onRefresh={() => void loadFromServer()} />
+                <MorePage gs={displayState} onRefresh={reloadFromServer} />
               )}
             </Suspense>
           </div>

@@ -24,6 +24,15 @@ class SavePayload(BaseModel):
     data_version: int
 
 
+class SaveResult(BaseModel):
+    ok: bool
+    rub: int
+    usd: int
+    paw_coins: int
+    balance_seq: int
+    data_version: int
+
+
 class RegisterBody(BaseModel):
     nickname: str
 
@@ -48,7 +57,7 @@ def me(
         db.close()
 
 
-@router.post("/api/save")
+@router.post("/api/save", response_model=SaveResult)
 def save(
     body: SavePayload,
     x_init_data: str = Header(default=""),
@@ -60,16 +69,23 @@ def save(
         with db.cursor() as cur:
             user = get_user(cur, tg_id)
             if not user:
-                return {"ok": False}
+                return {"ok": False, "rub": 0, "usd": 0, "paw_coins": 0, "balance_seq": 0, "data_version": 0}
+            user = dict(user)
             uid = user["id"]
             extra = get_extra(cur, uid)
             user, _income, _expenses = sync_passive_balance(cur, user)
+            current_usd = int(user.get("usd", 0))
+            current_paw_coins = int(user.get("paw_coins", 0))
 
             if body.balance_seq >= int(extra.get("balance_seq", 0)):
+                current_usd = int(body.usd)
+                current_paw_coins = int(body.paw_coins)
                 cur.execute(
                     "UPDATE users SET usd=%s, paw_coins=%s WHERE id=%s",
-                    (int(body.usd), int(body.paw_coins), uid),
+                    (current_usd, current_paw_coins, uid),
                 )
+                user["usd"] = current_usd
+                user["paw_coins"] = current_paw_coins
 
             if body.data_version >= int(extra.get("data_version", 0)):
                 for animal_state in body.animals:
@@ -101,7 +117,14 @@ def save(
                             (uid, db_id, legacy_aviary["price"], legacy_aviary["seats"], count, count),
                         )
         db.commit()
-        return {"ok": True}
+        return {
+            "ok": True,
+            "rub": int(user.get("rub", 0)),
+            "usd": current_usd,
+            "paw_coins": current_paw_coins,
+            "balance_seq": int(user.get("balance_seq", extra.get("balance_seq", 0))),
+            "data_version": int(extra.get("data_version", 0)),
+        }
     finally:
         db.close()
 
