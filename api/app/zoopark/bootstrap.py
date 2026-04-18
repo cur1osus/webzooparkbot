@@ -27,7 +27,7 @@ CREATE_TABLES_SQL: Sequence[str] = (
         bonus TINYINT(1) NOT NULL DEFAULT 1,
         unity_id INT NULL,
         is_banned TINYINT(1) NOT NULL DEFAULT 0,
-        balance_seq INT NOT NULL DEFAULT 0,
+        balance_seq BIGINT NOT NULL DEFAULT 0,
         data_version BIGINT NOT NULL DEFAULT 0,
         bonus_notify_msg_id BIGINT NULL DEFAULT NULL,
         INDEX (unity_id)
@@ -87,7 +87,7 @@ CREATE_TABLES_SQL: Sequence[str] = (
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
     """CREATE TABLE IF NOT EXISTS webapp_extra (
         user_id INT NOT NULL UNIQUE,
-        balance_seq INT NOT NULL DEFAULT 0,
+        balance_seq BIGINT NOT NULL DEFAULT 0,
         data_version BIGINT NOT NULL DEFAULT 0,
         profile_emoji VARCHAR(20) DEFAULT NULL,
         PRIMARY KEY (user_id)
@@ -238,6 +238,23 @@ def _available_columns(cur, table: str) -> set[str]:
     return {str(row["COLUMN_NAME"]) for row in cur.fetchall()}
 
 
+def _column_data_type(cur, table: str, column: str) -> str | None:
+    cur.execute(
+        "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=%s AND COLUMN_NAME=%s LIMIT 1",
+        (table, column),
+    )
+    row = cur.fetchone()
+    return None if row is None else str(row["DATA_TYPE"]).lower()
+
+
+def _ensure_bigint_column(cur, table: str, column: str) -> None:
+    if not _table_exists(cur, table):
+        return
+    if _column_data_type(cur, table, column) == "bigint":
+        return
+    cur.execute(f"ALTER TABLE {table} MODIFY COLUMN {column} BIGINT NOT NULL DEFAULT 0")
+
+
 def _copy_compat_table(cur, source_table: str, target_table: str, required: Sequence[str], optional: Sequence[str]) -> None:
     if source_table == target_table or not _table_exists(cur, source_table) or not _table_exists(cur, target_table):
         return
@@ -282,6 +299,8 @@ def init_schema() -> None:
         with db.cursor() as cur:
             for sql in CREATE_TABLES_SQL:
                 cur.execute(sql)
+            _ensure_bigint_column(cur, ZOOPARK_USERS_TABLE, "balance_seq")
+            _ensure_bigint_column(cur, "webapp_extra", "balance_seq")
             for source_table, target_table, required, optional in COPY_COMPAT_TABLES:
                 _copy_compat_table(cur, source_table, target_table, required, optional)
             seed_catalogue(cur)
