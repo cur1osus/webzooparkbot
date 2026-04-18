@@ -36,6 +36,10 @@ def _column_exists(conn, table: str, column: str) -> bool:
     return bool(row)
 
 
+def _columns_exist(conn, table: str, columns: list[str]) -> bool:
+    return all(_column_exists(conn, table, column) for column in columns)
+
+
 def _add_column_if_missing(table: str, column: str, definition: str) -> None:
     conn = op.get_bind()
     if not _table_exists(conn, table) or _column_exists(conn, table, column):
@@ -117,11 +121,12 @@ def upgrade() -> None:
     """))
 
     # ── aviaries: уникальный индекс + базовые данные ────────────────────────────
-    _add_index_if_missing(
-        "aviaries", "uq_code_name",
-        "ALTER TABLE aviaries ADD UNIQUE KEY uq_code_name (code_name)"
-    )
-    if _table_exists(conn, "aviaries"):
+    if _columns_exist(conn, "aviaries", ["code_name"]):
+        _add_index_if_missing(
+            "aviaries", "uq_code_name",
+            "ALTER TABLE aviaries ADD UNIQUE KEY uq_code_name (code_name)"
+        )
+    if _columns_exist(conn, "aviaries", ["code_name", "name", "size", "price"]):
         conn.execute(text("""
             INSERT IGNORE INTO aviaries (code_name, name, size, price) VALUES
                 ('aviary_1', 'Вольер маленький', 5,  4000),
