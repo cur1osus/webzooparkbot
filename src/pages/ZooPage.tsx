@@ -4,7 +4,7 @@ import type { GameState, ForgeItem, ForgeSet } from '../types';
 import { ANIMALS } from '../data/animals';
 import { ExpeditionOverviewCard, ExpeditionPage } from './ExpeditionPage';
 
-type ZooTab = 'overview' | 'stats' | 'forge' | 'aviaries' | 'medals';
+type ZooTab = 'overview' | 'forge' | 'aviaries' | 'medals';
 
 const FORGE_ICON: Record<string, string> = {
   bank: '🔄', income: '📈', game: '🧠', bonus: '🎲',
@@ -163,7 +163,6 @@ type SubPage =
 
 const ZOO_TABS: { id: ZooTab; emoji: string; label: string; badge?: (gs: GameState) => number | null }[] = [
   { id: 'overview', emoji: '🏠', label: 'Обзор' },
-  { id: 'stats',    emoji: '📊', label: 'Статы' },
   { id: 'forge',    emoji: '⚒️',  label: 'Кузня',  badge: gs => gs.forge_items.length > 0 ? gs.forge_items.length : null },
   { id: 'aviaries', emoji: '🏗️', label: 'Вольер', badge: gs => gs.sick_animals.length > 0 ? gs.sick_animals.length : null },
   { id: 'medals',   emoji: '🏅', label: 'Медали' },
@@ -339,31 +338,6 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         </div>
       )}
 
-      {tab === 'stats' && (
-        <div className="px-[14px] pt-3 flex flex-col gap-[10px] page-enter">
-          <div className="card">
-            <p className="m-0 mb-3 font-bold flex items-center gap-2">
-              <span className="icon-box text-base" style={{ background: 'rgba(52,199,89,0.12)' }}>💰</span>
-              Финансы
-            </p>
-            <Row label="Доход/мин"    value={`+${fmt(gs.income_rub_per_min)} ₽`}  color="#34c759" />
-            <Row label="Расходы/мин"  value={`-${fmt(gs.expenses_rub_per_min)} ₽`} color="#ff6b3d" />
-            <Row label="Чистый/мин"   value={`${fmtMin(netPerMin)} ₽`}            color={netPerMin >= 0 ? '#34c759' : '#ff6b3d'} />
-          </div>
-          <div className="card">
-            <p className="m-0 mb-3 font-bold flex items-center gap-2">
-              <span className="icon-box text-base" style={{ background: 'rgba(90,200,250,0.12)' }}>🦁</span>
-              Зоопарк
-            </p>
-            <Row label="Животных"     value={fmt(gs.animals.reduce((s, a) => s + a.quantity, 0))} />
-            <Row label="Видов"        value={String(gs.species_count)} />
-            <Row label="Бонус от видов" value={`+${Math.round(gs.diversity_bonus_per_species * gs.species_count * 100)}%`} color="#ffd60a" />
-            <Row label="Мест всего"   value={fmt(gs.total_seats)} />
-            <Row label="Свободно"     value={fmt(gs.free_seats)} color="#34c759" />
-          </div>
-        </div>
-      )}
-
       {tab === 'forge' && (
         <ForgeTab items={gs.forge_items} sets={gs.forge_sets}
           onApplySet={() => {}}
@@ -427,15 +401,6 @@ function StatTile({ icon, value, label, accent }: { icon: string; value: string;
       </div>
       <p className="m-0 mb-[2px] text-[22px] font-extrabold leading-none">{value}</p>
       <p className="m-0 text-[11px] text-tg-hint leading-snug">{label}</p>
-    </div>
-  );
-}
-
-function Row({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="flex justify-between mb-[6px] last:mb-0">
-      <span className="text-[13px] text-tg-hint">{label}</span>
-      <span className="text-[13px] font-bold" style={{ color: color ?? 'var(--tg-theme-text-color)' }}>{value}</span>
     </div>
   );
 }

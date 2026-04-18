@@ -107,6 +107,7 @@ MISSING_COLUMN_SQL: Sequence[str] = (
     "ALTER TABLE pack_animals ADD COLUMN locality_id INT NULL",
     "ALTER TABLE pack_animals ADD COLUMN last_bred_date DATE NULL",
     "ALTER TABLE pack_animals ADD COLUMN in_expedition INT NULL",
+    "ALTER TABLE webapp_extra ADD COLUMN last_income_at DATETIME NULL",
 )
 
 

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from api.app.zoopark.income import calc_pack_income
+from api.app.zoopark.income import accrue_income, calc_pack_income
 from api.app.zoopark.profile import build_state, get_extra, get_user
 from api.app.zoopark.runtime import BOT_USERNAME, auth, get_db
 from api.app.zoopark.catalog import ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID, AVIARY_STRING_TO_DB
@@ -40,7 +40,11 @@ def me(
             user = get_user(cur, tg_id)
             if not user:
                 raise HTTPException(404, "Пользователь не найден")
-            return build_state(cur, user, calc_pack_income(cur, user["id"]))
+            income = calc_pack_income(cur, user["id"])
+            user = accrue_income(cur, user, income)
+            result = build_state(cur, user, income)
+        db.commit()
+        return result
     finally:
         db.close()
 
