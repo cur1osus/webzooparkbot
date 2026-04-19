@@ -6,7 +6,19 @@ from api.app.zoopark.catalog import ANIMALS, AVIARIES
 from api.app.zoopark.db_tables import (
     ZOOPARK_ANIMALS_TABLE,
     ZOOPARK_AVIARIES_TABLE,
+    ZOOPARK_COCKTAIL_SESSIONS_TABLE,
+    ZOOPARK_EXPEDITION_ANIMALS_TABLE,
+    ZOOPARK_EXPEDITIONS_TABLE,
+    ZOOPARK_EXTRA_TABLE,
     ZOOPARK_ITEMS_TABLE,
+    ZOOPARK_LOCALITIES_TABLE,
+    ZOOPARK_MERCHANTS_TABLE,
+    ZOOPARK_MP_GAMES_TABLE,
+    ZOOPARK_PACK_ANIMALS_TABLE,
+    ZOOPARK_REFERRALS_TABLE,
+    ZOOPARK_SICK_EVENTS_TABLE,
+    ZOOPARK_SOLO_STATS_TABLE,
+    ZOOPARK_TRANSFER_LINKS_TABLE,
     ZOOPARK_UNITY_TABLE,
     ZOOPARK_USERS_TABLE,
 )
@@ -85,14 +97,17 @@ CREATE_TABLES_SQL: Sequence[str] = (
         size INT NOT NULL,
         UNIQUE KEY uq_aviaries_info_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS webapp_extra (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_EXTRA_TABLE} (
         user_id INT NOT NULL UNIQUE,
         balance_seq BIGINT NOT NULL DEFAULT 0,
         data_version BIGINT NOT NULL DEFAULT 0,
         profile_emoji VARCHAR(20) DEFAULT NULL,
+        packs_today INT NOT NULL DEFAULT 0,
+        packs_today_date DATE NULL,
+        last_income_at DATETIME NULL,
         PRIMARY KEY (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS sick_events (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_SICK_EVENTS_TABLE} (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         animal_id VARCHAR(30) NOT NULL,
@@ -100,7 +115,7 @@ CREATE_TABLES_SQL: Sequence[str] = (
         penalty_rub_per_min BIGINT NOT NULL DEFAULT 500,
         INDEX (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS mp_games_new (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_MP_GAMES_TABLE} (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         game_type VARCHAR(20) NOT NULL,
         bet_rub BIGINT NOT NULL,
@@ -114,7 +129,7 @@ CREATE_TABLES_SQL: Sequence[str] = (
         INDEX (status),
         INDEX (creator_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS solo_stats (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_SOLO_STATS_TABLE} (
         user_id INT NOT NULL PRIMARY KEY,
         games_played INT NOT NULL DEFAULT 0,
         wins INT NOT NULL DEFAULT 0,
@@ -122,14 +137,14 @@ CREATE_TABLES_SQL: Sequence[str] = (
         total_won BIGINT NOT NULL DEFAULT 0,
         total_lost BIGINT NOT NULL DEFAULT 0
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS cocktail_sessions (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_COCKTAIL_SESSIONS_TABLE} (
         user_id INT NOT NULL PRIMARY KEY,
         secret TEXT NOT NULL,
         attempts INT NOT NULL DEFAULT 0,
         won TINYINT(1) NOT NULL DEFAULT 0,
         started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS transfer_links (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_TRANSFER_LINKS_TABLE} (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         link_key VARCHAR(32) NOT NULL UNIQUE,
         creator_id INT NOT NULL,
@@ -141,7 +156,19 @@ CREATE_TABLES_SQL: Sequence[str] = (
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         INDEX (creator_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS pack_animals (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_MERCHANTS_TABLE} (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        animal_info_id INT NOT NULL,
+        name VARCHAR(64) NOT NULL,
+        discount INT NOT NULL DEFAULT 0,
+        price_with_discount BIGINT NOT NULL DEFAULT 0,
+        quantity_animals INT NOT NULL DEFAULT 1,
+        price BIGINT NOT NULL DEFAULT 0,
+        first_offer_bought TINYINT(1) NOT NULL DEFAULT 0,
+        INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_PACK_ANIMALS_TABLE} (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         survival ENUM('low','medium','high') NOT NULL,
@@ -151,16 +178,20 @@ CREATE_TABLES_SQL: Sequence[str] = (
         habitat ENUM('desert','mountains','forest','fields','antarctica') NOT NULL,
         is_alive TINYINT(1) NOT NULL DEFAULT 1,
         acquired_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        dies_at DATETIME NULL,
+        locality_id INT NULL,
+        last_bred_date DATE NULL,
+        in_expedition INT NULL,
         INDEX (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS player_localities (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_LOCALITIES_TABLE} (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         habitat ENUM('desert','mountains','forest','fields','antarctica') NOT NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         INDEX (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS expeditions (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_EXPEDITIONS_TABLE} (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         locality_habitat ENUM('desert','mountains','forest','fields','antarctica') NOT NULL,
@@ -171,21 +202,27 @@ CREATE_TABLES_SQL: Sequence[str] = (
         result_seen TINYINT(1) NOT NULL DEFAULT 0,
         INDEX (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
-    """CREATE TABLE IF NOT EXISTS expedition_animals (
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_EXPEDITION_ANIMALS_TABLE} (
         expedition_id INT NOT NULL,
         animal_id INT NOT NULL,
         PRIMARY KEY (expedition_id, animal_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_REFERRALS_TABLE} (
+        user_id INT NOT NULL,
+        referral_id INT NOT NULL,
+        UNIQUE KEY uq_referral_pair (user_id, referral_id),
+        INDEX (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
 )
 
 MISSING_COLUMN_SQL: Sequence[str] = (
-    "ALTER TABLE webapp_extra ADD COLUMN packs_today INT NOT NULL DEFAULT 0",
-    "ALTER TABLE webapp_extra ADD COLUMN packs_today_date DATE NULL",
-    "ALTER TABLE pack_animals ADD COLUMN dies_at DATETIME NULL",
-    "ALTER TABLE pack_animals ADD COLUMN locality_id INT NULL",
-    "ALTER TABLE pack_animals ADD COLUMN last_bred_date DATE NULL",
-    "ALTER TABLE pack_animals ADD COLUMN in_expedition INT NULL",
-    "ALTER TABLE webapp_extra ADD COLUMN last_income_at DATETIME NULL",
+    f"ALTER TABLE {ZOOPARK_EXTRA_TABLE} ADD COLUMN packs_today INT NOT NULL DEFAULT 0",
+    f"ALTER TABLE {ZOOPARK_EXTRA_TABLE} ADD COLUMN packs_today_date DATE NULL",
+    f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN dies_at DATETIME NULL",
+    f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN locality_id INT NULL",
+    f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN last_bred_date DATE NULL",
+    f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN in_expedition INT NULL",
+    f"ALTER TABLE {ZOOPARK_EXTRA_TABLE} ADD COLUMN last_income_at DATETIME NULL",
 )
 
 COPY_COMPAT_TABLES: Sequence[tuple[str, str, tuple[str, ...], tuple[str, ...]]] = (
@@ -217,6 +254,78 @@ COPY_COMPAT_TABLES: Sequence[tuple[str, str, tuple[str, ...], tuple[str, ...]]] 
         "unity",
         ZOOPARK_UNITY_TABLE,
         ("idpk", "id", "name", "level", "owner_id"),
+        (),
+    ),
+    (
+        "webapp_extra",
+        ZOOPARK_EXTRA_TABLE,
+        ("user_id", "balance_seq", "data_version"),
+        ("profile_emoji", "packs_today", "packs_today_date", "last_income_at"),
+    ),
+    (
+        "sick_events",
+        ZOOPARK_SICK_EVENTS_TABLE,
+        ("id", "user_id", "animal_id", "since", "penalty_rub_per_min"),
+        (),
+    ),
+    (
+        "merchants",
+        ZOOPARK_MERCHANTS_TABLE,
+        ("id", "user_id", "animal_info_id", "name", "discount", "price_with_discount", "quantity_animals", "price", "first_offer_bought"),
+        (),
+    ),
+    (
+        "pack_animals",
+        ZOOPARK_PACK_ANIMALS_TABLE,
+        ("id", "user_id", "survival", "reproduction", "appearance", "size_trait", "habitat", "is_alive", "acquired_at"),
+        ("dies_at", "locality_id", "last_bred_date", "in_expedition"),
+    ),
+    (
+        "player_localities",
+        ZOOPARK_LOCALITIES_TABLE,
+        ("id", "user_id", "habitat", "created_at"),
+        (),
+    ),
+    (
+        "expeditions",
+        ZOOPARK_EXPEDITIONS_TABLE,
+        ("id", "user_id", "locality_habitat", "started_at", "ends_at", "status"),
+        ("result_json", "result_seen"),
+    ),
+    (
+        "expedition_animals",
+        ZOOPARK_EXPEDITION_ANIMALS_TABLE,
+        ("expedition_id", "animal_id"),
+        (),
+    ),
+    (
+        "mp_games_new",
+        ZOOPARK_MP_GAMES_TABLE,
+        ("id", "game_type", "bet_rub", "creator_id", "status", "created_at"),
+        ("opponent_id", "creator_score", "opponent_score", "winner_id"),
+    ),
+    (
+        "solo_stats",
+        ZOOPARK_SOLO_STATS_TABLE,
+        ("user_id", "games_played", "wins", "losses", "total_won", "total_lost"),
+        (),
+    ),
+    (
+        "cocktail_sessions",
+        ZOOPARK_COCKTAIL_SESSIONS_TABLE,
+        ("user_id", "secret", "attempts", "won", "started_at"),
+        (),
+    ),
+    (
+        "transfer_links",
+        ZOOPARK_TRANSFER_LINKS_TABLE,
+        ("id", "link_key", "creator_id", "total_amount", "rub_per_claim", "max_claims", "claims", "active", "created_at"),
+        (),
+    ),
+    (
+        "referrals",
+        ZOOPARK_REFERRALS_TABLE,
+        ("user_id", "referral_id"),
         (),
     ),
 )
@@ -300,15 +409,15 @@ def init_schema() -> None:
             for sql in CREATE_TABLES_SQL:
                 cur.execute(sql)
             _ensure_bigint_column(cur, ZOOPARK_USERS_TABLE, "balance_seq")
-            _ensure_bigint_column(cur, "webapp_extra", "balance_seq")
-            for source_table, target_table, required, optional in COPY_COMPAT_TABLES:
-                _copy_compat_table(cur, source_table, target_table, required, optional)
-            seed_catalogue(cur)
+            _ensure_bigint_column(cur, ZOOPARK_EXTRA_TABLE, "balance_seq")
             for sql in MISSING_COLUMN_SQL:
                 try:
                     cur.execute(sql)
                 except Exception:
                     pass
+            for source_table, target_table, required, optional in COPY_COMPAT_TABLES:
+                _copy_compat_table(cur, source_table, target_table, required, optional)
+            seed_catalogue(cur)
         db.commit()
     finally:
         db.close()

@@ -4,7 +4,14 @@ from datetime import datetime, timezone
 from math import trunc
 
 from api.app.zoopark.catalog import DIVERSITY_BONUS_PER_SPECIES
-from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import (
+    ZOOPARK_ANIMALS_TABLE,
+    ZOOPARK_EXTRA_TABLE,
+    ZOOPARK_LOCALITIES_TABLE,
+    ZOOPARK_PACK_ANIMALS_TABLE,
+    ZOOPARK_SICK_EVENTS_TABLE,
+    ZOOPARK_USERS_TABLE,
+)
 
 PACK_BASE_INCOME = 5000
 
@@ -27,7 +34,7 @@ def pack_animal_income(animal: dict, habitat_bonus: float = 1.0) -> int:
 
 def calc_sick_expenses(cur, user_id: int) -> int:
     cur.execute(
-        "SELECT COALESCE(SUM(penalty_rub_per_min), 0) AS total FROM sick_events WHERE user_id=%s",
+        f"SELECT COALESCE(SUM(penalty_rub_per_min), 0) AS total FROM {ZOOPARK_SICK_EVENTS_TABLE} WHERE user_id=%s",
         (user_id,),
     )
     row = cur.fetchone() or {}
@@ -56,7 +63,7 @@ def calc_legacy_income(cur, user_id: int) -> int:
 def accrue_income(cur, user: dict, income_rub_per_min: int, expenses_rub_per_min: int = 0) -> dict:
     """Add elapsed passive net income to user balance. Returns updated user dict."""
     uid = user["id"]
-    cur.execute("SELECT last_income_at, balance_seq FROM webapp_extra WHERE user_id=%s", (uid,))
+    cur.execute(f"SELECT last_income_at, balance_seq FROM {ZOOPARK_EXTRA_TABLE} WHERE user_id=%s", (uid,))
     row = cur.fetchone()
     if row is None:
         return user
@@ -79,7 +86,7 @@ def accrue_income(cur, user: dict, income_rub_per_min: int, expenses_rub_per_min
     if new_rub != current_rub:
         cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, uid))
     cur.execute(
-        "UPDATE webapp_extra SET last_income_at=%s, balance_seq=%s WHERE user_id=%s",
+        f"UPDATE {ZOOPARK_EXTRA_TABLE} SET last_income_at=%s, balance_seq=%s WHERE user_id=%s",
         (now, new_seq, uid),
     )
 
@@ -91,10 +98,10 @@ def accrue_income(cur, user: dict, income_rub_per_min: int, expenses_rub_per_min
 
 def calc_pack_income(cur, user_id: int) -> int:
     cur.execute(
-        """SELECT pa.survival, pa.appearance, pa.size_trait,
+        f"""SELECT pa.survival, pa.appearance, pa.size_trait,
                   pa.habitat AS animal_habitat, pl.habitat AS locality_habitat
-           FROM pack_animals pa
-           LEFT JOIN player_localities pl ON pa.locality_id = pl.id
+           FROM {ZOOPARK_PACK_ANIMALS_TABLE} pa
+           LEFT JOIN {ZOOPARK_LOCALITIES_TABLE} pl ON pa.locality_id = pl.id
            WHERE pa.user_id=%s AND pa.is_alive=1 AND (pa.dies_at IS NULL OR pa.dies_at > NOW())
              AND pa.in_expedition IS NULL""",
         (user_id,),

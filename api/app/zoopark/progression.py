@@ -7,7 +7,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import (
+    ZOOPARK_EXPEDITION_ANIMALS_TABLE,
+    ZOOPARK_EXPEDITIONS_TABLE,
+    ZOOPARK_EXTRA_TABLE,
+    ZOOPARK_LOCALITIES_TABLE,
+    ZOOPARK_PACK_ANIMALS_TABLE,
+    ZOOPARK_USERS_TABLE,
+)
 from api.app.zoopark.income import pack_animal_income, sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import get_db
@@ -73,9 +80,9 @@ def breed_trait(trait1: str, trait2: str) -> str:
 
 
 def ensure_first_locality(cur, user_id: int) -> None:
-    cur.execute("SELECT COUNT(*) AS cnt FROM player_localities WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT COUNT(*) AS cnt FROM {ZOOPARK_LOCALITIES_TABLE} WHERE user_id=%s", (user_id,))
     if cur.fetchone()["cnt"] == 0:
-        cur.execute("INSERT INTO player_localities (user_id, habitat) VALUES (%s,%s)", (user_id, random.choice(HABITATS)))
+        cur.execute(f"INSERT INTO {ZOOPARK_LOCALITIES_TABLE} (user_id, habitat) VALUES (%s,%s)", (user_id, random.choice(HABITATS)))
 
 
 def pack_next_price(packs_today: int) -> int:
@@ -95,7 +102,7 @@ def roll_pack_animal() -> dict:
 
 
 def get_pack_state(cur, user_id: int) -> tuple[int, bool]:
-    cur.execute("SELECT packs_today, packs_today_date FROM webapp_extra WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT packs_today, packs_today_date FROM {ZOOPARK_EXTRA_TABLE} WHERE user_id=%s", (user_id,))
     row = cur.fetchone()
     if not row:
         return 0, False
@@ -109,7 +116,7 @@ def get_pack_state(cur, user_id: int) -> tuple[int, bool]:
 
 def expire_dead_pack_animals(cur, user_id: int) -> None:
     cur.execute(
-        "UPDATE pack_animals SET is_alive=0 WHERE user_id=%s AND is_alive=1 AND dies_at IS NOT NULL AND dies_at <= NOW()",
+        f"UPDATE {ZOOPARK_PACK_ANIMALS_TABLE} SET is_alive=0 WHERE user_id=%s AND is_alive=1 AND dies_at IS NOT NULL AND dies_at <= NOW()",
         (user_id,),
     )
 
@@ -147,7 +154,7 @@ def roll_trait_weighted(chances: list[float]) -> str:
 
 def resolve_expedition(cur, expedition_id: int, habitat: str, user_id: int) -> dict:
     cur.execute(
-        "SELECT pa.* FROM pack_animals pa JOIN expedition_animals ea ON ea.animal_id = pa.id WHERE ea.expedition_id=%s",
+        f"SELECT pa.* FROM {ZOOPARK_PACK_ANIMALS_TABLE} pa JOIN {ZOOPARK_EXPEDITION_ANIMALS_TABLE} ea ON ea.animal_id = pa.id WHERE ea.expedition_id=%s",
         (expedition_id,),
     )
     squad = cur.fetchall()
@@ -167,7 +174,7 @@ def resolve_expedition(cur, expedition_id: int, habitat: str, user_id: int) -> d
     if squad_power >= wild_power:
         dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[wild["survival"]])
         cur.execute(
-            "INSERT INTO pack_animals (user_id, survival, reproduction, appearance, size_trait, habitat, dies_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            f"INSERT INTO {ZOOPARK_PACK_ANIMALS_TABLE} (user_id, survival, reproduction, appearance, size_trait, habitat, dies_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
             (user_id, wild["survival"], wild["reproduction"], wild["appearance"], wild["size_trait"], wild["habitat"], dies_at),
         )
         result["outcome"] = "victory"
@@ -177,13 +184,13 @@ def resolve_expedition(cur, expedition_id: int, habitat: str, user_id: int) -> d
         killed_id = None
         if alive_squad:
             victim = random.choice(alive_squad)
-            cur.execute("UPDATE pack_animals SET is_alive=0 WHERE id=%s", (victim["id"],))
+            cur.execute(f"UPDATE {ZOOPARK_PACK_ANIMALS_TABLE} SET is_alive=0 WHERE id=%s", (victim["id"],))
             killed_id = victim["id"]
         result["outcome"] = "defeat"
         result["killed_id"] = killed_id
 
-    cur.execute("UPDATE pack_animals SET in_expedition=NULL WHERE in_expedition=%s", (expedition_id,))
-    cur.execute("UPDATE expeditions SET status='finished', result_json=%s WHERE id=%s", (json.dumps(result), expedition_id))
+    cur.execute(f"UPDATE {ZOOPARK_PACK_ANIMALS_TABLE} SET in_expedition=NULL WHERE in_expedition=%s", (expedition_id,))
+    cur.execute(f"UPDATE {ZOOPARK_EXPEDITIONS_TABLE} SET status='finished', result_json=%s WHERE id=%s", (json.dumps(result), expedition_id))
     return result
 
 
@@ -209,7 +216,7 @@ def api_packs_info(tg_id: int):
             packs_today, _ = get_pack_state(cur, user["id"])
             expire_dead_pack_animals(cur, user["id"])
             cur.execute(
-                "SELECT * FROM pack_animals WHERE user_id=%s AND is_alive=1 AND in_expedition IS NULL ORDER BY acquired_at DESC",
+                f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE user_id=%s AND is_alive=1 AND in_expedition IS NULL ORDER BY acquired_at DESC",
                 (user["id"],),
             )
             animals = [format_pack_animal(row) for row in cur.fetchall()]
@@ -245,7 +252,7 @@ def api_packs_open(tg_id: int):
             props = roll_pack_animal()
             dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[props["survival"]])
             cur.execute(
-                "INSERT INTO pack_animals (user_id, survival, reproduction, appearance, size_trait, habitat, dies_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                f"INSERT INTO {ZOOPARK_PACK_ANIMALS_TABLE} (user_id, survival, reproduction, appearance, size_trait, habitat, dies_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                 (user["id"], props["survival"], props["reproduction"], props["appearance"], props["size_trait"], props["habitat"], dies_at),
             )
             animal_id = cur.lastrowid
@@ -253,7 +260,7 @@ def api_packs_open(tg_id: int):
             today_str = datetime.now(timezone.utc).date().isoformat()
             new_count = (packs_today + 1) if date_is_today else 1
             cur.execute(
-                "INSERT INTO webapp_extra (user_id, packs_today, packs_today_date) VALUES (%s,%s,%s) "
+                f"INSERT INTO {ZOOPARK_EXTRA_TABLE} (user_id, packs_today, packs_today_date) VALUES (%s,%s,%s) "
                 "ON DUPLICATE KEY UPDATE packs_today=%s, packs_today_date=%s",
                 (user["id"], new_count, today_str, new_count, today_str),
             )
@@ -287,11 +294,11 @@ def api_get_localities(tg_id: int):
                 raise HTTPException(404, "Нет игрока")
 
             ensure_first_locality(cur, user["id"])
-            cur.execute("SELECT * FROM player_localities WHERE user_id=%s ORDER BY created_at", (user["id"],))
+            cur.execute(f"SELECT * FROM {ZOOPARK_LOCALITIES_TABLE} WHERE user_id=%s ORDER BY created_at", (user["id"],))
             localities_raw = cur.fetchall()
             expire_dead_pack_animals(cur, user["id"])
             cur.execute(
-                "SELECT * FROM pack_animals WHERE user_id=%s AND is_alive=1 AND in_expedition IS NULL ORDER BY acquired_at DESC",
+                f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE user_id=%s AND is_alive=1 AND in_expedition IS NULL ORDER BY acquired_at DESC",
                 (user["id"],),
             )
             animals_raw = cur.fetchall()
@@ -339,7 +346,7 @@ def api_buy_locality(
 
             rub = int(user["rub"])
             cur.execute(
-                "SELECT COUNT(*) AS cnt, GROUP_CONCAT(habitat) AS taken FROM player_localities WHERE user_id=%s",
+                f"SELECT COUNT(*) AS cnt, GROUP_CONCAT(habitat) AS taken FROM {ZOOPARK_LOCALITIES_TABLE} WHERE user_id=%s",
                 (user["id"],),
             )
             row = cur.fetchone()
@@ -358,7 +365,7 @@ def api_buy_locality(
             if price > 0:
                 cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (rub - price, user["id"]))
 
-            cur.execute("INSERT INTO player_localities (user_id, habitat) VALUES (%s,%s)", (user["id"], body.habitat))
+            cur.execute(f"INSERT INTO {ZOOPARK_LOCALITIES_TABLE} (user_id, habitat) VALUES (%s,%s)", (user["id"], body.habitat))
             locality_id = cur.lastrowid
         db.commit()
         return {"ok": True, "id": locality_id, "habitat": body.habitat, "price_paid": price, "new_rub": rub - price}
@@ -378,18 +385,18 @@ def api_assign_locality(
                 raise HTTPException(404, "Нет игрока")
 
             cur.execute(
-                "SELECT id FROM pack_animals WHERE id=%s AND user_id=%s AND is_alive=1",
+                f"SELECT id FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE id=%s AND user_id=%s AND is_alive=1",
                 (body.animal_id, user["id"]),
             )
             if not cur.fetchone():
                 raise HTTPException(404, "Животное не найдено")
 
             if body.locality_id is not None:
-                cur.execute("SELECT id FROM player_localities WHERE id=%s AND user_id=%s", (body.locality_id, user["id"]))
+                cur.execute(f"SELECT id FROM {ZOOPARK_LOCALITIES_TABLE} WHERE id=%s AND user_id=%s", (body.locality_id, user["id"]))
                 if not cur.fetchone():
                     raise HTTPException(404, "Местность не найдена")
 
-            cur.execute("UPDATE pack_animals SET locality_id=%s WHERE id=%s", (body.locality_id, body.animal_id))
+            cur.execute(f"UPDATE {ZOOPARK_PACK_ANIMALS_TABLE} SET locality_id=%s WHERE id=%s", (body.locality_id, body.animal_id))
         db.commit()
         return {"ok": True}
     finally:
@@ -412,7 +419,7 @@ def api_breed(
 
             today = datetime.now(timezone.utc).date()
             cur.execute(
-                "SELECT * FROM pack_animals WHERE id IN (%s,%s) AND user_id=%s AND is_alive=1",
+                f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE id IN (%s,%s) AND user_id=%s AND is_alive=1",
                 (body.animal_id_1, body.animal_id_2, user["id"]),
             )
             rows = {row["id"]: row for row in cur.fetchall()}
@@ -427,7 +434,7 @@ def api_breed(
 
             rate = BREED_RATES.get((parent1["reproduction"], parent2["reproduction"]), BREED_RATES.get((parent2["reproduction"], parent1["reproduction"]), 0.60))
             success = random.random() < rate
-            cur.execute("UPDATE pack_animals SET last_bred_date=%s WHERE id IN (%s,%s)", (today, body.animal_id_1, body.animal_id_2))
+            cur.execute(f"UPDATE {ZOOPARK_PACK_ANIMALS_TABLE} SET last_bred_date=%s WHERE id IN (%s,%s)", (today, body.animal_id_1, body.animal_id_2))
 
             offspring = None
             if success:
@@ -440,7 +447,7 @@ def api_breed(
                 }
                 dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[props["survival"]])
                 cur.execute(
-                    "INSERT INTO pack_animals (user_id, survival, reproduction, appearance, size_trait, habitat, dies_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    f"INSERT INTO {ZOOPARK_PACK_ANIMALS_TABLE} (user_id, survival, reproduction, appearance, size_trait, habitat, dies_at) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                     (user["id"], props["survival"], props["reproduction"], props["appearance"], props["size_trait"], props["habitat"], dies_at),
                 )
                 offspring = {
@@ -467,11 +474,11 @@ def api_get_expeditions(tg_id: int):
             if not user:
                 raise HTTPException(404, "Нет игрока")
 
-            cur.execute("SELECT id, habitat FROM player_localities WHERE user_id=%s ORDER BY created_at", (user["id"],))
+            cur.execute(f"SELECT id, habitat FROM {ZOOPARK_LOCALITIES_TABLE} WHERE user_id=%s ORDER BY created_at", (user["id"],))
             localities = [{"id": locality["id"], "habitat": locality["habitat"]} for locality in cur.fetchall()]
 
             cur.execute(
-                "SELECT * FROM expeditions WHERE user_id=%s AND (status='active' OR (status='finished' AND result_seen=0)) ORDER BY started_at DESC LIMIT 1",
+                f"SELECT * FROM {ZOOPARK_EXPEDITIONS_TABLE} WHERE user_id=%s AND (status='active' OR (status='finished' AND result_seen=0)) ORDER BY started_at DESC LIMIT 1",
                 (user["id"],),
             )
             expedition = cur.fetchone()
@@ -489,7 +496,7 @@ def api_get_expeditions(tg_id: int):
                         expedition = {**expedition, "status": "finished", "result_json": json.dumps(result)}
 
                 cur.execute(
-                    "SELECT pa.* FROM pack_animals pa JOIN expedition_animals ea ON ea.animal_id = pa.id WHERE ea.expedition_id=%s",
+                    f"SELECT pa.* FROM {ZOOPARK_PACK_ANIMALS_TABLE} pa JOIN {ZOOPARK_EXPEDITION_ANIMALS_TABLE} ea ON ea.animal_id = pa.id WHERE ea.expedition_id=%s",
                     (expedition_id,),
                 )
                 squad = [format_pack_animal(animal) for animal in cur.fetchall()]
@@ -498,7 +505,7 @@ def api_get_expeditions(tg_id: int):
                 if expedition["status"] == "finished" and expedition.get("result_json"):
                     result_data = json.loads(expedition["result_json"])
                     if result_data.get("outcome") == "victory" and result_data.get("reward_animal_id"):
-                        cur.execute("SELECT * FROM pack_animals WHERE id=%s", (result_data["reward_animal_id"],))
+                        cur.execute(f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE id=%s", (result_data["reward_animal_id"],))
                         reward = cur.fetchone()
                         if reward:
                             result_data["captured_animal"] = format_pack_animal(reward)
@@ -515,7 +522,7 @@ def api_get_expeditions(tg_id: int):
 
             expire_dead_pack_animals(cur, user["id"])
             cur.execute(
-                "SELECT * FROM pack_animals WHERE user_id=%s AND is_alive=1 AND in_expedition IS NULL ORDER BY acquired_at DESC",
+                f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE user_id=%s AND is_alive=1 AND in_expedition IS NULL ORDER BY acquired_at DESC",
                 (user["id"],),
             )
             available_animals = [format_pack_animal(animal) for animal in cur.fetchall()]
@@ -545,20 +552,20 @@ def api_start_expedition(
                 raise HTTPException(404, "Нет игрока")
 
             cur.execute(
-                "SELECT id FROM expeditions WHERE user_id=%s AND (status='active' OR (status='finished' AND result_seen=0))",
+                f"SELECT id FROM {ZOOPARK_EXPEDITIONS_TABLE} WHERE user_id=%s AND (status='active' OR (status='finished' AND result_seen=0))",
                 (user["id"],),
             )
             if cur.fetchone():
                 raise HTTPException(400, "Уже есть активная или незавершённая экспедиция")
 
-            cur.execute("SELECT habitat FROM player_localities WHERE id=%s AND user_id=%s", (body.locality_id, user["id"]))
+            cur.execute(f"SELECT habitat FROM {ZOOPARK_LOCALITIES_TABLE} WHERE id=%s AND user_id=%s", (body.locality_id, user["id"]))
             locality = cur.fetchone()
             if not locality:
                 raise HTTPException(404, "Местность не найдена")
 
             placeholders = ",".join(["%s"] * len(body.animal_ids))
             cur.execute(
-                f"SELECT * FROM pack_animals WHERE id IN ({placeholders}) AND user_id=%s AND is_alive=1 AND in_expedition IS NULL",
+                f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE id IN ({placeholders}) AND user_id=%s AND is_alive=1 AND in_expedition IS NULL",
                 (*body.animal_ids, user["id"]),
             )
             valid_animals = cur.fetchall()
@@ -568,15 +575,15 @@ def api_start_expedition(
             now = datetime.now(timezone.utc)
             ends_at = now + timedelta(minutes=EXPEDITION_PARAMS[locality["habitat"]]["minutes"])
             cur.execute(
-                "INSERT INTO expeditions (user_id, locality_habitat, ends_at) VALUES (%s,%s,%s)",
+                f"INSERT INTO {ZOOPARK_EXPEDITIONS_TABLE} (user_id, locality_habitat, ends_at) VALUES (%s,%s,%s)",
                 (user["id"], locality["habitat"], ends_at),
             )
             expedition_id = cur.lastrowid
             for animal_id in body.animal_ids:
-                cur.execute("INSERT INTO expedition_animals (expedition_id, animal_id) VALUES (%s,%s)", (expedition_id, animal_id))
+                cur.execute(f"INSERT INTO {ZOOPARK_EXPEDITION_ANIMALS_TABLE} (expedition_id, animal_id) VALUES (%s,%s)", (expedition_id, animal_id))
 
             cur.execute(
-                f"UPDATE pack_animals SET in_expedition=%s WHERE id IN ({placeholders}) AND user_id=%s",
+                f"UPDATE {ZOOPARK_PACK_ANIMALS_TABLE} SET in_expedition=%s WHERE id IN ({placeholders}) AND user_id=%s",
                 (expedition_id, *body.animal_ids, user["id"]),
             )
         db.commit()
@@ -604,7 +611,7 @@ def api_finish_expedition(tg_id: int):
             if not user:
                 raise HTTPException(404, "Нет игрока")
 
-            cur.execute("SELECT * FROM expeditions WHERE user_id=%s AND status='active' ORDER BY started_at DESC LIMIT 1", (user["id"],))
+            cur.execute(f"SELECT * FROM {ZOOPARK_EXPEDITIONS_TABLE} WHERE user_id=%s AND status='active' ORDER BY started_at DESC LIMIT 1", (user["id"],))
             expedition = cur.fetchone()
             if not expedition:
                 raise HTTPException(400, "Нет активной экспедиции")
@@ -622,7 +629,7 @@ def api_finish_expedition(tg_id: int):
             db2 = get_db()
             try:
                 with db2.cursor() as cur2:
-                    cur2.execute("SELECT * FROM pack_animals WHERE id=%s", (result["reward_animal_id"],))
+                    cur2.execute(f"SELECT * FROM {ZOOPARK_PACK_ANIMALS_TABLE} WHERE id=%s", (result["reward_animal_id"],))
                     reward = cur2.fetchone()
                     if reward:
                         result["captured_animal"] = format_pack_animal(reward)
@@ -642,7 +649,7 @@ def api_dismiss_expedition(tg_id: int):
             if not user:
                 raise HTTPException(404, "Нет игрока")
             cur.execute(
-                "UPDATE expeditions SET result_seen=1 WHERE user_id=%s AND status='finished' AND result_seen=0",
+                f"UPDATE {ZOOPARK_EXPEDITIONS_TABLE} SET result_seen=1 WHERE user_id=%s AND status='finished' AND result_seen=0",
                 (user["id"],),
             )
         db.commit()

@@ -6,7 +6,13 @@ import string
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_UNITY_TABLE, ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import (
+    ZOOPARK_ANIMALS_TABLE,
+    ZOOPARK_REFERRALS_TABLE,
+    ZOOPARK_TRANSFER_LINKS_TABLE,
+    ZOOPARK_UNITY_TABLE,
+    ZOOPARK_USERS_TABLE,
+)
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import get_db
@@ -201,7 +207,7 @@ def api_referrals(tg_id: int):
             if not user:
                 raise HTTPException(404, "Нет игрока")
             cur.execute(
-                f"SELECT u.nickname FROM referrals r JOIN {ZOOPARK_USERS_TABLE} u ON u.id=r.referral_id WHERE r.user_id=%s",
+                f"SELECT u.nickname FROM {ZOOPARK_REFERRALS_TABLE} r JOIN {ZOOPARK_USERS_TABLE} u ON u.id=r.referral_id WHERE r.user_id=%s",
                 (user["id"],),
             )
             referred = [row["nickname"] or "—" for row in cur.fetchall()]
@@ -233,7 +239,7 @@ def api_transfers_create(
 
             key = "".join(random.choices(string.ascii_letters + string.digits, k=16))
             cur.execute(
-                "INSERT INTO transfer_links (link_key, creator_id, total_amount, rub_per_claim, max_claims) VALUES (%s,%s,%s,%s,%s)",
+                f"INSERT INTO {ZOOPARK_TRANSFER_LINKS_TABLE} (link_key, creator_id, total_amount, rub_per_claim, max_claims) VALUES (%s,%s,%s,%s,%s)",
                 (key, user["id"], total, rub_per_claim, max_claims),
             )
             cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (total, user["id"]))
@@ -251,7 +257,7 @@ def api_my_transfers(tg_id: int):
             if not user:
                 return {"transfers": []}
 
-            cur.execute("SELECT * FROM transfer_links WHERE creator_id=%s ORDER BY created_at DESC LIMIT 20", (user["id"],))
+            cur.execute(f"SELECT * FROM {ZOOPARK_TRANSFER_LINKS_TABLE} WHERE creator_id=%s ORDER BY created_at DESC LIMIT 20", (user["id"],))
             rows = cur.fetchall()
         return {
             "transfers": [

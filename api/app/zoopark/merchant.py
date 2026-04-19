@@ -6,14 +6,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID
-from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_MERCHANTS_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
 from api.app.zoopark.runtime import get_db
 
 
 def ensure_merchant(cur, user_id: int, animals: list[dict]) -> list[dict]:
-    cur.execute("SELECT * FROM merchants WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT * FROM {ZOOPARK_MERCHANTS_TABLE} WHERE user_id=%s", (user_id,))
     existing = cur.fetchall()
     if existing:
         return existing
@@ -22,18 +22,18 @@ def ensure_merchant(cur, user_id: int, animals: list[dict]) -> list[dict]:
     pool = owned if owned else ANIMALS[:10]
     picks = random.sample(pool, min(3, len(pool)))
 
-    cur.execute("DELETE FROM merchants WHERE user_id=%s", (user_id,))
+    cur.execute(f"DELETE FROM {ZOOPARK_MERCHANTS_TABLE} WHERE user_id=%s", (user_id,))
     for pick in picks:
         discount = random.choice([5, 10, 15, 20, 25, 30])
         discounted = int(pick["price"] * (1 - discount / 100))
         quantity = random.randint(1, 3)
         cur.execute(
-            "INSERT INTO merchants (user_id, animal_info_id, name, discount, price_with_discount, quantity_animals, price, first_offer_bought) "
+            f"INSERT INTO {ZOOPARK_MERCHANTS_TABLE} (user_id, animal_info_id, name, discount, price_with_discount, quantity_animals, price, first_offer_bought) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,0)",
             (user_id, ANIMAL_STRING_TO_DB[pick["id"]], pick["name"], discount, discounted, quantity, pick["price"]),
         )
 
-    cur.execute("SELECT * FROM merchants WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT * FROM {ZOOPARK_MERCHANTS_TABLE} WHERE user_id=%s", (user_id,))
     return cur.fetchall()
 
 
@@ -74,7 +74,7 @@ def do_merchant_buy(tg_id: int, slot: int) -> dict:
             new_rub = int(user["rub"]) - cost
             cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, user_id))
             cur.execute(
-                "UPDATE merchants SET first_offer_bought=1 WHERE user_id=%s AND animal_info_id=%s",
+                f"UPDATE {ZOOPARK_MERCHANTS_TABLE} SET first_offer_bought=1 WHERE user_id=%s AND animal_info_id=%s",
                 (user_id, offer["animal_info_id"]),
             )
 

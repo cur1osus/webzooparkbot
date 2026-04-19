@@ -8,7 +8,9 @@ from api.app.zoopark.catalog import ANIMAL_BY_DB_ID, AVIARY_BY_DB_ID, DIVERSITY_
 from api.app.zoopark.db_tables import (
     ZOOPARK_ANIMALS_TABLE,
     ZOOPARK_AVIARIES_TABLE,
+    ZOOPARK_EXTRA_TABLE,
     ZOOPARK_ITEMS_TABLE,
+    ZOOPARK_SICK_EVENTS_TABLE,
     ZOOPARK_UNITY_TABLE,
     ZOOPARK_USERS_TABLE,
 )
@@ -20,12 +22,12 @@ def get_user(cur, tg_id: int):
 
 
 def get_extra(cur, user_id: int) -> dict:
-    cur.execute("SELECT * FROM webapp_extra WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT * FROM {ZOOPARK_EXTRA_TABLE} WHERE user_id=%s", (user_id,))
     row = cur.fetchone()
     if row:
         return row
     cur.execute(
-        "INSERT INTO webapp_extra (user_id, balance_seq, data_version) VALUES (%s,0,0)",
+        f"INSERT INTO {ZOOPARK_EXTRA_TABLE} (user_id, balance_seq, data_version) VALUES (%s,0,0)",
         (user_id,),
     )
     return {"user_id": user_id, "balance_seq": 0, "data_version": 0, "profile_emoji": None}
@@ -34,7 +36,7 @@ def get_extra(cur, user_id: int) -> dict:
 def bump_data_version(cur, user_id: int) -> int:
     ts = int(time.time() * 1000)
     cur.execute(
-        "INSERT INTO webapp_extra (user_id, data_version) VALUES (%s,%s) "
+        f"INSERT INTO {ZOOPARK_EXTRA_TABLE} (user_id, data_version) VALUES (%s,%s) "
         "ON DUPLICATE KEY UPDATE data_version=%s",
         (user_id, ts, ts),
     )
@@ -68,7 +70,7 @@ def get_aviaries(cur, user_id: int) -> list[dict]:
 
 
 def get_sick(cur, user_id: int) -> list[dict]:
-    cur.execute("SELECT animal_id, penalty_rub_per_min, since FROM sick_events WHERE user_id=%s", (user_id,))
+    cur.execute(f"SELECT animal_id, penalty_rub_per_min, since FROM {ZOOPARK_SICK_EVENTS_TABLE} WHERE user_id=%s", (user_id,))
     return [
         {
             "animal_id": row["animal_id"],

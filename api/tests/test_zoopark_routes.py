@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_USERS_TABLE
 
 
 class _FakeRouter:
@@ -187,14 +187,14 @@ class ZooParkRouteTests(unittest.TestCase):
             def execute(self, sql: str, params: tuple) -> None:
                 self.last_sql = sql
                 self.calls.append((sql, params))
-                if sql.startswith("UPDATE webapp_extra SET last_income_at=%s, balance_seq=%s WHERE user_id=%s"):
+                if sql.startswith(f"UPDATE {ZOOPARK_EXTRA_TABLE} SET last_income_at=%s, balance_seq=%s WHERE user_id=%s"):
                     self.extra["last_income_at"] = params[0]
                     self.extra["balance_seq"] = params[1]
 
             def fetchone(self):
-                if self.last_sql.startswith("SELECT * FROM webapp_extra WHERE user_id=%s"):
+                if self.last_sql.startswith(f"SELECT * FROM {ZOOPARK_EXTRA_TABLE} WHERE user_id=%s"):
                     return dict(self.extra)
-                if self.last_sql.startswith("SELECT last_income_at, balance_seq FROM webapp_extra WHERE user_id=%s"):
+                if self.last_sql.startswith(f"SELECT last_income_at, balance_seq FROM {ZOOPARK_EXTRA_TABLE} WHERE user_id=%s"):
                     return {
                         "last_income_at": self.extra["last_income_at"],
                         "balance_seq": self.extra["balance_seq"],

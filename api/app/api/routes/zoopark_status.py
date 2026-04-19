@@ -5,7 +5,7 @@ import random
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import ZOOPARK_SICK_EVENTS_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import auth, get_db
@@ -74,7 +74,7 @@ def cure_animal(
             if not user:
                 raise HTTPException(404, "Нет игрока")
             uid = user["id"]
-            cur.execute("SELECT id FROM sick_events WHERE user_id=%s AND animal_id=%s", (uid, body.animal_id))
+            cur.execute(f"SELECT id FROM {ZOOPARK_SICK_EVENTS_TABLE} WHERE user_id=%s AND animal_id=%s", (uid, body.animal_id))
             if not cur.fetchone():
                 raise HTTPException(400, "Животное не болеет")
             paw = int(user["paw_coins"])
@@ -82,7 +82,7 @@ def cure_animal(
                 raise HTTPException(400, f"Нужно {cost} 🐾")
             new_paw = paw - cost
             cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=%s WHERE id=%s", (new_paw, uid))
-            cur.execute("DELETE FROM sick_events WHERE user_id=%s AND animal_id=%s", (uid, body.animal_id))
+            cur.execute(f"DELETE FROM {ZOOPARK_SICK_EVENTS_TABLE} WHERE user_id=%s AND animal_id=%s", (uid, body.animal_id))
         db.commit()
         return {"ok": True, "cost_paw_coins": cost, "new_paw_coins": new_paw}
     finally:

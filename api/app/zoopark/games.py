@@ -9,7 +9,12 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from api.app.zoopark.catalog import STARS_TO_PAW
-from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import (
+    ZOOPARK_COCKTAIL_SESSIONS_TABLE,
+    ZOOPARK_MP_GAMES_TABLE,
+    ZOOPARK_SOLO_STATS_TABLE,
+    ZOOPARK_USERS_TABLE,
+)
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 from api.app.zoopark.runtime import BOT_TOKEN, get_db
@@ -40,7 +45,7 @@ def api_mpgame_open():
             cur.execute(
                 f"""
                 SELECT g.*, u.nickname AS creator_nickname
-                FROM mp_games_new g JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
+                FROM {ZOOPARK_MP_GAMES_TABLE} g JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
                 WHERE g.status='open' ORDER BY g.created_at DESC LIMIT 20
                 """
             )
@@ -79,7 +84,7 @@ def api_mpgame_create(
                 raise HTTPException(400, "Недостаточно рублей")
 
             cur.execute(
-                "INSERT INTO mp_games_new (game_type, bet_rub, creator_id) VALUES (%s,%s,%s)",
+                f"INSERT INTO {ZOOPARK_MP_GAMES_TABLE} (game_type, bet_rub, creator_id) VALUES (%s,%s,%s)",
                 (body.game_type, bet_rub, user["id"]),
             )
             game_id = cur.lastrowid
@@ -113,7 +118,7 @@ def api_mpgame_join(
                 raise HTTPException(404, "Нет игрока")
             user, _income, _expenses = sync_passive_balance(cur, user)
 
-            cur.execute("SELECT * FROM mp_games_new WHERE id=%s", (game_id,))
+            cur.execute(f"SELECT * FROM {ZOOPARK_MP_GAMES_TABLE} WHERE id=%s", (game_id,))
             game = cur.fetchone()
             if not game:
                 raise HTTPException(404, "Игра не найдена")
@@ -134,7 +139,7 @@ def api_mpgame_join(
 
             winner_id = game["creator_id"] if creator_score > opponent_score else user["id"]
             cur.execute(
-                "UPDATE mp_games_new SET opponent_id=%s, status='finished', creator_score=%s, opponent_score=%s, winner_id=%s WHERE id=%s",
+                f"UPDATE {ZOOPARK_MP_GAMES_TABLE} SET opponent_id=%s, status='finished', creator_score=%s, opponent_score=%s, winner_id=%s WHERE id=%s",
                 (user["id"], creator_score, opponent_score, winner_id, game_id),
             )
             cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
@@ -169,7 +174,7 @@ def api_mpgame_throw(
             cur.execute(
                 f"""
                 SELECT g.*, u.nickname AS creator_nickname, u2.nickname AS winner_nickname
-                FROM mp_games_new g
+                FROM {ZOOPARK_MP_GAMES_TABLE} g
                 JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
                 LEFT JOIN {ZOOPARK_USERS_TABLE} u2 ON u2.id=g.winner_id
                 WHERE g.id=%s
@@ -216,7 +221,7 @@ def api_start_solo_game(
             new_rub = int(user["rub"]) + rub_delta
             cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, user["id"]))
             cur.execute(
-                "INSERT INTO solo_stats (user_id, games_played, wins, losses, total_won, total_lost) "
+                f"INSERT INTO {ZOOPARK_SOLO_STATS_TABLE} (user_id, games_played, wins, losses, total_won, total_lost) "
                 "VALUES (%s,1,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE "
                 "games_played=games_played+1, wins=wins+%s, losses=losses+%s, "
                 "total_won=total_won+%s, total_lost=total_lost+%s",
@@ -252,7 +257,7 @@ def api_get_solo_stats(tg_id: int):
             user = get_user(cur, tg_id)
             if not user:
                 return {"games_played": 0, "wins": 0, "losses": 0, "total_won_rub": 0, "total_lost_rub": 0}
-            cur.execute("SELECT * FROM solo_stats WHERE user_id=%s", (user["id"],))
+            cur.execute(f"SELECT * FROM {ZOOPARK_SOLO_STATS_TABLE} WHERE user_id=%s", (user["id"],))
             row = cur.fetchone()
 
         if not row:
@@ -319,7 +324,7 @@ def api_cocktail_guess(tg_id: int, fruits: list[str]):
             if not user:
                 raise HTTPException(404, "Нет игрока")
 
-            cur.execute("SELECT * FROM cocktail_sessions WHERE user_id=%s", (user["id"],))
+            cur.execute(f"SELECT * FROM {ZOOPARK_COCKTAIL_SESSIONS_TABLE} WHERE user_id=%s", (user["id"],))
             session = cur.fetchone()
             now = datetime.now(timezone.utc)
             needs_new = (
@@ -330,12 +335,12 @@ def api_cocktail_guess(tg_id: int, fruits: list[str]):
             if needs_new:
                 secret = random.sample(COCKTAIL_FRUITS, 4)
                 cur.execute(
-                    "INSERT INTO cocktail_sessions (user_id, secret, attempts, won, started_at) VALUES (%s,%s,0,0,NOW()) "
+                    f"INSERT INTO {ZOOPARK_COCKTAIL_SESSIONS_TABLE} (user_id, secret, attempts, won, started_at) VALUES (%s,%s,0,0,NOW()) "
                     "ON DUPLICATE KEY UPDATE secret=%s, attempts=0, won=0, started_at=NOW()",
                     (user["id"], json.dumps(secret), json.dumps(secret)),
                 )
                 db.commit()
-                cur.execute("SELECT * FROM cocktail_sessions WHERE user_id=%s", (user["id"],))
+                cur.execute(f"SELECT * FROM {ZOOPARK_COCKTAIL_SESSIONS_TABLE} WHERE user_id=%s", (user["id"],))
                 session = cur.fetchone()
 
             secret = json.loads(session["secret"])
@@ -350,7 +355,7 @@ def api_cocktail_guess(tg_id: int, fruits: list[str]):
                     clues.append({"pos": index, "status": "absent"})
 
             won = all(clue["status"] == "correct" for clue in clues)
-            cur.execute("UPDATE cocktail_sessions SET attempts=%s, won=%s WHERE user_id=%s", (attempts, 1 if won else 0, user["id"]))
+            cur.execute(f"UPDATE {ZOOPARK_COCKTAIL_SESSIONS_TABLE} SET attempts=%s, won=%s WHERE user_id=%s", (attempts, 1 if won else 0, user["id"]))
             result: dict[str, object] = {
                 "ok": True,
                 "won": won,

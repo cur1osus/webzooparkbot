@@ -6,7 +6,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from api.app.zoopark.income import sync_passive_balance
-from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_AVIARIES_TABLE, ZOOPARK_USERS_TABLE
+from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_AVIARIES_TABLE, ZOOPARK_EXTRA_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.profile import build_state, get_extra, get_user
 from api.app.zoopark.runtime import BOT_USERNAME, auth, get_db
 from api.app.zoopark.catalog import ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID, AVIARY_STRING_TO_DB
@@ -160,7 +160,7 @@ def register(
                 (tg_id, nickname, now),
             )
             new_uid = cur.lastrowid
-            cur.execute("INSERT INTO webapp_extra (user_id, balance_seq, data_version) VALUES (%s,0,0)", (new_uid,))
+            cur.execute(f"INSERT INTO {ZOOPARK_EXTRA_TABLE} (user_id, balance_seq, data_version) VALUES (%s,0,0)", (new_uid,))
             cur.execute(f"SELECT * FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (new_uid,))
             user = cur.fetchone()
         db.commit()
