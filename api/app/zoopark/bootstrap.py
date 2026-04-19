@@ -6,6 +6,7 @@ from api.app.zoopark.catalog import ANIMALS, AVIARIES
 from api.app.zoopark.db_tables import (
     ZOOPARK_ANIMALS_TABLE,
     ZOOPARK_AVIARIES_TABLE,
+    ZOOPARK_BOOTSTRAP_META_TABLE,
     ZOOPARK_COCKTAIL_SESSIONS_TABLE,
     ZOOPARK_EXPEDITION_ANIMALS_TABLE,
     ZOOPARK_EXPEDITIONS_TABLE,
@@ -213,6 +214,10 @@ CREATE_TABLES_SQL: Sequence[str] = (
         UNIQUE KEY uq_referral_pair (user_id, referral_id),
         INDEX (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    f"""CREATE TABLE IF NOT EXISTS {ZOOPARK_BOOTSTRAP_META_TABLE} (
+        target_table VARCHAR(64) NOT NULL PRIMARY KEY,
+        copied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
 )
 
 MISSING_COLUMN_SQL: Sequence[str] = (
@@ -364,8 +369,30 @@ def _ensure_bigint_column(cur, table: str, column: str) -> None:
     cur.execute(f"ALTER TABLE {table} MODIFY COLUMN {column} BIGINT NOT NULL DEFAULT 0")
 
 
+def _compat_copy_completed(cur, target_table: str) -> bool:
+    if not _table_exists(cur, ZOOPARK_BOOTSTRAP_META_TABLE):
+        return False
+    cur.execute(
+        f"SELECT 1 AS exists_flag FROM {ZOOPARK_BOOTSTRAP_META_TABLE} WHERE target_table=%s LIMIT 1",
+        (target_table,),
+    )
+    return cur.fetchone() is not None
+
+
+def _mark_compat_copy_completed(cur, target_table: str) -> None:
+    if not _table_exists(cur, ZOOPARK_BOOTSTRAP_META_TABLE):
+        return
+    cur.execute(
+        f"INSERT INTO {ZOOPARK_BOOTSTRAP_META_TABLE} (target_table) VALUES (%s) "
+        "ON DUPLICATE KEY UPDATE copied_at=CURRENT_TIMESTAMP",
+        (target_table,),
+    )
+
+
 def _copy_compat_table(cur, source_table: str, target_table: str, required: Sequence[str], optional: Sequence[str]) -> None:
     if source_table == target_table or not _table_exists(cur, source_table) or not _table_exists(cur, target_table):
+        return
+    if _compat_copy_completed(cur, target_table):
         return
 
     target_columns = _available_columns(cur, target_table)
@@ -375,11 +402,13 @@ def _copy_compat_table(cur, source_table: str, target_table: str, required: Sequ
 
     cur.execute(f"SELECT COUNT(*) AS cnt FROM {target_table}")
     if int((cur.fetchone() or {}).get("cnt") or 0) > 0:
+        _mark_compat_copy_completed(cur, target_table)
         return
 
     columns = [column for column in [*required, *optional] if column in target_columns and column in source_columns]
     column_sql = ", ".join(columns)
     cur.execute(f"INSERT INTO {target_table} ({column_sql}) SELECT {column_sql} FROM {source_table}")
+    _mark_compat_copy_completed(cur, target_table)
 
 
 def seed_catalogue(cur) -> None:

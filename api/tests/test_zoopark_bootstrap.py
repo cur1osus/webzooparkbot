@@ -6,7 +6,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from api.app.zoopark.db_tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_PACK_ANIMALS_TABLE
+from api.app.zoopark.db_tables import ZOOPARK_BOOTSTRAP_META_TABLE, ZOOPARK_EXTRA_TABLE, ZOOPARK_PACK_ANIMALS_TABLE
 
 
 class _BootstrapCursor:
@@ -30,6 +30,8 @@ class _BootstrapCursor:
             },
         }
         self.copy_columns: dict[str, tuple[str, ...]] = {}
+        self.table_counts: dict[str, int] = {}
+        self.completed_targets: set[str] = set()
         self._fetchone: dict | None = None
         self._fetchall: list[dict] = []
 
@@ -69,14 +71,30 @@ class _BootstrapCursor:
             self._fetchall = []
             return
 
+        if sql.startswith(f"SELECT 1 AS exists_flag FROM {ZOOPARK_BOOTSTRAP_META_TABLE} WHERE target_table=%s LIMIT 1"):
+            target_table = str(params[0])
+            self._fetchone = {"exists_flag": 1} if target_table in self.completed_targets else None
+            self._fetchall = []
+            return
+
         if sql.startswith("SELECT COUNT(*) AS cnt FROM "):
-            self._fetchone = {"cnt": 0}
+            table = sql.split("SELECT COUNT(*) AS cnt FROM ", 1)[1]
+            self._fetchone = {"cnt": self.table_counts.get(table, 0)}
+            self._fetchall = []
+            return
+
+        if sql.startswith(f"INSERT INTO {ZOOPARK_BOOTSTRAP_META_TABLE} (target_table) VALUES (%s) ON DUPLICATE KEY UPDATE copied_at=CURRENT_TIMESTAMP"):
+            target_table = str(params[0])
+            self.completed_targets.add(target_table)
+            self.table_counts[ZOOPARK_BOOTSTRAP_META_TABLE] = len(self.completed_targets)
+            self._fetchone = None
             self._fetchall = []
             return
 
         if sql.startswith("INSERT INTO ") and ") SELECT " in sql:
             table, columns = self._parse_copy_insert(sql)
             self.copy_columns[table] = columns
+            self.table_counts[table] = max(1, self.table_counts.get(table, 0))
             self._fetchone = None
             self._fetchall = []
             return
@@ -190,6 +208,25 @@ class ZooParkBootstrapTests(unittest.TestCase):
                 "in_expedition",
             ),
         )
+
+    def test_init_schema_does_not_recopy_completed_compat_table_when_target_becomes_empty(self) -> None:
+        module = importlib.import_module("api.app.zoopark.bootstrap")
+        cursor = _BootstrapCursor()
+        db = _BootstrapDb(cursor)
+
+        with patch.object(module, "get_db", return_value=db), \
+             patch.object(module, "seed_catalogue", return_value=None):
+            module.init_schema()
+
+        cursor.copy_columns = {}
+        cursor.table_counts[ZOOPARK_EXTRA_TABLE] = 0
+        cursor.table_counts[ZOOPARK_PACK_ANIMALS_TABLE] = 0
+
+        with patch.object(module, "get_db", return_value=db), \
+             patch.object(module, "seed_catalogue", return_value=None):
+            module.init_schema()
+
+        self.assertEqual(cursor.copy_columns, {})
 
 
 if __name__ == "__main__":
