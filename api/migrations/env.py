@@ -1,17 +1,8 @@
 import os
-import sys
-from pathlib import Path
 from logging.config import fileConfig
 
 from sqlalchemy import create_engine, pool
 from alembic import context
-
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-
-from api.app.db.base import Base
-from api.app import models  # noqa: F401
 
 config = context.config
 
@@ -27,7 +18,8 @@ DB_NAME = os.getenv("DB_NAME", "zooparkbot")
 
 DB_URL = os.getenv("DB_URL") or f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-target_metadata = Base.metadata
+# Runtime schema is SQL-first and bootstrapped outside Alembic's ORM metadata.
+target_metadata = None
 
 
 def run_migrations_online() -> None:

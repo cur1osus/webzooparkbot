@@ -23,13 +23,13 @@ def _configure_common_middleware(app: FastAPI) -> None:
         allow_headers=["*"],
     )
 
-def _init_legacy_schema() -> None:
+def _init_zoopark_schema() -> None:
     init_schema()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    _init_legacy_schema()
+    _init_zoopark_schema()
     yield
 
 

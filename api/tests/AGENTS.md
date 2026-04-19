@@ -6,14 +6,14 @@
 
 ## Gateway Tests
 
-`/home/maxggor/Desktop/webzooparkbot/api/tests/test_api_gateway.py` защищает mixed-mode API seam.
+`/home/maxggor/Desktop/webzooparkbot/api/tests/test_api_gateway.py` защищает канонический ZooPark gateway seam.
 
 Если меняется что-то из списка ниже, тест нужно пересмотреть вместе с кодом:
 
 - legacy route inventory
-- combined gateway assembly
-- mount `/v2`
-- способ регистрации legacy-роутов
+- app assembly
+- canonical `/api/*` route inventory
+- thin `api/main.py` entrypoint
 
 ## Rules
 
@@ -24,5 +24,5 @@
 ## Minimum Expectations
 
 - Для legacy/gateway изменений должен оставаться тестовый сигнал на наличие ключевых путей:
-  `/api/me`, `/api/save`, `/api/expeditions/finish`, `/v2`
+  `/api/health`, `/api/me`, `/api/save`, `/api/expeditions/finish`
 - Для новых тестов prefer deterministic checks over environment-sensitive integration hacks.

@@ -1,1 +1,1 @@
-"""Merchant's Menagerie backend package."""
+"""ZooPark backend package."""

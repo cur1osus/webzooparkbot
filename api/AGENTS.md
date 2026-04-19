@@ -2,16 +2,16 @@
 
 ## Scope
 
-This directory contains the combined gateway entrypoint plus the new structured backend.
+This directory contains the stable ZooPark entrypoint plus the canonical structured backend.
 
 Do not mix them casually.
 
 ## Architecture Rules
 
 - ZooPark contracts on `/api/*` remain the source of truth for the current frontend.
-- New Merchant's Menagerie logic belongs in `/home/maxggor/Desktop/webzooparkbot/api/app`.
-- The combined gateway is defined in `/home/maxggor/Desktop/webzooparkbot/api/app/main.py`.
-- ZooPark `/api/*` routes in the combined gateway should live in first-class `zoopark_*.py` route modules.
+- Canonical ZooPark backend logic belongs in `/home/maxggor/Desktop/webzooparkbot/api/app`.
+- The app assembly is defined in `/home/maxggor/Desktop/webzooparkbot/api/app/main.py`.
+- ZooPark `/api/*` routes should live in first-class `zoopark_*.py` route modules.
 
 ## When Working In `api/main.py`
 
@@ -21,7 +21,7 @@ Do not mix them casually.
 
 ## When Working In `api/app`
 
-- Keep new code layered: routes -> services -> models/schemas.
+- Keep new code layered: routes -> zoopark domain modules.
 - Do not import `api.app.main` from legacy routing or bootstrapping modules.
 - Avoid creating cycles between `api.main`, `api.app.main`, and `api/app/api/routes/zoopark_*.py`.
 

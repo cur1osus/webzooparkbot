@@ -2,10 +2,11 @@
 
 ## Current Topology
 
-- `api.main:app` is the compatibility entrypoint for the current ZooPark app.
+- `api.main:app` is the stable entrypoint for the current ZooPark app.
 - `api.app.main:app` is the primary application entrypoint.
 - ZooPark HTTP routes live on `/api/*` and are the canonical product API.
 - `/v2/api/*` is no longer mounted at runtime.
+- The dormant native `/v2` route and ORM stack has been removed from the active codebase.
 
 ## Route Hosting
 
@@ -19,7 +20,6 @@
 ## Runtime Objects
 
 - `api.main:app` points to the current ZooPark app.
-- `api.main:legacy_app` is kept only as an alias to the same app for compatibility with old process targets.
 - `api.app.main:app` is the primary ZooPark app.
 
 ## Compatibility Note

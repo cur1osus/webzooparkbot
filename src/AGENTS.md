@@ -2,9 +2,7 @@
 
 ## Current Contract Reality
 
-The current frontend is still bound to legacy ZooPark `/api/*` contracts.
-
-Do not assume the native Merchant's Menagerie `/v2/api/*` responses can be consumed directly without an explicit frontend migration task.
+The current frontend is bound to canonical ZooPark `/api/*` contracts.
 
 ## Architecture Rules
 
@@ -19,11 +17,11 @@ Do not assume the native Merchant's Menagerie `/v2/api/*` responses can be consu
 - Do not change the persisted game-state shape casually.
 - If backend contracts change, update API helpers, types, and state transitions together.
 
-## Mixed-Mode Backend Notes
+## Backend Notes
 
-- `/api/*` currently means legacy ZooPark behavior.
-- `/v2/api/*` is reserved for native structured backend work and should only be consumed when the task explicitly migrates a frontend slice.
-- If you migrate a page from legacy to v2, do it end-to-end: API wrapper, types, UI state, and regression checks.
+- `/api/*` is the only supported product API for the shipped frontend.
+- Do not add frontend dependencies on dormant `/v2` contracts or deleted backend experiments.
+- If backend contracts change, migrate API wrapper, types, UI state, and regression checks together.
 
 ## Validation
 

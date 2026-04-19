@@ -10,13 +10,12 @@
 - Не оставляй в docs старые описания entrypoint'ов или route-префиксов.
 - Если документ описывает API, сверяй его с текущими `AGENTS.md` и gateway-тестами.
 
-## Mixed-Mode Source Of Truth
+## Topology Source Of Truth
 
-- `api.main:app` — compatibility entrypoint on the combined gateway
-- `api.main:legacy_app` — preserved legacy ZooPark app for compatibility
-- `api.app.main:app` — combined gateway
-- `/api/*` — legacy ZooPark contracts
-- `/v2/api/*` — native Merchant's Menagerie contracts
+- `api.main:app` — stable entrypoint for the canonical ZooPark app
+- `api.app.main:app` — canonical ZooPark app
+- `/api/*` — current ZooPark product contracts
+- `/v2/api/*` — removed from runtime and should not be documented as active
 
 ## When Updating Docs
 
