@@ -86,18 +86,18 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {successMsg && (
-        <div className="card bg-[rgba(52,199,89,0.1)] border border-[rgba(52,199,89,0.3)]">
-          <p className="m-0 text-[#34c759]">✅ {successMsg}</p>
+        <div className="card bg-[rgba(var(--c-green-rgb),0.1)] border border-[rgba(var(--c-green-rgb),0.3)]">
+          <p className="m-0 text-[var(--c-green)]">✅ {successMsg}</p>
         </div>
       )}
       {errorMsg && (
-        <div className="card bg-[rgba(255,59,48,0.1)] border border-[rgba(255,59,48,0.3)]">
-          <p className="m-0 text-[#ff6b63]">⚠️ {errorMsg}</p>
+        <div className="card bg-[rgba(var(--c-red-rgb),0.1)] border border-[rgba(var(--c-red-rgb),0.3)]">
+          <p className="m-0 text-[var(--c-red-soft)]">⚠️ {errorMsg}</p>
         </div>
       )}
 
       {gs.clan && (
-        <div className="card border border-[rgba(191,90,242,0.3)]">
+        <div className="card border border-[rgba(var(--c-purple-rgb),0.3)]">
           <p className="m-0 mb-[6px] font-bold text-[15px]">🏰 «{gs.clan.name}»</p>
           <p className="m-0 mb-1 text-[13px] text-tg-hint">
             Ур. {gs.clan.level} · {gs.clan.member_count} уч.
@@ -108,7 +108,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           </p>
           <button
             onClick={() => void handleLeave()}
-            className="px-[14px] py-2 rounded-lg border-none cursor-pointer bg-[rgba(255,59,48,0.12)] text-[#ff6b63] font-semibold text-[13px]"
+            className="px-[14px] py-2 rounded-lg border-none cursor-pointer bg-[rgba(var(--c-red-rgb),0.12)] text-[var(--c-red-soft)] font-semibold text-[13px]"
           >
             Покинуть клан
           </button>
@@ -120,7 +120,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           <button
             onClick={() => { setShowCreate(s => !s); clearMsgs(); }}
             className="py-3 rounded-[10px] border-none cursor-pointer text-white font-bold text-sm"
-            style={{ background: showCreate ? 'rgba(10,132,255,0.3)' : '#0a84ff' }}
+            style={{ background: showCreate ? 'rgba(var(--c-blue-rgb),0.3)' : 'var(--c-blue)' }}
           >
             {showCreate ? '✕ Отмена' : '+ Создать клан'}
           </button>
@@ -143,22 +143,22 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                     onClick={() => setNewSpec(prev => prev === s.id ? null : s.id)}
                     className="flex items-center gap-3 px-3 py-[10px] rounded-[10px] border cursor-pointer text-left"
                     style={{
-                      background: newSpec === s.id ? 'rgba(10,132,255,0.15)' : 'rgba(255,255,255,0.05)',
-                      borderColor: newSpec === s.id ? 'rgba(10,132,255,0.5)' : 'rgba(255,255,255,0.1)',
+                      background: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.15)' : 'rgba(255,255,255,0.05)',
+                      borderColor: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.5)' : 'rgba(255,255,255,0.1)',
                     }}
                   >
                     <div className="flex-1">
                       <p className="m-0 text-[13px] font-semibold">{s.label}</p>
                       <p className="m-0 text-[11px] text-tg-hint">{s.desc}</p>
                     </div>
-                    {newSpec === s.id && <span className="text-[#0a84ff]">✓</span>}
+                    {newSpec === s.id && <span className="text-[var(--c-blue)]">✓</span>}
                   </button>
                 ))}
               </div>
               <button
                 onClick={() => void handleCreate()}
                 disabled={creating || newName.trim().length < 3}
-                className="w-full py-[10px] rounded-[10px] border-none cursor-pointer bg-[#34c759] text-white font-bold text-sm disabled:opacity-60"
+                className="w-full py-[10px] rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-white font-bold text-sm disabled:opacity-60"
               >
                 {creating ? 'Создаём...' : 'Создать'}
               </button>
@@ -184,7 +184,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                   {!gs.clan && (
                     <button
                       onClick={() => void handleJoin(clan.idpk)}
-                      className="ml-2 px-3 py-[7px] rounded-lg border-none cursor-pointer bg-[rgba(10,132,255,0.15)] text-[#0a84ff] font-semibold text-[13px] shrink-0"
+                      className="ml-2 px-3 py-[7px] rounded-lg border-none cursor-pointer bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] font-semibold text-[13px] shrink-0"
                     >
                       Вступить
                     </button>

@@ -6,38 +6,38 @@ import { apiGetPacksInfo, apiOpenPack } from '../api';
 // ─── Display helpers ──────────────────────────────────────────────────────────
 
 const HABITAT_INFO: Record<string, { emoji: string; name: string; color: string }> = {
-  desert:     { emoji: '🐪', name: 'Пустыня',     color: '#ffd60a' },
-  mountains:  { emoji: '🦅', name: 'Горы',         color: '#8f95ab' },
-  forest:     { emoji: '🐆', name: 'Густой лес',   color: '#34c759' },
-  fields:     { emoji: '🐴', name: 'Поля',          color: '#30d5c8' },
-  antarctica: { emoji: '🐧', name: 'Антарктида',   color: '#5ac8fa' },
+  desert:     { emoji: '🐪', name: 'Пустыня',     color: 'var(--c-gold)' },
+  mountains:  { emoji: '🦅', name: 'Горы',         color: 'var(--tg-theme-hint-color)' },
+  forest:     { emoji: '🐆', name: 'Густой лес',   color: 'var(--c-green)' },
+  fields:     { emoji: '🐴', name: 'Поля',          color: 'var(--c-teal)' },
+  antarctica: { emoji: '🐧', name: 'Антарктида',   color: 'var(--c-cyan)' },
 };
 
 const GENE_LABELS: Record<string, Record<string, { label: string; color: string }>> = {
   survival: {
-    low:    { label: 'Слабый',       color: '#ff6b3d' },
-    medium: { label: 'Обычный',      color: '#8f95ab' },
-    high:   { label: 'Долгожитель',  color: '#34c759' },
+    low:    { label: 'Слабый',       color: 'var(--c-orange)' },
+    medium: { label: 'Обычный',      color: 'var(--tg-theme-hint-color)' },
+    high:   { label: 'Долгожитель',  color: 'var(--c-green)' },
   },
   reproduction: {
-    low:    { label: 'Неохотно',   color: '#ff6b3d' },
-    medium: { label: 'Обычно',     color: '#8f95ab' },
-    high:   { label: 'Активное',   color: '#34c759' },
+    low:    { label: 'Неохотно',   color: 'var(--c-orange)' },
+    medium: { label: 'Обычно',     color: 'var(--tg-theme-hint-color)' },
+    high:   { label: 'Активное',   color: 'var(--c-green)' },
   },
   appearance: {
-    low:    { label: 'Уродец',         color: '#ff6b3d' },
-    medium: { label: 'Обычный',        color: '#8f95ab' },
-    high:   { label: 'Привлекательный', color: '#ffd60a' },
+    low:    { label: 'Уродец',         color: 'var(--c-orange)' },
+    medium: { label: 'Обычный',        color: 'var(--tg-theme-hint-color)' },
+    high:   { label: 'Привлекательный', color: 'var(--c-gold)' },
   },
   size_trait: {
-    low:    { label: 'Маленький', color: '#8f95ab' },
-    medium: { label: 'Обычный',   color: '#8f95ab' },
-    high:   { label: 'Гигант',    color: '#ffd60a' },
+    low:    { label: 'Маленький', color: 'var(--tg-theme-hint-color)' },
+    medium: { label: 'Обычный',   color: 'var(--tg-theme-hint-color)' },
+    high:   { label: 'Гигант',    color: 'var(--c-gold)' },
   },
 };
 
 function geneColor(key: string, val: string) {
-  return GENE_LABELS[key]?.[val]?.color ?? '#8f95ab';
+  return GENE_LABELS[key]?.[val]?.color ?? 'var(--tg-theme-hint-color)';
 }
 function geneLabel(key: string, val: string) {
   return GENE_LABELS[key]?.[val]?.label ?? val;
@@ -46,12 +46,12 @@ function geneLabel(key: string, val: string) {
 function lifeLeft(diesAt: string | null): { label: string; color: string } | null {
   if (!diesAt) return null;
   const ms = new Date(diesAt).getTime() - Date.now();
-  if (ms <= 0) return { label: 'Умер', color: '#ff3b30' };
+  if (ms <= 0) return { label: 'Умер', color: 'var(--c-red)' };
   const totalHours = Math.floor(ms / 3_600_000);
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
   const label = days > 0 ? `${days}д ${hours}ч` : `${hours}ч`;
-  const color = totalHours < 24 ? '#ff3b30' : totalHours < 48 ? '#ff9f0a' : '#34c759';
+  const color = totalHours < 24 ? 'var(--c-red)' : totalHours < 48 ? 'var(--c-amber)' : 'var(--c-green)';
   return { label, color };
 }
 
@@ -61,11 +61,11 @@ function qualityScore(a: PackAnimal): number {
 }
 
 function qualityLabel(score: number): { text: string; color: string } {
-  if (score >= 7) return { text: 'Идеальный',    color: '#ffd60a' };
-  if (score >= 5) return { text: 'Отличный',     color: '#0a84ff' };
-  if (score >= 3) return { text: 'Хороший',      color: '#34c759' };
-  if (score >= 1) return { text: 'Посредственный', color: '#8f95ab' };
-  return             { text: 'Слабый',          color: '#ff6b3d' };
+  if (score >= 7) return { text: 'Идеальный',    color: 'var(--c-gold)' };
+  if (score >= 5) return { text: 'Отличный',     color: 'var(--c-blue)' };
+  if (score >= 3) return { text: 'Хороший',      color: 'var(--c-green)' };
+  if (score >= 1) return { text: 'Посредственный', color: 'var(--tg-theme-hint-color)' };
+  return             { text: 'Слабый',          color: 'var(--c-orange)' };
 }
 
 // ─── Animal card ──────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ function AnimalCard({ animal, isNew }: { animal: PackAnimal; isNew: boolean }) {
             {isNew && (
               <span
                 className="text-[11px] font-bold px-2 py-[2px] rounded-full"
-                style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759', border: '1px solid rgba(52,199,89,0.3)' }}
+                style={{ background: 'rgba(var(--c-green-rgb),0.15)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.3)' }}
               >
                 НОВЫЙ
               </span>
@@ -145,10 +145,10 @@ function AnimalCard({ animal, isNew }: { animal: PackAnimal; isNew: boolean }) {
       <div className="grid grid-cols-2 gap-[6px]">
         <div
           className="flex items-center justify-between px-3 py-[8px] rounded-xl"
-          style={{ background: 'rgba(52,199,89,0.08)', border: '1px solid rgba(52,199,89,0.2)' }}
+          style={{ background: 'rgba(var(--c-green-rgb),0.08)', border: '1px solid rgba(var(--c-green-rgb),0.2)' }}
         >
           <span className="text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>💰</span>
-          <span className="text-[12px] font-extrabold" style={{ color: '#34c759' }}>
+          <span className="text-[12px] font-extrabold" style={{ color: 'var(--c-green)' }}>
             ₽{fmt(animal.income)}/мин
           </span>
         </div>
@@ -183,16 +183,16 @@ function PackCard({
       className="relative overflow-hidden rounded-2xl p-5"
       style={{
         background:  isFree
-          ? 'linear-gradient(135deg, rgba(52,199,89,0.15) 0%, rgba(48,213,200,0.08) 100%)'
-          : 'linear-gradient(135deg, rgba(10,132,255,0.15) 0%, rgba(10,132,255,0.06) 100%)',
-        border: isFree ? '1px solid rgba(52,199,89,0.35)' : '1px solid rgba(10,132,255,0.3)',
+          ? 'linear-gradient(135deg, rgba(var(--c-green-rgb),0.15) 0%, rgba(var(--c-teal-rgb),0.08) 100%)'
+          : 'linear-gradient(135deg, rgba(var(--c-blue-rgb),0.15) 0%, rgba(var(--c-blue-rgb),0.06) 100%)',
+        border: isFree ? '1px solid rgba(var(--c-green-rgb),0.35)' : '1px solid rgba(var(--c-blue-rgb),0.3)',
       }}
     >
       {/* Glow orb */}
       <div
         className="absolute top-0 right-0 w-24 h-24 rounded-full pointer-events-none"
         style={{
-          background: isFree ? 'radial-gradient(rgba(52,199,89,0.2),transparent 70%)' : 'radial-gradient(rgba(10,132,255,0.2),transparent 70%)',
+          background: isFree ? 'radial-gradient(rgba(var(--c-green-rgb),0.2),transparent 70%)' : 'radial-gradient(rgba(var(--c-blue-rgb),0.2),transparent 70%)',
           transform: 'translate(30%, -30%)',
         }}
       />
@@ -201,8 +201,8 @@ function PackCard({
         <div
           className="w-14 h-14 rounded-2xl grid place-items-center text-[28px] shrink-0"
           style={{
-            background: isFree ? 'rgba(52,199,89,0.15)' : 'rgba(10,132,255,0.15)',
-            border:     isFree ? '1px solid rgba(52,199,89,0.3)' : '1px solid rgba(10,132,255,0.25)',
+            background: isFree ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(var(--c-blue-rgb),0.15)',
+            border:     isFree ? '1px solid rgba(var(--c-green-rgb),0.3)' : '1px solid rgba(var(--c-blue-rgb),0.25)',
           }}
         >
           📦
@@ -221,10 +221,10 @@ function PackCard({
           className="px-4 py-[10px] rounded-xl border-none font-extrabold text-[13px] shrink-0"
           style={{
             background: isFree
-              ? 'linear-gradient(135deg, #34c759, #30b34e)'
-              : 'linear-gradient(135deg, #0a84ff, #0066dd)',
+              ? 'linear-gradient(135deg, var(--c-green), #30b34e)'
+              : 'linear-gradient(135deg, var(--c-blue), #0066dd)',
             color:      '#fff',
-            boxShadow:  isFree ? '0 4px 12px rgba(52,199,89,0.35)' : '0 4px 12px rgba(10,132,255,0.3)',
+            boxShadow:  isFree ? '0 4px 12px rgba(var(--c-green-rgb),0.35)' : '0 4px 12px rgba(var(--c-blue-rgb),0.3)',
             opacity:    loading ? 0.6 : 1,
           }}
         >
@@ -287,7 +287,7 @@ export function PacksPage({ gs }: { gs: GameState }) {
       <div className="flex gap-2">
         <span
           className="px-3 py-[5px] rounded-[20px] text-[13px] font-bold"
-          style={{ background: 'rgba(52,199,89,0.12)', color: '#34c759', border: '1px solid rgba(52,199,89,0.25)' }}
+          style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.25)' }}
         >
           ₽ {fmt(gs.rub)}
         </span>
@@ -303,7 +303,7 @@ export function PacksPage({ gs }: { gs: GameState }) {
 
       {/* Error */}
       {error && (
-        <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.25)', color: '#ff3b30' }}>
+        <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}>
           {error}
         </div>
       )}

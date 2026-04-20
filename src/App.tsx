@@ -63,7 +63,7 @@ function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) {
             style={{ fontSize: 16, padding: '12px 14px' }}
           />
           {error && (
-            <p className="m-0 text-[#ff6b63] text-[13px]">⚠️ {error}</p>
+            <p className="m-0 text-[var(--c-red-soft)] text-[13px]">⚠️ {error}</p>
           )}
           <button
             onClick={() => void handleRegister()}
@@ -105,7 +105,7 @@ function DevBar({ onLogin }: { onLogin: (id: string) => void }) {
       />
       <button
         onClick={() => val.trim() && onLogin(val.trim())}
-        className="px-[14px] py-[7px] rounded-lg bg-[#0a84ff] text-white text-[13px] border-none cursor-pointer"
+        className="px-[14px] py-[7px] rounded-lg bg-[var(--c-blue)] text-white text-[13px] border-none cursor-pointer"
       >
         Войти
       </button>
@@ -311,7 +311,7 @@ export default function App() {
             <p className="m-0 mb-[14px] text-tg-hint text-[13px]">{error}</p>
             <button
               onClick={reloadFromServer}
-              className="w-full py-3 rounded-xl border-none bg-[#0a84ff] text-white cursor-pointer font-bold"
+              className="w-full py-3 rounded-xl border-none bg-[var(--c-blue)] text-white cursor-pointer font-bold"
             >
               Повторить
             </button>

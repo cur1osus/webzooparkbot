@@ -47,14 +47,25 @@
   --app-bottom-offset: calc(var(--app-tabbar-base-height) + var(--safe-bottom));
 
   /* Game accent palette */
-  --c-green:  #34c759;
-  --c-gold:   #ffd60a;
-  --c-purple: #bf5af2;
-  --c-blue:   #0a84ff;
-  --c-orange: #ff6b3d;
-  --c-red:    #ff3b30;
-  --c-cyan:   #5ac8fa;
-  --c-teal:   #30d5c8;
+  --c-green:    #34c759;
+  --c-gold:     #ffd60a;
+  --c-purple:   #bf5af2;
+  --c-blue:     #0a84ff;
+  --c-orange:   #ff6b3d;
+  --c-red:      #ff3b30;
+  --c-red-soft: #ff6b63;
+  --c-cyan:     #5ac8fa;
+  --c-teal:     #30d5c8;
+  --c-amber:    #ff9f0a;
+
+  /* RGB channels for rgba() opacity usage */
+  --c-green-rgb:  52, 199, 89;
+  --c-gold-rgb:   255, 214, 10;
+  --c-purple-rgb: 191, 90, 242;
+  --c-blue-rgb:   10, 132, 255;
+  --c-orange-rgb: 255, 107, 61;
+  --c-red-rgb:    255, 59, 48;
+  --c-teal-rgb:   48, 213, 200;
 
   /* Card system */
   --card-radius: 16px;

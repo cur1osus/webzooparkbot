@@ -9,10 +9,10 @@ type GamesTab = 'solo' | 'multi' | 'cocktail';
 const FRUITS = ['🍓', '🫐', '🍏', '🍐', '🍇', '🍒'];
 
 const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = {
-  darts:    { from: '#ff6b3d', to: '#ff3b30', glow: 'rgba(255,107,61,0.35)' },
-  bowling:  { from: '#34c759', to: '#30d5c8', glow: 'rgba(52,199,89,0.35)' },
-  dice:     { from: '#0a84ff', to: '#5ac8fa', glow: 'rgba(10,132,255,0.35)' },
-  football: { from: '#ffd60a', to: '#ff9f0a', glow: 'rgba(255,214,10,0.35)' },
+  darts:    { from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
+  bowling:  { from: 'var(--c-green)', to: 'var(--c-teal)', glow: 'rgba(var(--c-green-rgb),0.35)' },
+  dice:     { from: 'var(--c-blue)', to: 'var(--c-cyan)', glow: 'rgba(var(--c-blue-rgb),0.35)' },
+  football: { from: 'var(--c-gold)', to: 'var(--c-amber)', glow: 'rgba(var(--c-gold-rgb),0.35)' },
 };
 
 /* ──────────────────────────── COCKTAIL ──────────────────────────────── */
@@ -41,17 +41,17 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
       {/* Hero */}
       <div
         className="rounded-2xl p-5 text-center relative overflow-hidden"
-        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid rgba(48,213,200,0.25)' }}
+        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid rgba(var(--c-teal-rgb),0.25)' }}
       >
         <div
           className="absolute inset-0 opacity-20"
-          style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(48,213,200,0.5) 0%, transparent 70%)' }}
+          style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(var(--c-teal-rgb),0.5) 0%, transparent 70%)' }}
         />
         <div className="relative">
           <div className="text-[48px] mb-2">🍹</div>
           <p className="m-0 mb-1 text-[18px] font-extrabold">Коктейль дня</p>
           <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            Угадай секретный рецепт из 4 фруктов — получи <span style={{ color: '#ffd60a', fontWeight: 700 }}>150 🐾</span>
+            Угадай секретный рецепт из 4 фруктов — получи <span style={{ color: 'var(--c-gold)', fontWeight: 700 }}>150 🐾</span>
           </p>
         </div>
       </div>
@@ -63,7 +63,7 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
             className="h-full rounded-full transition-all duration-300"
             style={{
               width: `${(attemptsLeft / 10) * 100}%`,
-              background: attemptsLeft > 5 ? '#34c759' : attemptsLeft > 2 ? '#ffd60a' : '#ff3b30',
+              background: attemptsLeft > 5 ? 'var(--c-green)' : attemptsLeft > 2 ? 'var(--c-gold)' : 'var(--c-red)',
             }}
           />
         </div>
@@ -80,10 +80,10 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
             onClick={() => slots[i] && removeAtIdx(i)}
             className="w-[64px] h-[64px] rounded-2xl grid place-items-center text-[30px] transition-all duration-150"
             style={{
-              background: slots[i] ? 'rgba(10,132,255,0.12)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-              border: slots[i] ? '1px solid rgba(10,132,255,0.4)' : '1.5px dashed color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent)',
+              background: slots[i] ? 'rgba(var(--c-blue-rgb),0.12)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
+              border: slots[i] ? '1px solid rgba(var(--c-blue-rgb),0.4)' : '1.5px dashed color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent)',
               cursor: slots[i] ? 'pointer' : 'default',
-              boxShadow: slots[i] ? '0 0 12px rgba(10,132,255,0.2)' : 'none',
+              boxShadow: slots[i] ? '0 0 12px rgba(var(--c-blue-rgb),0.2)' : 'none',
             }}
           >
             {slots[i] ?? <span style={{ fontSize: 18, color: 'var(--tg-theme-hint-color)' }}>?</span>}
@@ -124,10 +124,10 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
           className="flex-[2] py-[13px] rounded-[14px] border-none font-extrabold text-sm"
           style={{
             background: slots.length === 4
-              ? 'linear-gradient(135deg, #0a84ff, #0066dd)'
+              ? 'linear-gradient(135deg, var(--c-blue), #0066dd)'
               : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
             color: slots.length === 4 ? '#fff' : 'var(--tg-theme-hint-color)',
-            boxShadow: slots.length === 4 ? '0 4px 16px rgba(10,132,255,0.35)' : 'none',
+            boxShadow: slots.length === 4 ? '0 4px 16px rgba(var(--c-blue-rgb),0.35)' : 'none',
           }}
         >
           Угадать! 🔮
@@ -137,11 +137,11 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
       {/* Legend */}
       <div className="flex gap-4 justify-center">
         <span className="text-xs flex items-center gap-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          <span className="w-2 h-2 rounded-full bg-[#34c759] inline-block" />
+          <span className="w-2 h-2 rounded-full bg-[var(--c-green)] inline-block" />
           верная позиция
         </span>
         <span className="text-xs flex items-center gap-1" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          <span className="w-2 h-2 rounded-full bg-[#0a84ff] inline-block" />
+          <span className="w-2 h-2 rounded-full bg-[var(--c-blue)] inline-block" />
           есть, но не там
         </span>
       </div>
@@ -150,8 +150,8 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
         <div
           className="rounded-2xl p-4"
           style={{
-            background: result.won ? 'rgba(52,199,89,0.1)' : 'rgba(255,107,61,0.1)',
-            border: `1px solid ${result.won ? 'rgba(52,199,89,0.35)' : 'rgba(255,107,61,0.35)'}`,
+            background: result.won ? 'rgba(var(--c-green-rgb),0.1)' : 'rgba(var(--c-orange-rgb),0.1)',
+            border: `1px solid ${result.won ? 'rgba(var(--c-green-rgb),0.35)' : 'rgba(var(--c-orange-rgb),0.35)'}`,
           }}
         >
           <p className="m-0 font-bold text-base">{result.won ? '🎉 Победа!' : '😢 Попробуй снова'}</p>
@@ -188,7 +188,7 @@ function MultiTab({ gs: _gs }: { gs: GameState }) {
     <div className="p-[14px] flex flex-col gap-3">
       <button
         className="py-[15px] rounded-2xl border-none font-extrabold text-base"
-        style={{ background: 'linear-gradient(135deg, #34c759, #30b34e)', color: '#fff', boxShadow: '0 4px 16px rgba(52,199,89,0.3)' }}
+        style={{ background: 'linear-gradient(135deg, var(--c-green), #30b34e)', color: '#fff', boxShadow: '0 4px 16px rgba(var(--c-green-rgb),0.3)' }}
       >
         + Создать игру
       </button>
@@ -199,7 +199,7 @@ function MultiTab({ gs: _gs }: { gs: GameState }) {
         </div>
       )}
       {error && (
-        <p className="text-center text-sm" style={{ color: '#ff6b63' }}>Ошибка загрузки игр</p>
+        <p className="text-center text-sm" style={{ color: 'var(--c-red-soft)' }}>Ошибка загрузки игр</p>
       )}
 
       {!loading && !error && games.length === 0 && (
@@ -216,7 +216,7 @@ function MultiTab({ gs: _gs }: { gs: GameState }) {
         <div key={g.id} className="card flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-xl grid place-items-center text-xl shrink-0"
-            style={{ background: 'rgba(10,132,255,0.15)', border: '1px solid rgba(10,132,255,0.25)' }}
+            style={{ background: 'rgba(var(--c-blue-rgb),0.15)', border: '1px solid rgba(var(--c-blue-rgb),0.25)' }}
           >
             🎲
           </div>
@@ -228,7 +228,7 @@ function MultiTab({ gs: _gs }: { gs: GameState }) {
           </div>
           <button
             className="px-4 py-2 rounded-xl border-none font-bold text-[13px] shrink-0"
-            style={{ background: 'linear-gradient(135deg, #0a84ff, #0066dd)', color: '#fff', boxShadow: '0 2px 8px rgba(10,132,255,0.3)' }}
+            style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: '#fff', boxShadow: '0 2px 8px rgba(var(--c-blue-rgb),0.3)' }}
           >
             Войти
           </button>
@@ -275,12 +275,12 @@ function SoloTab({ gs: _gs }: { gs: GameState }) {
               <p className="m-0 text-[20px] font-extrabold">{stats.games_played}</p>
               <p className="m-0 text-[11px] mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>Игр</p>
             </div>
-            <div className="text-center rounded-xl py-3" style={{ background: 'rgba(52,199,89,0.08)' }}>
-              <p className="m-0 text-[20px] font-extrabold" style={{ color: '#34c759' }}>{stats.wins}</p>
+            <div className="text-center rounded-xl py-3" style={{ background: 'rgba(var(--c-green-rgb),0.08)' }}>
+              <p className="m-0 text-[20px] font-extrabold" style={{ color: 'var(--c-green)' }}>{stats.wins}</p>
               <p className="m-0 text-[11px] mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>Победы</p>
             </div>
-            <div className="text-center rounded-xl py-3" style={{ background: 'rgba(255,107,61,0.08)' }}>
-              <p className="m-0 text-[20px] font-extrabold" style={{ color: '#ff6b3d' }}>{stats.losses}</p>
+            <div className="text-center rounded-xl py-3" style={{ background: 'rgba(var(--c-orange-rgb),0.08)' }}>
+              <p className="m-0 text-[20px] font-extrabold" style={{ color: 'var(--c-orange)' }}>{stats.losses}</p>
               <p className="m-0 text-[11px] mt-1" style={{ color: 'var(--tg-theme-hint-color)' }}>Поражения</p>
             </div>
           </div>
@@ -289,7 +289,7 @@ function SoloTab({ gs: _gs }: { gs: GameState }) {
             <div>
               <div className="flex justify-between text-[12px] mb-1">
                 <span style={{ color: 'var(--tg-theme-hint-color)' }}>Процент побед</span>
-                <span className="font-bold" style={{ color: winRate >= 50 ? '#34c759' : '#ff6b3d' }}>
+                <span className="font-bold" style={{ color: winRate >= 50 ? 'var(--c-green)' : 'var(--c-orange)' }}>
                   {winRate}%
                 </span>
               </div>
@@ -299,8 +299,8 @@ function SoloTab({ gs: _gs }: { gs: GameState }) {
                   style={{
                     width: `${winRate}%`,
                     background: winRate >= 50
-                      ? 'linear-gradient(90deg, #34c759, #30d5c8)'
-                      : 'linear-gradient(90deg, #ff9f0a, #ff3b30)',
+                      ? 'linear-gradient(90deg, var(--c-green), var(--c-teal))'
+                      : 'linear-gradient(90deg, var(--c-amber), var(--c-red))',
                   }}
                 />
               </div>
@@ -399,13 +399,13 @@ export function GamesPage({ gs }: { gs: GameState }) {
         {/* Background glow */}
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at 50% -20%, rgba(10,132,255,0.12) 0%, transparent 65%)' }}
+          style={{ background: 'radial-gradient(ellipse at 50% -20%, rgba(var(--c-blue-rgb),0.12) 0%, transparent 65%)' }}
         />
         <div className="relative px-[14px]">
           <div className="flex items-center gap-3 mb-1">
             <div
               className="w-10 h-10 rounded-xl grid place-items-center text-[20px]"
-              style={{ background: 'rgba(10,132,255,0.15)', border: '1px solid rgba(10,132,255,0.25)' }}
+              style={{ background: 'rgba(var(--c-blue-rgb),0.15)', border: '1px solid rgba(var(--c-blue-rgb),0.25)' }}
             >
               🎮
             </div>

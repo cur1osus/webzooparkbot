@@ -4,11 +4,11 @@ import type { GameState } from '../types';
 export function CurrencyBar({ gs, showSeats = false }: { gs: GameState; showSeats?: boolean }) {
   return (
     <div className="flex items-center gap-[6px] px-3 py-[6px] bg-tg-bg border-b border-white/[0.06] overflow-x-auto shrink-0">
-      <Chip color="#34c759">{fmtRub(gs.rub)}</Chip>
-      <Chip color="#ffd60a">{fmtUsd(gs.usd)}</Chip>
-      <Chip color="#bf5af2">🐾 {gs.paw_coins}</Chip>
+      <Chip color="var(--c-green)">{fmtRub(gs.rub)}</Chip>
+      <Chip color="var(--c-gold)">{fmtUsd(gs.usd)}</Chip>
+      <Chip color="var(--c-purple)">🐾 {gs.paw_coins}</Chip>
       {showSeats && (
-        <Chip color="#8f95ab">🏗️ {fmtRub(gs.free_seats).replace('₽ ', '')} мест</Chip>
+        <Chip color="var(--tg-theme-hint-color)">🏗️ {fmtRub(gs.free_seats).replace('₽ ', '')} мест</Chip>
       )}
     </div>
   );

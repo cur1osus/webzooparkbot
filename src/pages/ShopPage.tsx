@@ -4,6 +4,7 @@ import type { ForgeItem, GameState } from '../types';
 import { AVIARIES } from '../data/aviaries';
 import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
+import { tmaConfirm } from '../tma';
 import {
   apiForgeCreate,
   apiForgeUpgrade,
@@ -22,7 +23,7 @@ const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
 ];
 
 const RARITY_COLOR: Record<string, string> = {
-  common: '#8f95ab', rare: '#34c759', epic: '#bf5af2', mythical: '#ff6b3d', legendary: '#ffd60a',
+  common: 'var(--tg-theme-hint-color)', rare: 'var(--c-green)', epic: 'var(--c-purple)', mythical: 'var(--c-orange)', legendary: 'var(--c-gold)',
 };
 const RARITY_LABEL: Record<string, string> = {
   common: 'Обычный', rare: 'Редкий', epic: 'Эпический', mythical: 'Мифический', legendary: 'Легендарный',
@@ -102,7 +103,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     const level = item.level;
     const cost = 30_000 * (level + 1);
     const successPct = Math.max(0, 100 - 8 * level);
-    if (!confirm(`Улучшить ${item.name}?\nСтоимость: $${fmt(cost)}\nШанс успеха: ${successPct}%`)) return;
+    if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}\nШанс успеха: ${successPct}%`, `Улучшить ${item.name}?`))) return;
     setBusy(true);
     try {
       const r = await apiForgeUpgrade(item.id);
@@ -129,7 +130,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     const n1 = item1.properties?.length ?? 0;
     const n2 = item.properties?.length ?? 0;
     const cost = 100_000 * (n1 + n2 + Math.max(item1.level + item.level, 1));
-    if (!confirm(`Слить «${item1.name}» + «${item.name}»?\nСтоимость: $${fmt(cost)}`)) {
+    if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}`, `Слить «${item1.name}» + «${item.name}»?`))) {
       setMergeFirst(null);
       return;
     }
@@ -158,7 +159,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           className="fixed top-[60px] left-1/2 z-50 px-4 py-3 rounded-xl text-sm font-semibold text-white shadow-lg"
           style={{
             transform: 'translateX(-50%)',
-            background: toast.ok ? 'rgba(52,199,89,0.95)' : 'rgba(255,69,58,0.95)',
+            background: toast.ok ? 'rgba(var(--c-green-rgb),0.95)' : 'rgba(var(--c-red-rgb),0.95)',
             maxWidth: '90vw',
           }}
         >
@@ -176,7 +177,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           onClick={() => handleCreate('usd')}
           disabled={busy || !canAffordUsd}
           className="w-full py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
-          style={{ background: canAffordUsd ? '#ffd60a' : 'rgba(255,214,10,0.15)', color: canAffordUsd ? '#000' : '#ffd60a' }}
+          style={{ background: canAffordUsd ? 'var(--c-gold)' : 'rgba(var(--c-gold-rgb),0.15)', color: canAffordUsd ? '#000' : 'var(--c-gold)' }}
         >
           $ {fmt(usdCost)}
         </button>
@@ -184,7 +185,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           onClick={() => handleCreate('paw')}
           disabled={busy || !canAffordPaw}
           className="w-full py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
-          style={{ background: canAffordPaw ? 'rgba(191,90,242,0.2)' : 'rgba(191,90,242,0.08)', color: '#bf5af2' }}
+          style={{ background: canAffordPaw ? 'rgba(var(--c-purple-rgb),0.2)' : 'rgba(var(--c-purple-rgb),0.08)', color: 'var(--c-purple)' }}
         >
           🐾 {pawCost} PawCoins
         </button>
@@ -192,7 +193,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
       {/* Pending item — sell or keep */}
       {pendingItem && (() => {
-        const rc = RARITY_COLOR[pendingItem.rarity] ?? '#8f95ab';
+        const rc = RARITY_COLOR[pendingItem.rarity] ?? 'var(--tg-theme-hint-color)';
         return (
           <div className="card flex flex-col gap-[10px]" style={{ border: `1px solid ${rc}55`, background: `${rc}0d` }}>
             <div className="flex items-center gap-[10px]">
@@ -219,7 +220,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                 onClick={handlePendingSell}
                 disabled={busy}
                 className="flex-1 py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
-                style={{ background: 'rgba(255,69,58,0.15)', color: '#ff453a' }}
+                style={{ background: 'rgba(var(--c-red-rgb),0.15)', color: 'var(--c-red)' }}
               >
                 Продать $80k
               </button>
@@ -227,7 +228,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                 onClick={handlePendingKeep}
                 disabled={busy}
                 className="flex-1 py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
-                style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
+                style={{ background: 'rgba(var(--c-green-rgb),0.15)', color: 'var(--c-green)' }}
               >
                 Оставить
               </button>
@@ -238,8 +239,8 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
       {/* Merge hint */}
       {mergeFirst && (
-        <div className="card" style={{ border: '1px solid rgba(255,214,10,0.4)', background: 'rgba(255,214,10,0.08)' }}>
-          <p className="m-0 text-[13px] text-[#ffd60a] font-semibold">
+        <div className="card" style={{ border: '1px solid rgba(var(--c-gold-rgb),0.4)', background: 'rgba(var(--c-gold-rgb),0.08)' }}>
+          <p className="m-0 text-[13px] text-[var(--c-gold)] font-semibold">
             Выбери второй предмет для слияния или нажми ещё раз на выбранный, чтобы отменить.
           </p>
         </div>
@@ -252,7 +253,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         </div>
       ) : (
         items.map(item => {
-          const rarityColor = RARITY_COLOR[item.rarity] ?? '#8f95ab';
+          const rarityColor = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
           const level = item.level;
           const upgradeCost = 30_000 * (level + 1);
           const successPct = Math.max(0, 100 - 8 * level);
@@ -264,8 +265,8 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
               key={item.id}
               className="card flex flex-col gap-[8px]"
               style={{
-                border: isSelected ? '1px solid rgba(255,214,10,0.6)' : undefined,
-                background: isSelected ? 'rgba(255,214,10,0.07)' : undefined,
+                border: isSelected ? '1px solid rgba(var(--c-gold-rgb),0.6)' : undefined,
+                background: isSelected ? 'rgba(var(--c-gold-rgb),0.07)' : undefined,
               }}
             >
               {/* Header */}
@@ -281,7 +282,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                       {RARITY_LABEL[item.rarity] ?? item.rarity}
                     </span>
                     {item.is_active && (
-                      <span className="text-[11px] px-[6px] py-[1px] rounded-full bg-[rgba(52,199,89,0.15)] text-[#34c759] font-semibold">
+                      <span className="text-[11px] px-[6px] py-[1px] rounded-full bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] font-semibold">
                         Активен
                       </span>
                     )}
@@ -310,7 +311,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                   onClick={() => handleUpgrade(item)}
                   disabled={busy || level >= 12 || gs.usd < upgradeCost}
                   className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
-                  style={{ background: 'rgba(10,132,255,0.15)', color: '#0a84ff' }}
+                  style={{ background: 'rgba(var(--c-blue-rgb),0.15)', color: 'var(--c-blue)' }}
                 >
                   {level >= 12 ? 'Макс уровень' : `Улучш. $${fmt(upgradeCost)} (${successPct}%)`}
                 </button>
@@ -320,8 +321,8 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                   disabled={busy || isLegendary}
                   className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
                   style={{
-                    background: isSelected ? 'rgba(255,214,10,0.2)' : 'rgba(255,214,10,0.1)',
-                    color: '#ffd60a',
+                    background: isSelected ? 'rgba(var(--c-gold-rgb),0.2)' : 'rgba(var(--c-gold-rgb),0.1)',
+                    color: 'var(--c-gold)',
                   }}
                 >
                   {isLegendary ? 'Нельзя слить' : isSelected ? '✓ Выбран' : 'Слить'}
@@ -359,9 +360,9 @@ export function ShopPage({
         {/* Balance + seats */}
         <div className="flex gap-[6px] mb-[10px] overflow-x-auto">
           {[
-            { label: `₽ ${fmt(gs.rub)}`,    color: '#34c759' },
-            { label: `$ ${fmt(gs.usd)}`,    color: '#ffd60a' },
-            { label: `🐾 ${gs.paw_coins}`,  color: '#bf5af2' },
+            { label: `₽ ${fmt(gs.rub)}`,    color: 'var(--c-green)' },
+            { label: `$ ${fmt(gs.usd)}`,    color: 'var(--c-gold)' },
+            { label: `🐾 ${gs.paw_coins}`,  color: 'var(--c-purple)' },
           ].map(({ label, color }) => (
             <span key={label} className="px-[10px] py-1 rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
               style={{ background: `${color}18`, color, border: `1px solid ${color}30` }}>
@@ -369,7 +370,7 @@ export function ShopPage({
             </span>
           ))}
           <span className="px-[10px] py-1 rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
-            style={{ background: 'rgba(143,149,171,0.15)', color: '#8f95ab', border: '1px solid rgba(143,149,171,0.2)' }}>
+            style={{ background: 'rgba(143,149,171,0.15)', color: 'var(--tg-theme-hint-color)', border: '1px solid rgba(143,149,171,0.2)' }}>
             🏗️ {fmt(gs.free_seats)} мест
           </span>
         </div>
@@ -421,7 +422,7 @@ export function ShopPage({
                       {av.seats} мест · ₽ {fmt(av.price_rub)}
                     </p>
                     {owned > 0 && (
-                      <p className="mt-[2px] mb-0 text-xs text-[#34c759]">У вас: {owned} шт.</p>
+                      <p className="mt-[2px] mb-0 text-xs text-[var(--c-green)]">У вас: {owned} шт.</p>
                     )}
                   </div>
                 </div>
@@ -430,7 +431,7 @@ export function ShopPage({
                   disabled={!affordable}
                   className="w-full py-[10px] rounded-[10px] border-none font-bold text-sm disabled:opacity-60 cursor-pointer"
                   style={{
-                    background: affordable ? '#0a84ff' : 'color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent)',
+                    background: affordable ? 'var(--c-blue)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent)',
                     color: affordable ? '#fff' : 'var(--tg-theme-hint-color)',
                   }}
                 >
@@ -455,7 +456,7 @@ export function ShopPage({
             </p>
 
             <div className="flex gap-2 mb-3">
-              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-[#34c759] text-white">
+              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-[var(--c-green)] text-white">
                 Дешевле
               </button>
               <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-white/[0.08] text-tg-hint">
@@ -466,7 +467,7 @@ export function ShopPage({
             <div className="card flex justify-between items-center" style={{ background: 'var(--tg-theme-bg-color)' }}>
               <span className="font-bold">{gs.nickname}</span>
               <span className="text-tg-hint text-[13px]">По умолчанию</span>
-              <button className="px-[14px] py-[6px] rounded-lg border-none cursor-pointer bg-[rgba(10,132,255,0.15)] text-[#0a84ff] font-semibold text-[13px]">
+              <button className="px-[14px] py-[6px] rounded-lg border-none cursor-pointer bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] font-semibold text-[13px]">
                 Выбрать
               </button>
             </div>

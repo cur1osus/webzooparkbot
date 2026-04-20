@@ -18,11 +18,11 @@ export const RARITY_LABEL: Record<Rarity, string> = {
 };
 
 export const RARITY_COLOR: Record<Rarity, string> = {
-  common: '#8f95ab',
-  rare: '#34c759',
-  epic: '#bf5af2',
-  mythic: '#ff6b3d',
-  legendary: '#ffd60a',
+  common: 'var(--tg-theme-hint-color)',
+  rare: 'var(--c-green)',
+  epic: 'var(--c-purple)',
+  mythic: 'var(--c-orange)',
+  legendary: 'var(--c-gold)',
 };
 
 export const ANIMALS: AnimalDef[] = [

@@ -154,10 +154,10 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                   <div className="flex items-center gap-2">
                     <p className="m-0 text-[15px] font-semibold">{item.title}</p>
                     {item.id === 'bonus' && gs.bonus === 1 && (
-                      <span className="text-[10px] font-bold bg-[#34c759] text-white px-[6px] py-[2px] rounded-full">Доступен</span>
+                      <span className="text-[10px] font-bold bg-[var(--c-green)] text-white px-[6px] py-[2px] rounded-full">Доступен</span>
                     )}
                     {item.id === 'clan' && gs.clan && (
-                      <span className="text-[10px] font-bold bg-[rgba(191,90,242,0.2)] text-[#bf5af2] px-[6px] py-[2px] rounded-full">«{gs.clan.name}»</span>
+                      <span className="text-[10px] font-bold bg-[rgba(var(--c-purple-rgb),0.2)] text-[var(--c-purple)] px-[6px] py-[2px] rounded-full">«{gs.clan.name}»</span>
                     )}
                   </div>
                   <p className="mt-[2px] mb-0 text-xs text-tg-hint truncate">{item.desc}</p>
@@ -173,13 +173,13 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       {gs.tg_id === 474701274 && (
         <div
           className="card flex items-center gap-[14px] cursor-pointer"
-          style={{ border: '1px solid rgba(255,59,48,0.3)' }}
+          style={{ border: '1px solid rgba(var(--c-red-rgb),0.3)' }}
           onClick={() => {}}
         >
           <span className="text-[30px]">⚙️</span>
           <div className="flex-1">
             <p className="m-0 text-[15px] font-semibold">Админ-панель</p>
-            <p className="mt-[2px] mb-0 text-xs text-[#ff6b63]">Только для администратора</p>
+            <p className="mt-[2px] mb-0 text-xs text-[var(--c-red-soft)]">Только для администратора</p>
           </div>
           <span className="text-[18px] text-tg-hint">›</span>
         </div>
@@ -263,12 +263,12 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
             Каждый получит: <strong className="text-white">₽ {fmt(perPart)}</strong>
           </p>
         )}
-        {error && <p className="m-0 mb-2 text-[#ff6b63] text-[13px]">⚠️ {error}</p>}
+        {error && <p className="m-0 mb-2 text-[var(--c-red-soft)] text-[13px]">⚠️ {error}</p>}
         <button
           onClick={() => void handleCreate()}
           disabled={creating || !total || !max || total > gs.rub}
           className="w-full py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm disabled:opacity-50"
-          style={{ background: '#34c759', color: 'white' }}
+          style={{ background: 'var(--c-green)', color: 'white' }}
         >
           {creating ? 'Создаём...' : 'Создать ссылку'}
         </button>
@@ -296,8 +296,8 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
                   <span
                     className="text-[11px] font-bold px-2 py-[3px] rounded-full"
                     style={{
-                      background: t.active ? 'rgba(52,199,89,0.15)' : 'rgba(255,255,255,0.08)',
-                      color: t.active ? '#34c759' : 'var(--tg-theme-hint-color)',
+                      background: t.active ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(255,255,255,0.08)',
+                      color: t.active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
                     }}
                   >
                     {t.active ? 'Активна' : 'Завершена'}
@@ -309,8 +309,8 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
                     onClick={() => copyLink(t.key)}
                     className="w-full py-2 rounded-[8px] border-none cursor-pointer font-semibold text-[13px]"
                     style={{
-                      background: copiedKey === t.key ? 'rgba(52,199,89,0.15)' : 'rgba(255,255,255,0.08)',
-                      color: copiedKey === t.key ? '#34c759' : 'var(--tg-theme-text-color)',
+                      background: copiedKey === t.key ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(255,255,255,0.08)',
+                      color: copiedKey === t.key ? 'var(--c-green)' : 'var(--tg-theme-text-color)',
                     }}
                   >
                     {copiedKey === t.key ? '✅ Скопировано' : '📋 Скопировать ссылку'}

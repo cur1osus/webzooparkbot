@@ -4,11 +4,11 @@ import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '../api';
 import { fmt } from '../utils/format';
 
 const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
-  desert:     { emoji: '🐪', name: 'Пустыня',   color: '#ffd60a' },
-  mountains:  { emoji: '🦅', name: 'Горы',       color: '#8f95ab' },
-  forest:     { emoji: '🐆', name: 'Густой лес', color: '#34c759' },
-  fields:     { emoji: '🐴', name: 'Поля',        color: '#30d5c8' },
-  antarctica: { emoji: '🐧', name: 'Антарктида', color: '#5ac8fa' },
+  desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },
+  mountains:  { emoji: '🦅', name: 'Горы',       color: 'var(--tg-theme-hint-color)' },
+  forest:     { emoji: '🐆', name: 'Густой лес', color: 'var(--c-green)' },
+  fields:     { emoji: '🐴', name: 'Поля',        color: 'var(--c-teal)' },
+  antarctica: { emoji: '🐧', name: 'Антарктида', color: 'var(--c-cyan)' },
 };
 
 const ALL_HABITATS: Habitat[] = ['desert', 'mountains', 'forest', 'fields', 'antarctica'];
@@ -25,12 +25,12 @@ function AnimalChip({ animal, onRemove }: { animal: PackAnimal; onRemove: () => 
       <span className="text-[18px]">{hab.emoji}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-[6px]">
-          <span className="text-[12px] font-bold" style={{ color: '#34c759' }}>
+          <span className="text-[12px] font-bold" style={{ color: 'var(--c-green)' }}>
             ₽{fmt(animal.income)}/мин
           </span>
           {animal.habitat_bonus && (
             <span className="text-[10px] font-bold px-[5px] py-[1px] rounded-full"
-                  style={{ background: '#ffd60a20', color: '#ffd60a', border: '1px solid #ffd60a30' }}>
+                  style={{ background: 'var(--c-gold)20', color: 'var(--c-gold)', border: '1px solid var(--c-gold)30' }}>
               ×1.5
             </span>
           )}
@@ -42,7 +42,7 @@ function AnimalChip({ animal, onRemove }: { animal: PackAnimal; onRemove: () => 
       <button
         onClick={onRemove}
         className="w-6 h-6 rounded-full border-none grid place-items-center cursor-pointer text-[13px]"
-        style={{ background: 'rgba(255,59,48,0.12)', color: '#ff3b30' }}
+        style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red)' }}
       >
         ×
       </button>
@@ -80,7 +80,7 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
         <div className="flex-1 min-w-0">
           <p className="m-0 font-extrabold text-[14px]">{hab.name}</p>
           {totalIncome > 0 && (
-            <p className="m-0 text-[11px]" style={{ color: '#34c759' }}>
+            <p className="m-0 text-[11px]" style={{ color: 'var(--c-green)' }}>
               ₽{fmt(totalIncome)}/мин суммарно
             </p>
           )}
@@ -180,7 +180,7 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
                   {isMatch && (
                     <span
                       className="text-[10px] font-bold px-[6px] py-[2px] rounded-full"
-                      style={{ background: '#ffd60a25', color: '#ffd60a', border: '1px solid #ffd60a30' }}
+                      style={{ background: 'var(--c-gold)25', color: 'var(--c-gold)', border: '1px solid var(--c-gold)30' }}
                     >
                       ×1.5 бонус
                     </span>
@@ -269,7 +269,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
       {/* Balance */}
       <span
         className="self-start px-3 py-[5px] rounded-[20px] text-[13px] font-bold"
-        style={{ background: 'rgba(52,199,89,0.12)', color: '#34c759', border: '1px solid rgba(52,199,89,0.25)' }}
+        style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.25)' }}
       >
         ₽ {fmt(gs.rub)}
       </span>
@@ -277,7 +277,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
       {error && (
         <div
           className="rounded-xl px-4 py-3 text-sm"
-          style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.25)', color: '#ff3b30' }}
+          style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}
         >
           {error}
         </div>
@@ -317,7 +317,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
                     <div key={a.id} className="flex items-center gap-2 text-[12px]">
                       <span>{hab.emoji}</span>
                       <span style={{ color: 'var(--tg-theme-hint-color)' }}>{hab.name}</span>
-                      <span className="ml-auto font-bold" style={{ color: '#8f95ab' }}>
+                      <span className="ml-auto font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>
                         ₽{fmt(a.income)}/мин (без бонуса)
                       </span>
                     </div>
@@ -331,11 +331,11 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
           {info.next_price !== null ? (
             <div
               className="rounded-2xl p-4 flex flex-col gap-3"
-              style={{ background: 'rgba(10,132,255,0.08)', border: '1px solid rgba(10,132,255,0.2)' }}
+              style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}
             >
               <div className="flex items-center gap-2">
                 <p className="m-0 font-extrabold text-[14px] flex-1">🔓 Открыть местность</p>
-                <span className="text-[13px] font-bold" style={{ color: info.next_price === 0 ? '#34c759' : '#8f95ab' }}>
+                <span className="text-[13px] font-bold" style={{ color: info.next_price === 0 ? 'var(--c-green)' : 'var(--tg-theme-hint-color)' }}>
                   {info.next_price === 0 ? 'Бесплатно' : `₽${fmt(info.next_price)}`}
                 </span>
               </div>
@@ -359,7 +359,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
                       }}
                     >
                       <span className="text-[20px]">{hab.emoji}</span>
-                      <span className="text-[9px] font-bold leading-none" style={{ color: taken ? '#8f95ab' : hab.color }}>
+                      <span className="text-[9px] font-bold leading-none" style={{ color: taken ? 'var(--tg-theme-hint-color)' : hab.color }}>
                         {taken ? '✓' : hab.name.split(' ')[0]}
                       </span>
                     </button>
@@ -371,7 +371,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
                 onClick={() => void handleBuy()}
                 disabled={!selHabitat || buying || (info.next_price > 0 && gs.rub < info.next_price)}
                 className="w-full py-[11px] rounded-xl border-none font-extrabold text-[13px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, #0a84ff, #0066dd)', color: '#fff' }}
+                style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: '#fff' }}
               >
                 {buying ? '...' : selHabitat ? `Открыть ${HABITAT_INFO[selHabitat].name}` : 'Выбери среду обитания'}
               </button>

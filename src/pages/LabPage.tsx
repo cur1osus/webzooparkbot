@@ -4,11 +4,11 @@ import { apiGetPacksInfo, apiBreed } from '../api';
 import { fmt } from '../utils/format';
 
 const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
-  desert:     { emoji: '🐪', name: 'Пустыня',   color: '#ffd60a' },
-  mountains:  { emoji: '🦅', name: 'Горы',       color: '#8f95ab' },
-  forest:     { emoji: '🐆', name: 'Густой лес', color: '#34c759' },
-  fields:     { emoji: '🐴', name: 'Поля',        color: '#30d5c8' },
-  antarctica: { emoji: '🐧', name: 'Антарктида', color: '#5ac8fa' },
+  desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },
+  mountains:  { emoji: '🦅', name: 'Горы',       color: 'var(--tg-theme-hint-color)' },
+  forest:     { emoji: '🐆', name: 'Густой лес', color: 'var(--c-green)' },
+  fields:     { emoji: '🐴', name: 'Поля',        color: 'var(--c-teal)' },
+  antarctica: { emoji: '🐧', name: 'Антарктида', color: 'var(--c-cyan)' },
 };
 
 const GENE_LABEL: Record<string, Record<GeneTier, string>> = {
@@ -19,7 +19,7 @@ const GENE_LABEL: Record<string, Record<GeneTier, string>> = {
 };
 
 const GENE_COLOR: Record<GeneTier, string> = {
-  low: '#ff6b3d', medium: '#8f95ab', high: '#34c759',
+  low: 'var(--c-orange)', medium: 'var(--tg-theme-hint-color)', high: 'var(--c-green)',
 };
 
 // success rate table matching GDD §6
@@ -53,7 +53,7 @@ function AnimalResultCard({ animal }: { animal: PackAnimal }) {
         </div>
         <div>
           <p className="m-0 font-extrabold text-[15px]">{hab.name}</p>
-          <p className="m-0 text-[11px]" style={{ color: '#34c759' }}>₽{fmt(animal.income)}/мин</p>
+          <p className="m-0 text-[11px]" style={{ color: 'var(--c-green)' }}>₽{fmt(animal.income)}/мин</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-[6px]">
@@ -242,11 +242,11 @@ export function LabPage({ gs }: { gs: GameState }) {
           {/* Success probability */}
           {rate !== null && (
             <div className="rounded-2xl px-4 py-3 flex items-center justify-between"
-                 style={{ background: 'rgba(10,132,255,0.08)', border: '1px solid rgba(10,132,255,0.2)' }}>
+                 style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}>
               <span className="text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
                 Шанс успеха
               </span>
-              <span className="text-[22px] font-extrabold" style={{ color: '#0a84ff' }}>
+              <span className="text-[22px] font-extrabold" style={{ color: 'var(--c-blue)' }}>
                 {Math.round(rate * 100)}%
               </span>
             </div>
@@ -259,7 +259,7 @@ export function LabPage({ gs }: { gs: GameState }) {
             className="w-full py-[14px] rounded-2xl border-none font-extrabold text-[15px] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
               background: canBreed
-                ? 'linear-gradient(135deg, #bf5af2, #9b3bd6)'
+                ? 'linear-gradient(135deg, var(--c-purple), #9b3bd6)'
                 : 'color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent)',
               color: canBreed ? '#fff' : 'var(--tg-theme-hint-color)',
             }}
@@ -270,7 +270,7 @@ export function LabPage({ gs }: { gs: GameState }) {
           {!parent1 || !parent2
             ? null
             : (!parent1.can_breed || !parent2.can_breed) && (
-              <p className="m-0 text-center text-[12px]" style={{ color: '#ff9f0a' }}>
+              <p className="m-0 text-center text-[12px]" style={{ color: 'var(--c-amber)' }}>
                 ⚠️ Одно из животных уже скрещивалось сегодня
               </p>
             )
@@ -278,7 +278,7 @@ export function LabPage({ gs }: { gs: GameState }) {
 
           {error && (
             <div className="rounded-xl px-4 py-3 text-sm"
-                 style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.25)', color: '#ff3b30' }}>
+                 style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}>
               {error}
             </div>
           )}
@@ -289,8 +289,8 @@ export function LabPage({ gs }: { gs: GameState }) {
               <div
                 className="rounded-2xl px-4 py-3 text-center font-extrabold text-[15px]"
                 style={result.success
-                  ? { background: 'rgba(52,199,89,0.12)', border: '1px solid rgba(52,199,89,0.3)', color: '#34c759' }
-                  : { background: 'rgba(255,59,48,0.08)', border: '1px solid rgba(255,59,48,0.2)', color: '#ff3b30' }
+                  ? { background: 'rgba(var(--c-green-rgb),0.12)', border: '1px solid rgba(var(--c-green-rgb),0.3)', color: 'var(--c-green)' }
+                  : { background: 'rgba(var(--c-red-rgb),0.08)', border: '1px solid rgba(var(--c-red-rgb),0.2)', color: 'var(--c-red)' }
                 }
               >
                 {result.success ? '✅ Успех! Родился новый детёныш' : '❌ Попытка не удалась'}

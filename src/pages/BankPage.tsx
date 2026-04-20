@@ -55,17 +55,17 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
       {/* Balance tiles */}
       <div className="flex gap-2">
-        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(52,199,89,0.3)' }}>
+        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(var(--c-green-rgb),0.3)' }}>
           <p className="m-0 text-[11px] text-tg-hint">Рубли</p>
-          <p className="mt-1 mb-0 text-lg font-extrabold text-[#34c759]">₽ {fmt(gs.rub)}</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[var(--c-green)]">₽ {fmt(gs.rub)}</p>
         </div>
-        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(10,132,255,0.3)' }}>
+        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(var(--c-blue-rgb),0.3)' }}>
           <p className="m-0 text-[11px] text-tg-hint">Доллары</p>
-          <p className="mt-1 mb-0 text-lg font-extrabold text-[#0a84ff]">$ {fmt(gs.usd)}</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[var(--c-blue)]">$ {fmt(gs.usd)}</p>
         </div>
-        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(255,107,61,0.3)' }}>
+        <div className="flex-1 card text-center" style={{ borderColor: 'rgba(var(--c-orange-rgb),0.3)' }}>
           <p className="m-0 text-[11px] text-tg-hint">Обновление через</p>
-          <p className="mt-1 mb-0 text-lg font-extrabold text-[#ff6b3d]">57с</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[var(--c-orange)]">57с</p>
         </div>
       </div>
 
@@ -73,16 +73,16 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       {bankInfo && (
         <div className="card">
           <p className="m-0 mb-2 text-[13px] text-tg-hint">Твой курс</p>
-          <p className="m-0 mb-3 text-[28px] font-extrabold text-[#0a84ff]">1$ = ₽ {fmt(rate)}</p>
+          <p className="m-0 mb-3 text-[28px] font-extrabold text-[var(--c-blue)]">1$ = ₽ {fmt(rate)}</p>
           
           <div className="flex gap-2">
-            <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(10,132,255,0.1)]">
+            <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(var(--c-blue-rgb),0.1)]">
               <p className="m-0 text-[10px] text-tg-hint">Хранилище банка</p>
-              <p className="mt-1 mb-0 text-[15px] font-bold text-[#0a84ff]">$ {fmt(1000000000)}</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-blue)]">$ {fmt(1000000000)}</p>
             </div>
-            <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(255,107,61,0.1)]">
+            <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(var(--c-orange-rgb),0.1)]">
               <p className="m-0 text-[10px] text-tg-hint">Комиссия банка</p>
-              <p className="mt-1 mb-0 text-[15px] font-bold text-[#ff6b3d]">1%</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-orange)]">1%</p>
             </div>
           </div>
         </div>
@@ -90,7 +90,7 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
       {/* Exchange section */}
       {loading && <p className="text-center text-tg-hint">Загрузка курса...</p>}
-      {error && <p className="text-[#ff6b63]">⚠️ {error}</p>}
+      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error}</p>}
 
       {bankInfo && (
         <div className="flex flex-col gap-3">
@@ -113,7 +113,7 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             {gs.rub > 0 && (
               <button
                 onClick={() => setAmount(String(gs.rub))}
-                className="px-3 py-2 rounded-lg border-none bg-[rgba(52,199,89,0.15)] text-[#34c759] text-[13px] font-bold cursor-pointer"
+                className="px-3 py-2 rounded-lg border-none bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] text-[13px] font-bold cursor-pointer"
               >
                 Всё
               </button>
@@ -136,7 +136,7 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           )}
 
           {exchResult && (
-            <p className={`m-0 text-[13px] ${exchResult === 'Обмен выполнен!' ? 'text-[#34c759]' : 'text-[#ff6b63]'}`}>
+            <p className={`m-0 text-[13px] ${exchResult === 'Обмен выполнен!' ? 'text-[var(--c-green)]' : 'text-[var(--c-red-soft)]'}`}>
               {exchResult}
             </p>
           )}
@@ -146,7 +146,7 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             <button
               onClick={() => void handleExchange(true)}
               disabled={exchLoading || gs.rub <= 0}
-              className="flex-1 py-3 rounded-[10px] border-none cursor-pointer bg-[#34c759] text-white font-bold text-sm disabled:opacity-60"
+              className="flex-1 py-3 rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-white font-bold text-sm disabled:opacity-60"
             >
               {exchLoading ? 'Обмен...' : 'Обменять всё'}
             </button>

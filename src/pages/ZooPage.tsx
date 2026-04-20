@@ -22,7 +22,7 @@ function forgeItemIcon(item: ForgeItem): string {
 }
 
 const RARITY_COLOR: Record<string, string> = {
-  common: '#8f95ab', rare: '#34c759', epic: '#bf5af2', mythical: '#ff6b3d', legendary: '#ffd60a',
+  common: 'var(--tg-theme-hint-color)', rare: 'var(--c-green)', epic: 'var(--c-purple)', mythical: 'var(--c-orange)', legendary: 'var(--c-gold)',
 };
 const RARITY_LABEL: Record<string, string> = {
   common: 'Обычный', rare: 'Редкий', epic: 'Эпический', mythical: 'Мифический', legendary: 'Легендарный',
@@ -51,7 +51,7 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
           : Object.entries(bonuses).map(([type, val]) => (
             <div key={type} className="flex justify-between mb-1">
               <span className="text-[13px] text-tg-hint">{PROP_ICON[type] ?? '✨'} {type.replace(/_/g, ' ')}</span>
-              <span className="text-[13px] text-[#34c759] font-bold">{val}</span>
+              <span className="text-[13px] text-[var(--c-green)] font-bold">{val}</span>
             </div>
           ))}
         <div className="mt-2 pt-2 border-t border-white/[0.08]">
@@ -62,7 +62,7 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
 
       <div className="flex justify-between items-center">
         <p className="m-0 font-bold text-[15px]">Сеты предметов</p>
-        <button className="px-3 py-[5px] rounded-lg border-none bg-[rgba(10,132,255,0.15)] text-[#0a84ff] text-[13px] font-semibold">+ Добавить</button>
+        <button className="px-3 py-[5px] rounded-lg border-none bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] text-[13px] font-semibold">+ Добавить</button>
       </div>
       <p className="m-0 -mt-2 text-xs text-tg-hint">Выбери до 3 предметов для каждого слота и переключай наборы одним нажатием.</p>
 
@@ -70,21 +70,21 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
         const setItems = items.filter(i => s.item_ids.includes(i.id));
         return (
           <div key={s.id} className="card" style={{
-            border: s.is_active ? '1px solid rgba(10,132,255,0.4)' : undefined,
-            background: s.is_active ? 'rgba(10,132,255,0.07)' : undefined,
+            border: s.is_active ? '1px solid rgba(var(--c-blue-rgb),0.4)' : undefined,
+            background: s.is_active ? 'rgba(var(--c-blue-rgb),0.07)' : undefined,
           }}>
             <div className="flex items-center justify-between mb-[6px]">
               <div>
                 <span className="font-bold text-sm">{s.icon} {s.name} 🔨 🗑️</span>
                 {s.is_active
-                  ? <span className="ml-2 text-[11px] text-[#0a84ff]">Сейчас активен</span>
+                  ? <span className="ml-2 text-[11px] text-[var(--c-blue)]">Сейчас активен</span>
                   : <p className="mt-[2px] mb-0 text-[11px] text-tg-hint">{setItems.length} предмет{setItems.length === 1 ? '' : 'а'} в слоте</p>}
               </div>
               <div className="flex gap-[6px]">{setItems.slice(0, 3).map(i => <span key={i.id} className="text-lg">{forgeItemIcon(i)}</span>)}</div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => onSelectItems(s.id)} className="flex-1 py-2 rounded-lg border-none bg-[rgba(255,214,10,0.15)] text-[#ffd60a] text-[13px] font-semibold">Выбрать предметы</button>
-              <button onClick={() => onApplySet(s.id)} className="flex-1 py-2 rounded-lg border-none bg-[rgba(52,199,89,0.15)] text-[#34c759] text-[13px] font-semibold">Применить</button>
+              <button onClick={() => onSelectItems(s.id)} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-gold-rgb),0.15)] text-[var(--c-gold)] text-[13px] font-semibold">Выбрать предметы</button>
+              <button onClick={() => onApplySet(s.id)} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] text-[13px] font-semibold">Применить</button>
             </div>
           </div>
         );
@@ -103,7 +103,7 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
       <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b border-white/[0.07]" style={{ top: 0 }}>
         <button onClick={onBack} className="bg-transparent border-none text-white text-[22px]">✕</button>
         <span className="font-bold text-[15px]">Выбрать предметы</span>
-        <button onClick={onApply} className="px-[14px] py-[7px] rounded-lg border-none bg-[#34c759] text-white font-bold text-[13px]">Применить ✓</button>
+        <button onClick={onApply} className="px-[14px] py-[7px] rounded-lg border-none bg-[var(--c-green)] text-white font-bold text-[13px]">Применить ✓</button>
       </div>
       <div className="px-[14px] pt-3 flex flex-col gap-[10px]">
         {items.map(item => {
@@ -111,15 +111,15 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
           return (
             <div key={item.id} onClick={() => onSelect(item.id)}
               className={`card flex items-center gap-3 cursor-pointer ${sel ? 'card-rare' : ''}`}
-              style={sel ? { border: `1px solid ${RARITY_COLOR[item.rarity] ?? '#34c759'}` } : undefined}>
+              style={sel ? { border: `1px solid ${RARITY_COLOR[item.rarity] ?? 'var(--c-green)'}` } : undefined}>
               <span className="text-[26px] shrink-0">{forgeItemIcon(item)}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-[6px]">
                   <span className="font-semibold text-sm">{item.name}</span>
-                  <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `${RARITY_COLOR[item.rarity] ?? '#8f95ab'}22`, color: RARITY_COLOR[item.rarity] ?? '#8f95ab' }}>
+                  <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `${RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)'}22`, color: RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)' }}>
                     {RARITY_LABEL[item.rarity] ?? item.rarity}
                   </span>
-                  {item.is_active && <span className="text-[11px] text-[#34c759]">АКТИВЕН</span>}
+                  {item.is_active && <span className="text-[11px] text-[var(--c-green)]">АКТИВЕН</span>}
                 </div>
                 <p className="mt-[2px] mb-0 text-xs text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</p>
               </div>
@@ -150,16 +150,16 @@ function ItemDetailPage({ item, onActivate, onSell, onBack }: {
           {(item.properties ?? []).map((p, i) => (
             <div key={i} className="flex justify-between mb-1">
               <span className="text-[13px] text-tg-hint">{PROP_ICON[p.type] ?? '✨'} {p.label.split(' ').slice(0, -1).join(' ')}</span>
-              <span className="text-[13px] text-[#34c759] font-bold">{p.label.split(' ').pop()}</span>
+              <span className="text-[13px] text-[var(--c-green)] font-bold">{p.label.split(' ').pop()}</span>
             </div>
           ))}
         </div>
         <div className="flex gap-2">
           <button onClick={onActivate} className="flex-1 py-3 rounded-[10px] border-none font-bold text-sm"
-            style={{ background: item.is_active ? 'rgba(255,255,255,0.08)' : 'rgba(52,199,89,0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : '#34c759' }}>
+            style={{ background: item.is_active ? 'rgba(255,255,255,0.08)' : 'rgba(var(--c-green-rgb),0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
             {item.is_active ? 'Деактивировать' : 'Активировать'}
           </button>
-          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(255,107,61,0.15)] text-[#ff6b3d] font-bold text-sm">Продать $80k</button>
+          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(var(--c-orange-rgb),0.15)] text-[var(--c-orange)] font-bold text-sm">Продать $80k</button>
         </div>
       </div>
     </div>
@@ -218,14 +218,14 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       <div className="relative overflow-hidden"
         style={{ background: 'var(--tg-theme-secondary-bg-color)', paddingTop: '16px' }}>
         <div className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at 20% -10%, rgba(52,199,89,0.1) 0%, transparent 55%)' }} />
+          style={{ background: 'radial-gradient(ellipse at 20% -10%, rgba(var(--c-green-rgb),0.1) 0%, transparent 55%)' }} />
 
         {/* Profile row */}
         <div className="relative px-[14px] flex items-center gap-3 mb-3">
           <div className="w-11 h-11 rounded-full grid place-items-center text-[24px] shrink-0 relative"
-            style={{ background: 'linear-gradient(135deg,rgba(52,199,89,0.3),rgba(10,132,255,0.2))', border: '1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent)' }}>
+            style={{ background: 'linear-gradient(135deg,rgba(var(--c-green-rgb),0.3),rgba(var(--c-blue-rgb),0.2))', border: '1.5px solid color-mix(in srgb, var(--tg-theme-hint-color) 30%, transparent)' }}>
             {gs.profile_emoji ?? '🦁'}
-            <div className="absolute inset-0 rounded-full" style={{ boxShadow: '0 0 14px rgba(52,199,89,0.3)' }} />
+            <div className="absolute inset-0 rounded-full" style={{ boxShadow: '0 0 14px rgba(var(--c-green-rgb),0.3)' }} />
           </div>
           <div>
             <p className="m-0 text-lg font-extrabold leading-tight">{gs.nickname}</p>
@@ -236,9 +236,9 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         {/* Balance chips */}
         <div className="relative px-[14px] flex gap-[6px] mb-3 overflow-x-auto">
           {[
-            { label: `₽ ${fmt(gs.rub)}`,   color: '#34c759' },
-            { label: `$ ${fmt(gs.usd)}`,   color: '#ffd60a' },
-            { label: `🐾 ${gs.paw_coins}`, color: '#bf5af2' },
+            { label: `₽ ${fmt(gs.rub)}`,   color: 'var(--c-green)' },
+            { label: `$ ${fmt(gs.usd)}`,   color: 'var(--c-gold)' },
+            { label: `🐾 ${gs.paw_coins}`, color: 'var(--c-purple)' },
           ].map(({ label, color }) => (
             <span key={label} className="px-3 py-[5px] rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
               style={{ background: `${color}18`, color, border: `1px solid ${color}28`, boxShadow: `0 0 8px ${color}14` }}>
@@ -252,7 +252,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           <div>
             <p className="m-0 text-[9px] font-bold tracking-[1px] uppercase" style={{ color: 'var(--tg-theme-hint-color)' }}>Чистый доход/мин</p>
             <p className={`mt-[3px] mb-0 text-[18px] font-extrabold tabular-nums ${netPerMin >= 0 ? 'income-glow' : 'expense-glow'}`}
-              style={{ color: netPerMin >= 0 ? '#34c759' : '#ff6b3d' }}>
+              style={{ color: netPerMin >= 0 ? 'var(--c-green)' : 'var(--c-orange)' }}>
               {fmtMin(netPerMin)}₽
             </p>
           </div>
@@ -280,7 +280,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             >
               <span className="text-[18px] leading-none">{emoji}</span>
               {badgeVal != null && (
-                <span className="absolute top-[4px] right-[4px] bg-[#ff3b30] text-white text-[9px] font-extrabold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-[3px]"
+                <span className="absolute top-[4px] right-[4px] bg-[var(--c-red)] text-white text-[9px] font-extrabold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-[3px]"
                   style={{ animation: 'badge-pop 0.3s ease' }}>
                   {badgeVal}
                 </span>
@@ -296,19 +296,19 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
           {gs.sick_animals.length > 0 && (
             <div className="rounded-2xl px-[14px] py-3 flex items-start gap-3"
-              style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.35)' }}>
+              style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.35)' }}>
               <span className="text-xl">🤒</span>
-              <p className="m-0 text-[13px] font-bold text-[#ff6b63]">
+              <p className="m-0 text-[13px] font-bold text-[var(--c-red-soft)]">
                 {gs.sick_animals.length} животное больно! Штраф уже действует — открой ветеринара
               </p>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <StatTile icon="🦁" label="Животных"    value={fmt(gs.animals.reduce((s, a) => s + a.quantity, 0))} accent="#34c759" />
-            <StatTile icon="🌿" label={`Видов (+${Math.round(gs.diversity_bonus_per_species * gs.species_count * 100)}%)`} value={String(gs.species_count)} accent="#5ac8fa" />
-            <StatTile icon="🏗️" label="Мест всего"  value={fmt(gs.total_seats)} accent="#5ac8fa" />
-            <StatTile icon="✅" label="Свободно"    value={fmt(gs.free_seats)}  accent="#ffd60a" />
+            <StatTile icon="🦁" label="Животных"    value={fmt(gs.animals.reduce((s, a) => s + a.quantity, 0))} accent="var(--c-green)" />
+            <StatTile icon="🌿" label={`Видов (+${Math.round(gs.diversity_bonus_per_species * gs.species_count * 100)}%)`} value={String(gs.species_count)} accent="var(--c-cyan)" />
+            <StatTile icon="🏗️" label="Мест всего"  value={fmt(gs.total_seats)} accent="var(--c-cyan)" />
+            <StatTile icon="✅" label="Свободно"    value={fmt(gs.free_seats)}  accent="var(--c-gold)" />
           </div>
 
           {gs.clan && (
@@ -361,16 +361,16 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       {tab === 'aviaries' && (
         <div className="px-[14px] pt-3 flex flex-col gap-[10px] page-enter">
           {gs.sick_animals.length > 0 && (
-            <div className="rounded-2xl px-[14px] py-3" style={{ background: 'rgba(255,59,48,0.1)', border: '1px solid rgba(255,59,48,0.35)' }}>
-              <p className="m-0 mb-[6px] font-bold text-[#ff6b63]">🤒 Больные животные</p>
+            <div className="rounded-2xl px-[14px] py-3" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.35)' }}>
+              <p className="m-0 mb-[6px] font-bold text-[var(--c-red-soft)]">🤒 Больные животные</p>
               {gs.sick_animals.map(s => {
                 const def = ANIMALS.find(d => d.id === s.animal_id);
                 return (
                   <div key={s.animal_id} className="flex justify-between items-center mb-2">
                     <span className="text-[13px]">{def?.emoji ?? '🐾'} {def?.name ?? s.animal_id}</span>
                     <div className="flex gap-2 items-center">
-                      <span className="text-xs text-[#ff6b63]">-{fmt(s.penalty_rub_per_min)}/мин</span>
-                      <button className="px-[10px] py-1 rounded-lg border-none bg-[rgba(52,199,89,0.15)] text-[#34c759] text-xs font-semibold">Лечить 🐾</button>
+                      <span className="text-xs text-[var(--c-red-soft)]">-{fmt(s.penalty_rub_per_min)}/мин</span>
+                      <button className="px-[10px] py-1 rounded-lg border-none bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] text-xs font-semibold">Лечить 🐾</button>
                     </div>
                   </div>
                 );

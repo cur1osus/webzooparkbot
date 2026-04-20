@@ -46,14 +46,14 @@ export function ReferralPage({ gs: _gs }: { gs: GameState }) {
   return (
     <div className="p-[14px] flex flex-col gap-3">
       {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
-      {error && <p className="text-[#ff6b63]">⚠️ {error}</p>}
+      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error}</p>}
 
       {data && (
         <>
           <div className="card">
             <p className="m-0 mb-[6px] font-bold">🤝 Твоя реферальная ссылка</p>
             <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
-              За каждого приглашённого — <strong className="text-[#ffd60a]">$ {fmt(data.reward_usd_per_ref)}</strong>
+              За каждого приглашённого — <strong className="text-[var(--c-gold)]">$ {fmt(data.reward_usd_per_ref)}</strong>
             </p>
             <div className="px-3 py-[10px] rounded-[10px] mb-[10px] bg-black/20 border border-white/[0.1] text-[13px] text-tg-hint break-all select-all">
               {refLink}
@@ -62,14 +62,14 @@ export function ReferralPage({ gs: _gs }: { gs: GameState }) {
               <button
                 onClick={copyLink}
                 className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-white transition-all"
-                style={{ background: copied ? '#34c759' : '#0a84ff' }}
+                style={{ background: copied ? 'var(--c-green)' : 'var(--c-blue)' }}
               >
                 {copied ? '✅ Скопировано' : '📋 Копировать'}
               </button>
               <button
                 onClick={shareLink}
                 className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-white"
-                style={{ background: 'rgba(10,132,255,0.25)', color: '#0a84ff' }}
+                style={{ background: 'rgba(var(--c-blue-rgb),0.25)', color: 'var(--c-blue)' }}
               >
                 🔗 Поделиться
               </button>
@@ -84,7 +84,7 @@ export function ReferralPage({ gs: _gs }: { gs: GameState }) {
             </div>
             <div className="flex justify-between">
               <span className="text-[13px] text-tg-hint">Заработано</span>
-              <span className="font-bold text-[#ffd60a]">$ {fmt(data.total * data.reward_usd_per_ref)}</span>
+              <span className="font-bold text-[var(--c-gold)]">$ {fmt(data.total * data.reward_usd_per_ref)}</span>
             </div>
           </div>
 

@@ -12,35 +12,35 @@ export const HABITAT_INFO: Record<Habitat, {
   desert: {
     emoji: '🐪',
     name: 'Пустыня',
-    color: '#ffd60a',
+    color: 'var(--c-gold)',
     expeditionDifficulty: 'Средняя',
     expeditionReward: 'Средний',
   },
   mountains: {
     emoji: '🦅',
     name: 'Горы',
-    color: '#8f95ab',
+    color: 'var(--tg-theme-hint-color)',
     expeditionDifficulty: 'Высокая',
     expeditionReward: 'Высокий',
   },
   forest: {
     emoji: '🐆',
     name: 'Густой лес',
-    color: '#34c759',
+    color: 'var(--c-green)',
     expeditionDifficulty: 'Средняя',
     expeditionReward: 'Средний',
   },
   fields: {
     emoji: '🐴',
     name: 'Поля',
-    color: '#30d5c8',
+    color: 'var(--c-teal)',
     expeditionDifficulty: 'Низкая',
     expeditionReward: 'Низкий',
   },
   antarctica: {
     emoji: '🐧',
     name: 'Антарктида',
-    color: '#5ac8fa',
+    color: 'var(--c-cyan)',
     expeditionDifficulty: 'Очень высокая',
     expeditionReward: 'Очень высокий',
   },
@@ -48,24 +48,24 @@ export const HABITAT_INFO: Record<Habitat, {
 
 export const GENE_META: Record<GeneKey, Record<GeneTier, { label: string; color: string }>> = {
   survival: {
-    low: { label: 'Слабый', color: '#ff6b3d' },
-    medium: { label: 'Обычный', color: '#8f95ab' },
-    high: { label: 'Долгожитель', color: '#34c759' },
+    low: { label: 'Слабый', color: 'var(--c-orange)' },
+    medium: { label: 'Обычный', color: 'var(--tg-theme-hint-color)' },
+    high: { label: 'Долгожитель', color: 'var(--c-green)' },
   },
   reproduction: {
-    low: { label: 'Неохотно', color: '#ff6b3d' },
-    medium: { label: 'Обычно', color: '#8f95ab' },
-    high: { label: 'Активное', color: '#34c759' },
+    low: { label: 'Неохотно', color: 'var(--c-orange)' },
+    medium: { label: 'Обычно', color: 'var(--tg-theme-hint-color)' },
+    high: { label: 'Активное', color: 'var(--c-green)' },
   },
   appearance: {
-    low: { label: 'Уродец', color: '#ff6b3d' },
-    medium: { label: 'Обычный', color: '#8f95ab' },
-    high: { label: 'Привлекательный', color: '#ffd60a' },
+    low: { label: 'Уродец', color: 'var(--c-orange)' },
+    medium: { label: 'Обычный', color: 'var(--tg-theme-hint-color)' },
+    high: { label: 'Привлекательный', color: 'var(--c-gold)' },
   },
   size_trait: {
-    low: { label: 'Маленький', color: '#8f95ab' },
-    medium: { label: 'Обычный', color: '#8f95ab' },
-    high: { label: 'Гигант', color: '#ffd60a' },
+    low: { label: 'Маленький', color: 'var(--tg-theme-hint-color)' },
+    medium: { label: 'Обычный', color: 'var(--tg-theme-hint-color)' },
+    high: { label: 'Гигант', color: 'var(--c-gold)' },
   },
 };
 
@@ -94,12 +94,12 @@ export function expeditionPower(animal: Pick<PackAnimal, 'size_trait' | 'surviva
 export function lifeLeft(diesAt: string | null): { label: string; color: string } | null {
   if (!diesAt) return null;
   const ms = new Date(diesAt).getTime() - Date.now();
-  if (ms <= 0) return { label: 'Умер', color: '#ff3b30' };
+  if (ms <= 0) return { label: 'Умер', color: 'var(--c-red)' };
   const totalHours = Math.floor(ms / 3_600_000);
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
   const label = days > 0 ? `${days}д ${hours}ч` : `${Math.max(hours, 1)}ч`;
-  const color = totalHours < 24 ? '#ff3b30' : totalHours < 48 ? '#ff9f0a' : '#34c759';
+  const color = totalHours < 24 ? 'var(--c-red)' : totalHours < 48 ? 'var(--c-amber)' : 'var(--c-green)';
   return { label, color };
 }
 

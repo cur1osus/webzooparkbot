@@ -40,14 +40,14 @@ export function BonusPage({ gs, onClaim }: { gs: GameState; onClaim: () => void 
       </div>
 
       {result && (
-        <div className="card bg-[rgba(52,199,89,0.1)] border border-[rgba(52,199,89,0.3)]">
-          <p className="m-0 font-bold text-[#34c759]">🎉 {result}</p>
+        <div className="card bg-[rgba(var(--c-green-rgb),0.1)] border border-[rgba(var(--c-green-rgb),0.3)]">
+          <p className="m-0 font-bold text-[var(--c-green)]">🎉 {result}</p>
         </div>
       )}
 
       {error && (
-        <div className="card bg-[rgba(255,59,48,0.1)] border border-[rgba(255,59,48,0.3)]">
-          <p className="m-0 text-[#ff6b63]">⚠️ {error}</p>
+        <div className="card bg-[rgba(var(--c-red-rgb),0.1)] border border-[rgba(var(--c-red-rgb),0.3)]">
+          <p className="m-0 text-[var(--c-red-soft)]">⚠️ {error}</p>
         </div>
       )}
 
@@ -56,7 +56,7 @@ export function BonusPage({ gs, onClaim }: { gs: GameState; onClaim: () => void 
         disabled={!available || claiming}
         className="py-[14px] rounded-xl border-none cursor-pointer font-extrabold text-base disabled:opacity-60 disabled:cursor-not-allowed"
         style={{
-          background: available ? '#34c759' : 'rgba(255,255,255,0.08)',
+          background: available ? 'var(--c-green)' : 'rgba(255,255,255,0.08)',
           color: available ? 'white' : 'var(--tg-theme-hint-color)',
         }}
       >

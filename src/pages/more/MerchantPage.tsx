@@ -42,8 +42,8 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
       {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {error && (
-        <div className="card bg-[rgba(255,59,48,0.1)] border border-[rgba(255,59,48,0.3)]">
-          <p className="m-0 text-[#ff6b63]">⚠️ {error}</p>
+        <div className="card bg-[rgba(var(--c-red-rgb),0.1)] border border-[rgba(var(--c-red-rgb),0.3)]">
+          <p className="m-0 text-[var(--c-red-soft)]">⚠️ {error}</p>
           <p className="mt-1 mb-0 text-xs text-tg-hint">
             Торговец появляется только если у тебя есть животные в зоопарке
           </p>
@@ -51,8 +51,8 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
       )}
 
       {msg && (
-        <div className="card bg-[rgba(52,199,89,0.1)] border border-[rgba(52,199,89,0.3)]">
-          <p className="m-0 text-[#34c759]">{msg}</p>
+        <div className="card bg-[rgba(var(--c-green-rgb),0.1)] border border-[rgba(var(--c-green-rgb),0.3)]">
+          <p className="m-0 text-[var(--c-green)]">{msg}</p>
         </div>
       )}
 
@@ -75,7 +75,7 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
                       {offer.quantity} шт. · +{fmt(def?.income_rub_per_min ?? 0)}₽/мин
                     </p>
                   </div>
-                  <div className="bg-[rgba(52,199,89,0.15)] rounded-lg px-[10px] py-1 text-[#34c759] font-extrabold text-[15px]">
+                  <div className="bg-[rgba(var(--c-green-rgb),0.15)] rounded-lg px-[10px] py-1 text-[var(--c-green)] font-extrabold text-[15px]">
                     -{offer.discount_pct}%
                   </div>
                 </div>
@@ -90,7 +90,7 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
                     disabled={buying === offer.slot || !affordable}
                     className="px-4 py-2 rounded-[10px] border-none cursor-pointer font-bold text-sm disabled:opacity-60"
                     style={{
-                      background: affordable ? '#34c759' : 'rgba(255,255,255,0.08)',
+                      background: affordable ? 'var(--c-green)' : 'rgba(255,255,255,0.08)',
                       color: affordable ? 'white' : 'var(--tg-theme-hint-color)',
                     }}
                   >

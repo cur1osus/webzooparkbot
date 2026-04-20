@@ -1,4 +1,4 @@
-import { init, miniApp, viewport } from '@tma.js/sdk';
+import { init, miniApp, viewport, popup } from '@tma.js/sdk';
 
 const VIEWPORT_CSS_VAR_NAMES: Record<string, string> = {
   height: '--tg-viewport-height',
@@ -92,4 +92,21 @@ export function hapticNotification(type: 'success' | 'warning' | 'error' = 'succ
   } catch {
     // Haptic not available
   }
+}
+
+/** Confirm dialog: uses Telegram native popup in TMA, falls back to window.confirm in browser */
+export async function tmaConfirm(message: string, title?: string): Promise<boolean> {
+  if (inTma) {
+    try {
+      const buttonId = await popup.show({
+        title,
+        message,
+        buttons: [{ id: 'ok', type: 'ok' }, { id: 'cancel', type: 'cancel' }],
+      });
+      return buttonId === 'ok';
+    } catch {
+      // Popup not supported or failed — fall through to window.confirm
+    }
+  }
+  return window.confirm(title ? `${title}\n${message}` : message);
 }
