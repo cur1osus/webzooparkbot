@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { fmt } from '../utils/format';
 import type { GameState, MpGame, SoloStats } from '../types';
 import { GAMES } from '../data/games';
@@ -11,7 +11,72 @@ import {
   apiStartSoloGame,
 } from '../api';
 
-type GamesTab = 'solo' | 'multi' | 'cocktail';
+type GamesTab = 'solo' | 'multi' | 'cocktail' | 'basketball';
+
+/* ─── RLottie bootstrap ────────────────────────────────────────────────── */
+declare global {
+  interface Window {
+    RLottie?: {
+      init: (el: HTMLElement, opts?: Record<string, unknown>) => void;
+      destroy: (el: HTMLElement) => void;
+    };
+  }
+}
+
+let _rlottiePromise: Promise<void> | null = null;
+function loadRLottie(): Promise<void> {
+  if (window.RLottie) return Promise.resolve();
+  if (!_rlottiePromise) {
+    _rlottiePromise = new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/tgsticker/tgsticker.js';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('RLottie load failed'));
+      document.head.appendChild(s);
+    });
+  }
+  return _rlottiePromise;
+}
+
+/* ─── TGS Player ───────────────────────────────────────────────────────── */
+interface TgsHandle {
+  playAnimation(src: string): Promise<void>;
+}
+
+const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 }, ref) => {
+  const picRef = useRef<HTMLPictureElement>(null);
+  const srcRef = useRef<HTMLSourceElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    async playAnimation(src: string): Promise<void> {
+      await loadRLottie();
+      const el = picRef.current;
+      const srcEl = srcRef.current;
+      if (!el || !srcEl || !window.RLottie) return;
+
+      window.RLottie.destroy(el);
+      srcEl.setAttribute('srcset', src);
+
+      await new Promise<void>((resolve) => {
+        const onPause = () => { el.removeEventListener('tg:pause', onPause); resolve(); };
+        el.addEventListener('tg:pause', onPause);
+        window.RLottie!.init(el, { playUntilEnd: true });
+      });
+    },
+  }), []);
+
+  useEffect(() => {
+    return () => { if (picRef.current && window.RLottie) window.RLottie.destroy(picRef.current); };
+  }, []);
+
+  return (
+    <picture ref={picRef} style={{ width: size, height: size, display: 'block' }}>
+      <source ref={srcRef} type="application/x-tgsticker" srcSet="" />
+      <img alt="" style={{ width: size, height: size }} />
+    </picture>
+  );
+});
+TgsPlayer.displayName = 'TgsPlayer';
 type BetAmount = 100 | 1_000 | 10_000;
 type CocktailClueStatus = 'correct' | 'present' | 'absent';
 
@@ -637,14 +702,212 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   );
 }
 
+/* ──────────────────────────── BASKETBALL ───────────────────────────── */
+const BBALL_ROUNDS = 5;
+const rollScore = (r: number) => r >= 3 ? 2 : 0;
+const rollResult = (r: number) => r >= 3
+  ? { label: 'Гол!', icon: '🏀', color: 'var(--c-green)' }
+  : { label: 'Мимо', icon: '❌', color: 'var(--tg-theme-hint-color)' };
+
+interface ThrowRecord { round: number; playerRoll: number; aiRoll: number }
+type BballPhase = 'idle' | 'player-anim' | 'ai-anim' | 'game-over';
+
+function BasketballTab() {
+  const [phase, setPhase] = useState<BballPhase>('idle');
+  const [history, setHistory] = useState<ThrowRecord[]>([]);
+  const [animLabel, setAnimLabel] = useState('');
+  const tgsRef = useRef<TgsHandle>(null);
+
+  const round = history.length + 1;
+  const gameOver = phase === 'game-over';
+  const playerScore = history.reduce((s, h) => s + rollScore(h.playerRoll), 0);
+  const aiScore = history.reduce((s, h) => s + rollScore(h.aiRoll), 0);
+
+  const handleThrow = async () => {
+    if (phase !== 'idle' || history.length >= BBALL_ROUNDS) return;
+    const currentRound = history.length + 1;
+    const pr = Math.floor(Math.random() * 6);
+    const ar = Math.floor(Math.random() * 6);
+
+    setAnimLabel('Ваш бросок');
+    setPhase('player-anim');
+    await tgsRef.current?.playAnimation(`/telegram-dice/basketball/${pr}.tgs`);
+
+    setAnimLabel('Бросок ИИ');
+    setPhase('ai-anim');
+    await tgsRef.current?.playAnimation(`/telegram-dice/basketball/${ar}.tgs`);
+
+    const record: ThrowRecord = { round: currentRound, playerRoll: pr, aiRoll: ar };
+    setHistory(prev => [...prev, record]);
+    setPhase(currentRound >= BBALL_ROUNDS ? 'game-over' : 'idle');
+  };
+
+  const resetGame = () => {
+    setPhase('idle');
+    setHistory([]);
+    setAnimLabel('');
+  };
+
+  const isAnimating = phase === 'player-anim' || phase === 'ai-anim';
+  const lastRecord = history[history.length - 1];
+
+  let winner: 'player' | 'ai' | 'draw' | null = null;
+  if (gameOver) winner = playerScore > aiScore ? 'player' : playerScore < aiScore ? 'ai' : 'draw';
+
+  return (
+    <div className="px-[14px] pt-[14px] pb-6 flex flex-col gap-[14px]">
+
+      {/* Scoreboard */}
+      <div
+        className="rounded-2xl overflow-hidden relative"
+        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid rgba(var(--c-orange-rgb),0.22)' }}
+      >
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% -10%, rgba(var(--c-orange-rgb),0.15) 0%, transparent 65%)' }} />
+        <div className="relative flex items-center justify-between px-5 py-4">
+          <div className="text-center flex-1">
+            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--tg-theme-hint-color)' }}>Вы</p>
+            <p className="m-0 text-[36px] font-extrabold leading-none mt-1" style={{ color: 'var(--c-orange)' }}>{playerScore}</p>
+          </div>
+          <div className="text-center px-4">
+            <p className="m-0 text-[13px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              {gameOver ? 'Конец' : `Раунд ${Math.min(round, BBALL_ROUNDS)}/${BBALL_ROUNDS}`}
+            </p>
+            <p className="m-0 text-[22px]">🏀</p>
+          </div>
+          <div className="text-center flex-1">
+            <p className="m-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--tg-theme-hint-color)' }}>ИИ</p>
+            <p className="m-0 text-[36px] font-extrabold leading-none mt-1" style={{ color: 'var(--c-blue)' }}>{aiScore}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Animation area */}
+      <div
+        className="rounded-2xl flex flex-col items-center justify-center gap-2 py-4"
+        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)', minHeight: 220 }}
+      >
+        {/* Label row — always rendered, empty when idle */}
+        <p
+          className="m-0 text-[13px] font-semibold"
+          style={{ color: 'var(--tg-theme-hint-color)', visibility: isAnimating ? 'visible' : 'hidden', minHeight: 20 }}
+        >
+          {animLabel}
+        </p>
+
+        {/* TgsPlayer always at the same position; emoji overlay covers it when idle */}
+        <div style={{ position: 'relative', width: 180, height: 180, flexShrink: 0 }}>
+          <TgsPlayer ref={tgsRef} size={180} />
+          {!isAnimating && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {gameOver ? (
+                <>
+                  <span style={{ fontSize: 64 }}>
+                    {winner === 'player' ? '🎉' : winner === 'ai' ? '😢' : '🤝'}
+                  </span>
+                </>
+              ) : (
+                <span style={{ fontSize: 72 }}>🏀</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Status text below animation box */}
+        {!isAnimating && !gameOver && (
+          <div className="text-center mt-1">
+            {lastRecord ? (
+              <div className="flex gap-6">
+                <span className="text-[13px]" style={{ color: rollResult(lastRecord.playerRoll).color }}>
+                  Вы {rollResult(lastRecord.playerRoll).icon} +{rollScore(lastRecord.playerRoll)}
+                </span>
+                <span className="text-[13px]" style={{ color: rollResult(lastRecord.aiRoll).color }}>
+                  ИИ {rollResult(lastRecord.aiRoll).icon} +{rollScore(lastRecord.aiRoll)}
+                </span>
+              </div>
+            ) : (
+              <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Нажми «Бросок» чтобы начать</p>
+            )}
+          </div>
+        )}
+
+        {gameOver && (
+          <div className="text-center mt-1">
+            <p className="m-0 font-extrabold text-[18px]">
+              {winner === 'player' ? 'Вы победили!' : winner === 'ai' ? 'ИИ победил' : 'Ничья!'}
+            </p>
+            <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              Итог: {playerScore} — {aiScore}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Throw / Reset button */}
+      {gameOver ? (
+        <button
+          onClick={resetGame}
+          className="py-[15px] rounded-2xl border-none font-extrabold text-[16px]"
+          style={{ background: 'linear-gradient(135deg, var(--c-orange), var(--c-red))', color: 'var(--tg-theme-button-text-color)', boxShadow: '0 6px 20px rgba(var(--c-orange-rgb),0.35)' }}
+        >
+          Играть снова 🔄
+        </button>
+      ) : (
+        <button
+          onClick={() => void handleThrow()}
+          disabled={isAnimating}
+          className="py-[15px] rounded-2xl border-none font-extrabold text-[16px] transition-opacity"
+          style={{
+            background: isAnimating
+              ? 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)'
+              : 'linear-gradient(135deg, var(--c-orange), var(--c-red))',
+            color: isAnimating ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)',
+            boxShadow: isAnimating ? 'none' : '0 6px 20px rgba(var(--c-orange-rgb),0.35)',
+          }}
+        >
+          {isAnimating ? animLabel + '...' : '🏀 Бросок'}
+        </button>
+      )}
+
+      {/* History */}
+      {history.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="m-0 text-[12px] font-bold uppercase tracking-wide" style={{ color: 'var(--tg-theme-hint-color)' }}>История бросков</p>
+          {history.slice().reverse().map((h) => {
+            const pr = rollResult(h.playerRoll);
+            const ar = rollResult(h.aiRoll);
+            return (
+              <div
+                key={h.round}
+                className="flex items-center gap-2 rounded-xl px-3 py-2"
+                style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)' }}
+              >
+                <span className="text-[11px] font-bold w-[44px] shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                  Р{h.round}
+                </span>
+                <div className="flex-1 flex items-center gap-1">
+                  <span className="text-[11px]" style={{ color: pr.color }}>{pr.icon} Вы +{rollScore(h.playerRoll)}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px]" style={{ color: ar.color }}>{ar.icon} ИИ +{rollScore(h.aiRoll)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ──────────────────────────── MAIN PAGE ────────────────────────────── */
 export function GamesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [tab, setTab] = useState<GamesTab>('solo');
 
   const tabs: { id: GamesTab; emoji: string; label: string }[] = [
-    { id: 'solo',     emoji: '🤖', label: 'Соло' },
-    { id: 'multi',    emoji: '🏆', label: 'Мульти' },
-    { id: 'cocktail', emoji: '🥤', label: 'Коктейль' },
+    { id: 'solo',       emoji: '🤖', label: 'Соло' },
+    { id: 'multi',      emoji: '🏆', label: 'Мульти' },
+    { id: 'cocktail',   emoji: '🥤', label: 'Коктейль' },
+    { id: 'basketball', emoji: '🏀', label: 'Баскет' },
   ];
 
   return (
@@ -702,9 +965,10 @@ export function GamesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       </div>
 
       <div>
-        {tab === 'solo'     && <SoloTab gs={gs} onRefresh={onRefresh} />}
-        {tab === 'multi'    && <MultiTab gs={gs} onRefresh={onRefresh} />}
-        {tab === 'cocktail' && <CocktailTab onRefresh={onRefresh} />}
+        {tab === 'solo'       && <SoloTab gs={gs} onRefresh={onRefresh} />}
+        {tab === 'multi'      && <MultiTab gs={gs} onRefresh={onRefresh} />}
+        {tab === 'cocktail'   && <CocktailTab onRefresh={onRefresh} />}
+        {tab === 'basketball' && <BasketballTab />}
       </div>
     </div>
   );
