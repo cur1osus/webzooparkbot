@@ -6,19 +6,26 @@ import { ExpeditionOverviewCard, ExpeditionPage } from './ExpeditionPage';
 
 type ZooTab = 'overview' | 'forge' | 'aviaries' | 'medals';
 
-const FORGE_ICON: Record<string, string> = {
-  bank: '🔄', income: '📈', game: '🧠', bonus: '🎲',
-  aviary: '🔗', discount: '📉', agility: '⚡', luck: '🍀',
+const PROP_ICON: Record<string, string> = {
+  bank_rate: '🔄',
+  income_boost: '📈',
+  animal_income: '🐾',
+  aviary_discount: '🏗️',
+  animal_discount: '📉',
+  extra_turns: '🎲',
+  last_chance: '🍀',
+  bonus_rerolls: '🎁',
 };
 function forgeItemIcon(item: ForgeItem): string {
-  for (const key of Object.keys(FORGE_ICON)) {
-    if (item.item_type.includes(key)) return FORGE_ICON[key];
-  }
-  return '✨';
+  const first = item.properties?.[0]?.type;
+  return first ? (PROP_ICON[first] ?? '✨') : '✨';
 }
 
 const RARITY_COLOR: Record<string, string> = {
-  common: '#8f95ab', rare: '#34c759', epic: '#bf5af2', mythic: '#ff6b3d',
+  common: '#8f95ab', rare: '#34c759', epic: '#bf5af2', mythical: '#ff6b3d', legendary: '#ffd60a',
+};
+const RARITY_LABEL: Record<string, string> = {
+  common: 'Обычный', rare: 'Редкий', epic: 'Эпический', mythical: 'Мифический', legendary: 'Легендарный',
 };
 
 // ─── Forge sub-pages ──────────────────────────────────────────────────────────
@@ -29,7 +36,11 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
 }) {
   const activeItems = items.filter(i => i.is_active);
   const bonuses: Record<string, number> = {};
-  for (const item of activeItems) bonuses[item.item_type] = (bonuses[item.item_type] ?? 0) + item.effect_value;
+  for (const item of activeItems) {
+    for (const p of item.properties ?? []) {
+      bonuses[p.type] = (bonuses[p.type] ?? 0) + p.value;
+    }
+  }
 
   return (
     <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
@@ -39,13 +50,13 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
           ? <p className="m-0 text-tg-hint text-[13px]">Нет активных предметов</p>
           : Object.entries(bonuses).map(([type, val]) => (
             <div key={type} className="flex justify-between mb-1">
-              <span className="text-[13px] text-tg-hint">{activeItems.find(i => i.item_type === type)?.name ?? type}</span>
-              <span className="text-[13px] text-[#34c759] font-bold">+{val}</span>
+              <span className="text-[13px] text-tg-hint">{PROP_ICON[type] ?? '✨'} {type.replace(/_/g, ' ')}</span>
+              <span className="text-[13px] text-[#34c759] font-bold">{val}</span>
             </div>
           ))}
         <div className="mt-2 pt-2 border-t border-white/[0.08]">
           <span className="text-[13px] text-tg-hint">Активных предметов </span>
-          <span className="text-[13px] font-bold">{activeItems.length} / {Math.min(items.length, 3)}</span>
+          <span className="text-[13px] font-bold">{activeItems.length} / 3</span>
         </div>
       </div>
 
@@ -106,11 +117,11 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
                 <div className="flex items-center gap-[6px]">
                   <span className="font-semibold text-sm">{item.name}</span>
                   <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `${RARITY_COLOR[item.rarity] ?? '#8f95ab'}22`, color: RARITY_COLOR[item.rarity] ?? '#8f95ab' }}>
-                    {item.rarity === 'rare' ? 'Редкий' : item.rarity === 'epic' ? 'Эпический' : item.rarity === 'mythic' ? 'Мифический' : 'Обычный'}
+                    {RARITY_LABEL[item.rarity] ?? item.rarity}
                   </span>
                   {item.is_active && <span className="text-[11px] text-[#34c759]">АКТИВЕН</span>}
                 </div>
-                <p className="mt-[2px] mb-0 text-xs text-tg-hint">Уровень {item.level} · {item.sv} св-в</p>
+                <p className="mt-[2px] mb-0 text-xs text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</p>
               </div>
               <span className="text-base text-tg-hint">▼</span>
             </div>
@@ -129,24 +140,26 @@ function ItemDetailPage({ item, onActivate, onSell, onBack }: {
       <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b border-white/[0.07]" style={{ top: 0 }}>
         <button onClick={onBack} className="bg-transparent border-none text-white text-[22px]">✕</button>
         <span className="font-bold text-[15px]">
-          {item.name} · <span style={{ color: RARITY_COLOR[item.rarity] }}>{item.rarity === 'epic' ? 'Эпический' : item.rarity === 'rare' ? 'Редкий' : 'Обычный'}</span>
+          {item.name} · <span style={{ color: RARITY_COLOR[item.rarity] }}>{RARITY_LABEL[item.rarity] ?? item.rarity}</span>
         </span>
         <div />
       </div>
       <div className="p-[14px] flex flex-col gap-[10px]">
         <div className="card">
-          <p className="m-0 mb-1 text-[13px] text-tg-hint">Уровень {item.level} · {item.sv} св-в</p>
-          <div className="flex justify-between mt-2">
-            <span className="text-[13px]">{item.effect_label}</span>
-            <span className="text-[13px] text-[#34c759] font-bold">{item.effect_value}</span>
-          </div>
+          <p className="m-0 mb-2 text-[13px] text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</p>
+          {(item.properties ?? []).map((p, i) => (
+            <div key={i} className="flex justify-between mb-1">
+              <span className="text-[13px] text-tg-hint">{PROP_ICON[p.type] ?? '✨'} {p.label.split(' ').slice(0, -1).join(' ')}</span>
+              <span className="text-[13px] text-[#34c759] font-bold">{p.label.split(' ').pop()}</span>
+            </div>
+          ))}
         </div>
         <div className="flex gap-2">
-          <button onClick={onActivate} disabled={item.is_active} className="flex-1 py-3 rounded-[10px] border-none font-bold text-sm disabled:opacity-60"
+          <button onClick={onActivate} className="flex-1 py-3 rounded-[10px] border-none font-bold text-sm"
             style={{ background: item.is_active ? 'rgba(255,255,255,0.08)' : 'rgba(52,199,89,0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : '#34c759' }}>
-            Активировать
+            {item.is_active ? 'Деактивировать' : 'Активировать'}
           </button>
-          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(255,107,61,0.15)] text-[#ff6b3d] font-bold text-sm">Продать</button>
+          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(255,107,61,0.15)] text-[#ff6b3d] font-bold text-sm">Продать $80k</button>
         </div>
       </div>
     </div>

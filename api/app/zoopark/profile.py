@@ -86,23 +86,27 @@ def get_forge_items(cur, user_id: int) -> list[dict]:
     result: list[dict] = []
     for row in cur.fetchall():
         try:
-            props = json.loads(row["properties"]) if row["properties"] else {}
+            raw = json.loads(row["properties"]) if row["properties"] else []
         except Exception:
-            props = {}
-        result.append(
-            {
-                "id": str(row["id"]),
-                "item_type": props.get("item_type", "unknown"),
-                "name": row["name"],
-                "icon": row["emoji"],
-                "rarity": row["rarity"],
-                "level": int(row["lvl"]),
-                "effect_label": props.get("effect_label", ""),
-                "effect_value": props.get("effect_value", 0),
-                "sv": props.get("sv", 0),
-                "is_active": bool(row["is_active"]),
-            }
-        )
+            raw = []
+        # Support old dict format (single property) → convert to list
+        if isinstance(raw, dict):
+            props: list[dict] = [{
+                "type": raw.get("item_type", "income_boost"),
+                "value": raw.get("effect_value", 0),
+                "label": raw.get("effect_label", ""),
+            }]
+        else:
+            props = raw if isinstance(raw, list) else []
+        result.append({
+            "id": str(row["id"]),
+            "name": row["name"],
+            "icon": row["emoji"],
+            "rarity": row["rarity"],
+            "level": int(row["lvl"]),
+            "properties": props,
+            "is_active": bool(row["is_active"]),
+        })
     return result
 
 

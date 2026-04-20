@@ -339,6 +339,7 @@ export default function App() {
                 <ShopPage
                   gs={displayState}
                   onBuyAviary={id => void handleBuyAviary(id)}
+                  onRefresh={reloadFromServer}
                 />
               )}
               {tab === 'lab' && (

@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Header
 
-from api.app.zoopark.forge import ForgeActivateBody, ForgeCreateBody, ForgeItemIdBody, ForgeMergeBody, api_forge_activate, api_forge_create, api_forge_items, api_forge_merge, api_forge_upgrade
+from api.app.zoopark.forge import (
+    ForgeActivateBody,
+    ForgeCreateBody,
+    ForgeItemIdBody,
+    ForgeMergeBody,
+    api_forge_activate,
+    api_forge_create,
+    api_forge_items,
+    api_forge_merge,
+    api_forge_sell,
+    api_forge_upgrade,
+)
 from api.app.zoopark.runtime import auth
 
 
@@ -42,6 +53,15 @@ def forge_merge(
     x_dev_user_id: str = Header(default=""),
 ):
     return api_forge_merge(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/sell")
+def forge_sell(
+    body: ForgeItemIdBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_sell(auth(x_init_data, x_dev_user_id), body)
 
 
 @router.post("/api/forge/activate")

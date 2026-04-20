@@ -16,16 +16,20 @@ export interface SickAnimal {
   since: string; // ISO timestamp
 }
 
+export interface ForgeProperty {
+  type: string;       // 'animal_income' | 'income_boost' | 'bank_rate' | 'aviary_discount' | 'animal_discount' | 'extra_turns' | 'last_chance' | 'bonus_rerolls'
+  value: number;      // integer (e.g. 12 for 12%)
+  label: string;      // e.g. "Курс банка -12%"
+  animal_id?: string; // set only for animal_income
+}
+
 export interface ForgeItem {
-  id: string;           // UUID
-  item_type: string;    // e.g. "crystal_exchange", "stone_aviary", etc.
+  id: string;
   name: string;
   icon: string;         // emoji
-  rarity: string;       // 'common' | 'rare' | 'epic' | 'mythic'
+  rarity: string;       // 'common' | 'rare' | 'epic' | 'mythical' | 'legendary'
   level: number;
-  effect_label: string; // e.g. "Скидка на вольеры -46%"
-  effect_value: number;
-  sv: number;           // sv = slots value
+  properties: ForgeProperty[];
   is_active: boolean;
 }
 
@@ -204,15 +208,32 @@ export interface CureResponse {
 export interface ForgeCreateResponse {
   ok: boolean;
   item: ForgeItem;
-  cost_paw_coins: number;
+  cost_usd?: number;
+  new_usd: number;
+  cost_paw_coins?: number;
   new_paw_coins: number;
+}
+
+export interface ForgeUpgradeResponse {
+  ok: boolean;
+  success: boolean;
+  success_pct: number;
+  item: ForgeItem;
+  cost_usd: number;
+  new_usd: number;
 }
 
 export interface ForgeMergeResponse {
   ok: boolean;
   new_item: ForgeItem;
-  cost_paw_coins: number;
-  new_paw_coins: number;
+  cost_usd: number;
+  new_usd: number;
+}
+
+export interface ForgeSellResponse {
+  ok: boolean;
+  earned_usd: number;
+  new_usd: number;
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
