@@ -22,7 +22,7 @@ from api.app.zoopark.runtime import BOT_TOKEN, get_db
 
 COCKTAIL_FRUITS = ["🍓", "🍊", "🍋", "🍇", "🍒", "🍑", "🥝", "🍍"]
 MAX_COCKTAIL_ATTEMPTS = 10
-BASKETBALL_ROUNDS = 5
+SOLO_MATCH_ROUNDS = 5
 
 
 class DonateInvoiceBody(BaseModel):
@@ -39,21 +39,32 @@ class SoloStartBody(BaseModel):
     bet_rub: float
 
 
-def _basketball_roll_score(roll: int) -> int:
-    return 2 if roll >= 3 else 0
+def _solo_roll_bounds(game_type: str) -> tuple[int, int]:
+    if game_type in {"basketball", "football"}:
+        return 0, 5
+    return 1, 6
 
 
-def _simulate_basketball_match(*, require_winner: bool) -> tuple[list[dict[str, int]], int, int]:
+def _solo_roll_score(game_type: str, roll: int) -> int:
+    if game_type == "basketball":
+        return 2 if roll >= 3 else 0
+    if game_type == "football":
+        return 1 if roll >= 3 else 0
+    return roll
+
+
+def _simulate_throw_match(game_type: str, *, require_winner: bool) -> tuple[list[dict[str, int]], int, int]:
     history: list[dict[str, int]] = []
     player_score = 0
     opponent_score = 0
     round_no = 1
+    roll_min, roll_max = _solo_roll_bounds(game_type)
 
-    while round_no <= BASKETBALL_ROUNDS or (require_winner and player_score == opponent_score):
-        player_roll = random.randint(0, 5)
-        opponent_roll = random.randint(0, 5)
-        player_score += _basketball_roll_score(player_roll)
-        opponent_score += _basketball_roll_score(opponent_roll)
+    while round_no <= SOLO_MATCH_ROUNDS or (require_winner and player_score == opponent_score):
+        player_roll = random.randint(roll_min, roll_max)
+        opponent_roll = random.randint(roll_min, roll_max)
+        player_score += _solo_roll_score(game_type, player_roll)
+        opponent_score += _solo_roll_score(game_type, opponent_roll)
         history.append({"round": round_no, "player_roll": player_roll, "ai_roll": opponent_roll})
         round_no += 1
 
@@ -153,14 +164,7 @@ def api_mpgame_join(
             if int(user["rub"]) < bet_rub:
                 raise HTTPException(400, "Недостаточно рублей")
 
-            if game["game_type"] == "basketball":
-                _history, creator_score, opponent_score = _simulate_basketball_match(require_winner=True)
-            else:
-                creator_score = random.randint(1, 6)
-                opponent_score = random.randint(1, 6)
-                while creator_score == opponent_score:
-                    creator_score = random.randint(1, 6)
-                    opponent_score = random.randint(1, 6)
+            _history, creator_score, opponent_score = _simulate_throw_match(game["game_type"], require_winner=True)
 
             winner_id = game["creator_id"] if creator_score > opponent_score else user["id"]
             cur.execute(
@@ -245,18 +249,12 @@ def api_start_solo_game(
             ai_score: int | None = None
             is_draw = False
 
-            if body.game_type == "basketball":
-                history, player_score, ai_score = _simulate_basketball_match(require_winner=False)
-                is_draw = player_score == ai_score
-                score = player_score
-                won = player_score > ai_score
-                rub_delta = bet_rub if won else 0 if is_draw else -bet_rub
-                result_text = f"Счёт: {player_score} — {ai_score}"
-            else:
-                score = random.randint(1, 100)
-                won = score >= 50
-                rub_delta = bet_rub if won else -bet_rub
-                result_text = f"Счёт: {score}"
+            history, player_score, ai_score = _simulate_throw_match(body.game_type, require_winner=False)
+            is_draw = player_score == ai_score
+            score = player_score
+            won = player_score > ai_score
+            rub_delta = bet_rub if won else 0 if is_draw else -bet_rub
+            result_text = f"Счёт: {player_score} — {ai_score}"
 
             new_rub = int(user["rub"]) + rub_delta
             wins_delta = 1 if won else 0
@@ -292,11 +290,10 @@ def api_start_solo_game(
             "new_rub": new_rub,
         }
 
-        if history is not None:
-            response["history"] = history
-            response["player_score"] = player_score
-            response["ai_score"] = ai_score
-            response["is_draw"] = is_draw
+        response["history"] = history
+        response["player_score"] = player_score
+        response["ai_score"] = ai_score
+        response["is_draw"] = is_draw
 
         return response
     finally:

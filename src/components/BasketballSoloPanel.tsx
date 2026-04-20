@@ -1,47 +1,115 @@
 import { useMemo, useRef, useState } from 'react';
 import { apiStartSoloGame } from '../api';
-import type { SoloBasketballThrow, SoloGameResult } from '../types';
+import type { SoloGameResult, SoloThrowRound } from '../types';
 import { fmt } from '../utils/format';
 import { TgsPlayer, type TgsHandle } from './TgsPlayer';
 
 type BasketballPhase = 'idle' | 'loading' | 'player-anim' | 'ai-anim' | 'result';
 
-const rollScore = (roll: number) => (roll >= 3 ? 2 : 0);
-const rollResult = (roll: number) => roll >= 3
-  ? { icon: '🏀', color: 'var(--c-green)' }
-  : { icon: '❌', color: 'var(--tg-theme-hint-color)' };
+const GAME_RULES: Record<string, {
+  assetDir: string;
+  accent: string;
+  playerIcon: string;
+  successIcon: string;
+  failIcon: string;
+  scoreRoll: (roll: number) => number;
+}> = {
+  basketball: {
+    assetDir: 'basketball',
+    accent: 'var(--c-orange)',
+    playerIcon: '🏀',
+    successIcon: '🏀',
+    failIcon: '❌',
+    scoreRoll: (roll) => (roll >= 3 ? 2 : 0),
+  },
+  football: {
+    assetDir: 'football',
+    accent: 'var(--c-gold)',
+    playerIcon: '⚽',
+    successIcon: '⚽',
+    failIcon: '❌',
+    scoreRoll: (roll) => (roll >= 3 ? 1 : 0),
+  },
+  dice: {
+    assetDir: 'dice',
+    accent: 'var(--c-blue)',
+    playerIcon: '🎲',
+    successIcon: '🎲',
+    failIcon: '🎲',
+    scoreRoll: (roll) => roll,
+  },
+  darts: {
+    assetDir: 'dart',
+    accent: 'var(--c-orange)',
+    playerIcon: '🎯',
+    successIcon: '🎯',
+    failIcon: '🎯',
+    scoreRoll: (roll) => roll,
+  },
+  bowling: {
+    assetDir: 'bowling',
+    accent: 'var(--c-green)',
+    playerIcon: '🎳',
+    successIcon: '🎳',
+    failIcon: '🎳',
+    scoreRoll: (roll) => roll,
+  },
+};
+
+function getGameRule(gameId: string) {
+  return GAME_RULES[gameId] ?? GAME_RULES.dice;
+}
+
+function getRollScore(gameId: string, roll: number) {
+  return getGameRule(gameId).scoreRoll(roll);
+}
+
+function getRollResult(gameId: string, roll: number) {
+  const rule = getGameRule(gameId);
+  const delta = getRollScore(gameId, roll);
+  const success = delta > 0;
+
+  return {
+    icon: success ? rule.successIcon : rule.failIcon,
+    color: success ? rule.accent : 'var(--tg-theme-hint-color)',
+    delta,
+  };
+}
 
 interface BasketballSoloPanelProps {
+  gameId: string;
+  gameEmoji: string;
   bet: number;
   canStart: boolean;
   onRefresh: () => void;
 }
 
-function getVisibleScore(history: SoloBasketballThrow[]) {
+function getVisibleScore(gameId: string, history: SoloThrowRound[]) {
   return history.reduce(
     (acc, item) => ({
-      player: acc.player + rollScore(item.player_roll),
-      ai: acc.ai + rollScore(item.ai_roll),
+      player: acc.player + getRollScore(gameId, item.player_roll),
+      ai: acc.ai + getRollScore(gameId, item.ai_roll),
     }),
     { player: 0, ai: 0 },
   );
 }
 
-export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSoloPanelProps) {
+export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefresh }: BasketballSoloPanelProps) {
   const [phase, setPhase] = useState<BasketballPhase>('idle');
   const [animLabel, setAnimLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<SoloGameResult | null>(null);
   const [sessionBet, setSessionBet] = useState<number | null>(null);
-  const [visibleHistory, setVisibleHistory] = useState<SoloBasketballThrow[]>([]);
+  const [visibleHistory, setVisibleHistory] = useState<SoloThrowRound[]>([]);
   const tgsRef = useRef<TgsHandle>(null);
 
   const sessionHistory = session?.history ?? [];
   const hasPendingRounds = visibleHistory.length < sessionHistory.length;
   const isAnimating = phase === 'player-anim' || phase === 'ai-anim';
   const finished = Boolean(session && !hasPendingRounds && phase === 'result');
+  const gameRule = getGameRule(gameId);
 
-  const visibleScore = useMemo(() => getVisibleScore(visibleHistory), [visibleHistory]);
+  const visibleScore = useMemo(() => getVisibleScore(gameId, visibleHistory), [gameId, visibleHistory]);
   const lastRound = visibleHistory[visibleHistory.length - 1];
 
   const resetSession = () => {
@@ -53,14 +121,14 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
     setVisibleHistory([]);
   };
 
-  const playRound = async (round: SoloBasketballThrow, isLastRound: boolean) => {
+  const playRound = async (round: SoloThrowRound, isLastRound: boolean) => {
     setAnimLabel('Ваш бросок');
     setPhase('player-anim');
-    await tgsRef.current?.playAnimation(`/telegram-dice/basketball/${round.player_roll}.tgs`);
+    await tgsRef.current?.playAnimation(`/telegram-dice/${gameRule.assetDir}/${round.player_roll}.tgs`);
 
     setAnimLabel('Бросок ИИ');
     setPhase('ai-anim');
-    await tgsRef.current?.playAnimation(`/telegram-dice/basketball/${round.ai_roll}.tgs`);
+    await tgsRef.current?.playAnimation(`/telegram-dice/${gameRule.assetDir}/${round.ai_roll}.tgs`);
 
     setVisibleHistory((current) => [...current, round]);
     setAnimLabel('');
@@ -73,9 +141,9 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
     setPhase('loading');
 
     try {
-      const result = await apiStartSoloGame('basketball', bet);
+      const result = await apiStartSoloGame(gameId, bet);
       if (!result.history?.length) {
-        throw new Error('Сервер не вернул историю баскетбольного матча');
+        throw new Error('Сервер не вернул историю матча');
       }
 
       setSession(result);
@@ -121,7 +189,7 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
       ? 'Готовим матч...'
       : isAnimating
         ? `${animLabel}...`
-        : '🏀 Бросок';
+        : 'Бросок';
 
   const resultTitle = session?.is_draw ? 'Ничья' : session?.won ? 'Победа' : 'Поражение';
   const resultColor = session?.is_draw
@@ -130,24 +198,29 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
       ? 'var(--c-green)'
       : 'var(--c-orange)';
   const displayBet = sessionBet ?? bet;
+  const lastPlayer = lastRound ? getRollResult(gameId, lastRound.player_roll) : null;
+  const lastAi = lastRound ? getRollResult(gameId, lastRound.ai_roll) : null;
 
   return (
     <div className="flex flex-col gap-[14px] mt-2">
       <div
         className="rounded-2xl overflow-hidden relative"
-        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid rgba(var(--c-orange-rgb),0.22)' }}
+        style={{
+          background: 'var(--tg-theme-secondary-bg-color)',
+          border: `1px solid color-mix(in srgb, ${gameRule.accent} 24%, transparent)`,
+        }}
       >
-        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% -10%, rgba(var(--c-orange-rgb),0.15) 0%, transparent 65%)' }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% -10%, color-mix(in srgb, ${gameRule.accent} 18%, transparent) 0%, transparent 65%)` }} />
         <div className="relative flex items-center justify-between px-5 py-4">
           <div className="text-center flex-1">
             <p className="m-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--tg-theme-hint-color)' }}>Вы</p>
-            <p className="m-0 text-[36px] font-extrabold leading-none mt-1" style={{ color: 'var(--c-orange)' }}>{visibleScore.player}</p>
+            <p className="m-0 text-[36px] font-extrabold leading-none mt-1" style={{ color: gameRule.accent }}>{visibleScore.player}</p>
           </div>
           <div className="text-center px-4">
             <p className="m-0 text-[13px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>
               Ставка ₽{fmt(displayBet)}
             </p>
-            <p className="m-0 text-[22px]">🏀</p>
+            <p className="m-0 text-[22px]">{gameEmoji}</p>
           </div>
           <div className="text-center flex-1">
             <p className="m-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--tg-theme-hint-color)' }}>ИИ</p>
@@ -176,7 +249,7 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
                   {session?.is_draw ? '🤝' : session?.won ? '🎉' : '😢'}
                 </span>
               ) : (
-                <span style={{ fontSize: 72 }}>🏀</span>
+                <span style={{ fontSize: 72 }}>{gameEmoji}</span>
               )}
             </div>
           )}
@@ -184,13 +257,13 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
 
         {!isAnimating && !finished && (
           <div className="text-center mt-1">
-            {lastRound ? (
+            {lastRound && lastPlayer && lastAi ? (
               <div className="flex gap-6">
-                <span className="text-[13px]" style={{ color: rollResult(lastRound.player_roll).color }}>
-                  Вы {rollResult(lastRound.player_roll).icon} +{rollScore(lastRound.player_roll)}
+                <span className="text-[13px]" style={{ color: lastPlayer.color }}>
+                  Вы {lastPlayer.icon} +{lastPlayer.delta}
                 </span>
-                <span className="text-[13px]" style={{ color: rollResult(lastRound.ai_roll).color }}>
-                  ИИ {rollResult(lastRound.ai_roll).icon} +{rollScore(lastRound.ai_roll)}
+                <span className="text-[13px]" style={{ color: lastAi.color }}>
+                  ИИ {lastAi.icon} +{lastAi.delta}
                 </span>
               </div>
             ) : (
@@ -217,9 +290,9 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
         style={{
           background: actionDisabled
             ? 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)'
-            : 'linear-gradient(135deg, var(--c-orange), var(--c-red))',
+            : `linear-gradient(135deg, ${gameRule.accent}, var(--c-red))`,
           color: actionDisabled ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)',
-          boxShadow: actionDisabled ? 'none' : '0 6px 20px rgba(var(--c-orange-rgb),0.35)',
+          boxShadow: actionDisabled ? 'none' : '0 6px 20px rgba(0,0,0,0.18)',
         }}
       >
         {actionLabel}
@@ -241,8 +314,8 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
         <div className="flex flex-col gap-2">
           <p className="m-0 text-[12px] font-bold uppercase tracking-wide" style={{ color: 'var(--tg-theme-hint-color)' }}>История бросков</p>
           {visibleHistory.slice().reverse().map((item) => {
-            const player = rollResult(item.player_roll);
-            const ai = rollResult(item.ai_roll);
+            const player = getRollResult(gameId, item.player_roll);
+            const ai = getRollResult(gameId, item.ai_roll);
 
             return (
               <div
@@ -254,10 +327,10 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
                   Р{item.round}
                 </span>
                 <div className="flex-1 flex items-center gap-1">
-                  <span className="text-[11px]" style={{ color: player.color }}>{player.icon} Вы +{rollScore(item.player_roll)}</span>
+                  <span className="text-[11px]" style={{ color: player.color }}>{player.icon} Вы +{player.delta}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-[11px]" style={{ color: ai.color }}>{ai.icon} ИИ +{rollScore(item.ai_roll)}</span>
+                  <span className="text-[11px]" style={{ color: ai.color }}>{ai.icon} ИИ +{ai.delta}</span>
                 </div>
               </div>
             );

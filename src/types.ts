@@ -322,11 +322,13 @@ export interface SoloStats {
   total_lost_rub: number;
 }
 
-export interface SoloBasketballThrow {
+export interface SoloThrowRound {
   round: number;
   player_roll: number;
   ai_roll: number;
 }
+
+export type SoloBasketballThrow = SoloThrowRound;
 
 export interface SoloGameResult {
   ok: boolean;
@@ -338,7 +340,7 @@ export interface SoloGameResult {
   is_draw?: boolean;
   player_score?: number;
   ai_score?: number;
-  history?: SoloBasketballThrow[];
+  history?: SoloThrowRound[];
 }
 
 // ─── Register ─────────────────────────────────────────────────────────────────

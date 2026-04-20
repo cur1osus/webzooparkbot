@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { apiStartSoloGame } from '../api';
 import type { GameDef } from '../data/games';
-import type { SoloGameResult } from '../types';
 import { fmt } from '../utils/format';
 import { BasketballSoloPanel } from './BasketballSoloPanel';
 
@@ -47,32 +45,11 @@ function FlowHeader({ title, subtitle, onBack }: { title: string; subtitle: stri
 export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGameFlowProps) {
   const [bet, setBet] = useState<BetAmount>(100);
   const [screen, setScreen] = useState<SoloFlowScreen>('setup');
-  const [playing, setPlaying] = useState(false);
-  const [result, setResult] = useState<SoloGameResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const accents = GAME_ACCENTS[game.id] ?? GAME_ACCENTS.dice;
   const canStart = availableRub >= bet;
-  const isBasketball = game.id === 'basketball';
 
-  const startClassicGame = async () => {
-    if (playing || !canStart) return;
-    setPlaying(true);
-    setError(null);
-    setResult(null);
-
-    try {
-      const response = await apiStartSoloGame(game.id, bet);
-      setResult(response);
-      onRefresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка запуска игры');
-    } finally {
-      setPlaying(false);
-    }
-  };
-
-  if (isBasketball && screen === 'match') {
+  if (screen === 'match') {
     return (
       <div className="p-[14px] flex flex-col gap-3">
         <FlowHeader
@@ -80,7 +57,7 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
           subtitle={`Матч со ставкой ₽${fmt(bet)}`}
           onBack={() => setScreen('setup')}
         />
-        <BasketballSoloPanel bet={bet} canStart={canStart} onRefresh={onRefresh} />
+        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} canStart={canStart} onRefresh={onRefresh} />
       </div>
     );
   }
@@ -89,7 +66,7 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
     <div className="p-[14px] flex flex-col gap-3">
       <FlowHeader
         title={game.name}
-        subtitle={isBasketball ? 'Сначала настрой матч, потом начни игру' : game.description}
+        subtitle="Сначала выбери ставку, затем начни матч"
         onBack={onBack}
       />
 
@@ -148,14 +125,8 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
 
         <button
           type="button"
-          onClick={() => {
-            if (isBasketball) {
-              setScreen('match');
-              return;
-            }
-            void startClassicGame();
-          }}
-          disabled={isBasketball ? !canStart : playing || !canStart}
+          onClick={() => setScreen('match')}
+          disabled={!canStart}
           className="py-[15px] rounded-2xl border-none font-extrabold text-[16px]"
           style={{
             background: canStart
@@ -163,28 +134,11 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
               : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
             color: canStart ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
             boxShadow: canStart ? `0 6px 20px ${accents.glow}` : 'none',
-            opacity: !isBasketball && playing ? 0.7 : 1,
           }}
         >
-          {isBasketball ? 'Начать игру' : playing ? 'Играем...' : 'Начать игру'}
+          Начать игру
         </button>
       </div>
-
-      {!isBasketball && error && (
-        <div className="rounded-2xl p-4" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>
-          <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
-        </div>
-      )}
-
-      {!isBasketball && result && (
-        <div className="card" style={{ background: result.won ? 'rgba(var(--c-green-rgb),0.1)' : 'rgba(var(--c-orange-rgb),0.1)', borderColor: result.won ? 'rgba(var(--c-green-rgb),0.25)' : 'rgba(var(--c-orange-rgb),0.25)' }}>
-          <p className="m-0 font-bold text-[15px]">{result.won ? 'Победа' : 'Поражение'}</p>
-          <p className="mt-1 mb-0 text-[13px] text-tg-hint">{result.result} · Счёт {result.score}</p>
-          <p className="mt-2 mb-0 text-[13px] font-semibold" style={{ color: result.won ? 'var(--c-green)' : 'var(--c-orange)' }}>
-            {result.rub_delta >= 0 ? '+' : ''}{fmt(result.rub_delta)} ₽
-          </p>
-        </div>
-      )}
     </div>
   );
 }
