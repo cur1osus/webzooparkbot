@@ -100,7 +100,7 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
           style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(var(--c-teal-rgb),0.5) 0%, transparent 70%)' }}
         />
         <div className="relative">
-          <div className="text-[48px] mb-2">🍹</div>
+          <div className="text-[48px] mb-2">🥤</div>
           <p className="m-0 mb-1 text-[18px] font-extrabold">Коктейль дня</p>
           <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Угадай секретный рецепт из 4 фруктов — получи <span style={{ color: 'var(--c-gold)', fontWeight: 700 }}>150 🐾</span>
@@ -268,14 +268,6 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         </div>
       )}
 
-      {/* How to play */}
-      <div className="card">
-        <p className="m-0 mb-[6px] font-bold text-[13px]">Как играть:</p>
-        <p className="m-0 text-xs leading-relaxed" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Каждый день — новый секретный коктейль из 4 фруктов 🍓🫐🍏🍐🍇🍒. Фрукты могут повторяться.
-          У тебя 10 попыток. После каждой — подсказка. Угадаешь — получи 150 🐾!
-        </p>
-      </div>
     </div>
   );
 }
@@ -652,7 +644,7 @@ export function GamesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
   const tabs: { id: GamesTab; emoji: string; label: string }[] = [
     { id: 'solo',     emoji: '🤖', label: 'Соло' },
     { id: 'multi',    emoji: '🏆', label: 'Мульти' },
-    { id: 'cocktail', emoji: '🍹', label: 'Коктейль' },
+    { id: 'cocktail', emoji: '🥤', label: 'Коктейль' },
   ];
 
   return (
