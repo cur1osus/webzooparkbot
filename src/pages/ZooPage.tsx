@@ -117,7 +117,7 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-[6px]">
                   <span className="font-semibold text-sm">{item.name}</span>
-                  <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `${RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)'}22`, color: RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)' }}>
+                  <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `color-mix(in srgb, ${RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)'} 13%, transparent)`, color: RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)' }}>
                     {RARITY_LABEL[item.rarity] ?? item.rarity}
                   </span>
                   {item.is_active && <span className="text-[11px] text-[var(--c-green)]">АКТИВЕН</span>}
@@ -242,7 +242,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             { label: `🐾 ${gs.paw_coins}`, color: 'var(--c-purple)' },
           ].map(({ label, color }) => (
             <span key={label} className="px-3 py-[5px] rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
-              style={{ background: `${color}18`, color, border: `1px solid ${color}28`, boxShadow: `0 0 8px ${color}14` }}>
+              style={{ background: `color-mix(in srgb, ${color} 10%, transparent)`, color, border: `1px solid color-mix(in srgb, ${color} 16%, transparent)`, boxShadow: `0 0 8px color-mix(in srgb, ${color} 8%, transparent)` }}>
               {label}
             </span>
           ))}
