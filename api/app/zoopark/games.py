@@ -164,7 +164,11 @@ def api_mpgame_join(
             if int(user["rub"]) < bet_rub:
                 raise HTTPException(400, "Недостаточно рублей")
 
-            _history, creator_score, opponent_score = _simulate_throw_match(game["game_type"], require_winner=True)
+            creator_score = random.randint(1, 6)
+            opponent_score = random.randint(1, 6)
+            while creator_score == opponent_score:
+                creator_score = random.randint(1, 6)
+                opponent_score = random.randint(1, 6)
 
             winner_id = game["creator_id"] if creator_score > opponent_score else user["id"]
             cur.execute(
@@ -247,13 +251,18 @@ def api_start_solo_game(
             history: list[dict[str, int]] | None = None
             player_score: int | None = None
             ai_score: int | None = None
-            is_draw = False
+            desired_win = random.randint(1, 100) >= 50
 
-            history, player_score, ai_score = _simulate_throw_match(body.game_type, require_winner=False)
-            is_draw = player_score == ai_score
+            while True:
+                history, player_score, ai_score = _simulate_throw_match(body.game_type, require_winner=True)
+                simulated_win = player_score > ai_score
+                if simulated_win == desired_win:
+                    break
+
+            is_draw = False
             score = player_score
-            won = player_score > ai_score
-            rub_delta = bet_rub if won else 0 if is_draw else -bet_rub
+            won = desired_win
+            rub_delta = bet_rub if won else -bet_rub
             result_text = f"Счёт: {player_score} — {ai_score}"
 
             new_rub = int(user["rub"]) + rub_delta

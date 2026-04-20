@@ -435,27 +435,27 @@ class ZooParkRouteTests(unittest.TestCase):
         with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value={"id": 9, "rub": 500, "nickname": "guest"}), \
              patch.object(module, "sync_passive_balance", return_value=({"id": 9, "rub": 500, "nickname": "guest"}, 0, 0)), \
-             patch.object(module, "_simulate_throw_match", return_value=([{"round": 1, "player_roll": 6, "ai_roll": 2}], 12, 8)):
+             patch.object(module.random, "randint", side_effect=[6, 2]):
             result = module.api_mpgame_join(77, 5)
         self.assertEqual(result["game"]["status"], "finished")
         self.assertEqual(result["game"]["winner_nickname"], "host")
 
-    def test_start_solo_basketball_returns_history_and_refunds_draw(self) -> None:
+    def test_start_solo_basketball_returns_history(self) -> None:
         module = importlib.import_module("api.app.zoopark.games")
         db, cur = self._fake_db()
 
         with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value={"id": 11, "rub": 1000, "nickname": "neo"}), \
              patch.object(module, "sync_passive_balance", return_value=({"id": 11, "rub": 1000, "nickname": "neo"}, 0, 0)), \
-             patch.object(module.random, "randint", side_effect=[5, 5, 0, 0, 4, 4, 1, 1, 3, 3]):
+             patch.object(module.random, "randint", return_value=80), \
+             patch.object(module, "_simulate_throw_match", return_value=([{"round": 1, "player_roll": 5, "ai_roll": 4}], 6, 4)):
             result = module.api_start_solo_game(77, module.SoloStartBody(game_type="basketball", bet_rub=100))
 
         self.assertTrue(result["ok"])
-        self.assertEqual(result["result"], "Счёт: 6 — 6")
-        self.assertEqual(result["rub_delta"], 0)
-        self.assertTrue(result["is_draw"])
-        self.assertEqual(len(result["history"]), 5)
-        self.assertEqual(result["history"][0], {"round": 1, "player_roll": 5, "ai_roll": 5})
+        self.assertEqual(result["result"], "Счёт: 6 — 4")
+        self.assertEqual(result["rub_delta"], 100)
+        self.assertFalse(result["is_draw"])
+        self.assertEqual(result["history"], [{"round": 1, "player_roll": 5, "ai_roll": 4}])
 
     def test_start_solo_dice_returns_history(self) -> None:
         module = importlib.import_module("api.app.zoopark.games")
@@ -464,12 +464,14 @@ class ZooParkRouteTests(unittest.TestCase):
         with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value={"id": 11, "rub": 1000, "nickname": "neo"}), \
              patch.object(module, "sync_passive_balance", return_value=({"id": 11, "rub": 1000, "nickname": "neo"}, 0, 0)), \
-             patch.object(module, "_simulate_throw_match", return_value=([{"round": 1, "player_roll": 6, "ai_roll": 5}], 6, 5)):
+             patch.object(module.random, "randint", return_value=20), \
+             patch.object(module, "_simulate_throw_match", return_value=([{"round": 1, "player_roll": 4, "ai_roll": 5}], 4, 5)):
             result = module.api_start_solo_game(77, module.SoloStartBody(game_type="dice", bet_rub=100))
 
-        self.assertEqual(result["result"], "Счёт: 6 — 5")
-        self.assertTrue(result["won"])
-        self.assertEqual(result["history"], [{"round": 1, "player_roll": 6, "ai_roll": 5}])
+        self.assertEqual(result["result"], "Счёт: 4 — 5")
+        self.assertFalse(result["won"])
+        self.assertEqual(result["rub_delta"], -100)
+        self.assertEqual(result["history"], [{"round": 1, "player_roll": 4, "ai_roll": 5}])
 
     def test_get_expeditions_auto_resolves_expired_active_expedition(self) -> None:
         module = importlib.import_module("api.app.zoopark.progression")
