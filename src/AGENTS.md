@@ -1,5 +1,20 @@
 # Frontend Instructions
 
+## TMA Development Reference
+
+This app is a Telegram Mini App (TMA). When working on the frontend, always consult the TMA guide for LLMs:
+
+```
+https://raw.githubusercontent.com/ohld/tma-llms-txt/main/llms-full.txt
+```
+
+Key rules from that guide that apply here:
+- Always call `ready()` after mounting — omitting it leaves the Telegram loading spinner visible.
+- Use Telegram CSS variables (`var(--tg-theme-*)`) for colours — never hardcode dark/light palette values.
+- Retrieve launch params with try/catch (`retrieveLaunchParams()`) for cross-environment reliability.
+- Do not wrap mock environment checks with `import.meta.env.DEV` — it breaks production previews.
+- Hash routing must be configured before any link navigation is wired up.
+
 ## Current Contract Reality
 
 The current frontend is bound to canonical ZooPark `/api/*` contracts.
