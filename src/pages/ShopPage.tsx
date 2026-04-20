@@ -194,7 +194,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           className="w-full py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
           style={{ background: canAffordPaw ? 'rgba(191,90,242,0.2)' : 'rgba(191,90,242,0.08)', color: '#bf5af2' }}
         >
-          🐾 {pawCost} PawCoins (фиксированно)
+          🐾 {pawCost} PawCoins
         </button>
       </div>
 
