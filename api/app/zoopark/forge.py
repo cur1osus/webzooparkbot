@@ -64,7 +64,7 @@ PROPERTY_BASE_LABELS = {
 
 # ─── Forge economy ────────────────────────────────────────────────────────────
 
-FORGE_CREATE_BASE_USD = 100_000
+FORGE_CREATE_BASE_USD = 1
 FORGE_CREATE_PAW = 350
 FORGE_CREATE_MULT = 1.15
 FORGE_UPGRADE_BASE_USD = 30_000

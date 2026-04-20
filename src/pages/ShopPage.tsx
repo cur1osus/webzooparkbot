@@ -53,7 +53,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
   const items = gs.forge_items;
   const itemCount = items.length;
-  const usdCost = Math.round(100_000 * Math.pow(1.15, itemCount));
+  const usdCost = Math.round(1 * Math.pow(1.15, itemCount));
   const pawCost = 350;
   const activeCount = items.filter(i => i.is_active).length;
 
