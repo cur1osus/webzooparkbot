@@ -125,10 +125,8 @@ function AnimalPicker({ animals, exclude, onPick, onClose }: {
   const available = animals.filter(a => a.can_breed && a.id !== exclude);
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-end justify-center"
-         style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
-      <div className="w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[75vh] overflow-y-auto"
-           style={{ background: 'var(--tg-theme-bg-color)', border: '1px solid rgba(255,255,255,0.08)' }}
+    <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose}>
+      <div className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[75vh] overflow-y-auto"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
           <p className="m-0 font-extrabold text-[15px]">Выбери родителя</p>
@@ -261,7 +259,7 @@ export function LabPage({ gs }: { gs: GameState }) {
               background: canBreed
                 ? 'linear-gradient(135deg, var(--c-purple), #9b3bd6)'
                 : 'color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent)',
-              color: canBreed ? '#fff' : 'var(--tg-theme-hint-color)',
+              color: canBreed ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
             }}
           >
             {breeding ? '🧬 Скрещиваем...' : '🧬 Скрестить'}

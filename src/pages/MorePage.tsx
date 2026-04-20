@@ -8,9 +8,9 @@ import { ClanPage } from './more/ClanPage';
 import { TopPage } from './more/TopPage';
 import { ReferralPage } from './more/ReferralPage';
 import { DonatePage } from './more/DonatePage';
-import { apiCreateTransfer, apiGetMyTransfers } from '../api';
+import { apiConfig, apiCreateTransfer, apiGetMyTransfers } from '../api';
 import { fmt, formatDateShort } from '../utils/format';
-import { inTma } from '../tma';
+import { copyTmaText, inTma } from '../tma';
 
 type Section =
   | 'bank' | 'bonus' | 'merchant' | 'clan' | 'top'
@@ -54,10 +54,11 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
       style={{ top: topOffset, bottom: 'var(--app-bottom-offset)' }}
     >
       <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)' }}>
-        <div className="px-[14px] pt-[14px] pb-[10px] flex items-center gap-3 border-b border-white/[0.07] bg-tg-bg/95 backdrop-blur-xl shrink-0">
+        <div className="px-[14px] pt-[14px] pb-[10px] flex items-center gap-3 border-b bg-tg-bg/95 backdrop-blur-xl shrink-0" style={{ borderColor: 'var(--surface-overlay-border)' }}>
           <button
             onClick={onBack}
-            className="flex items-center gap-1 px-3 py-[6px] rounded-lg border border-white/[0.12] bg-transparent text-white cursor-pointer text-[13px] shrink-0"
+            className="flex items-center gap-1 px-3 py-[6px] rounded-lg border bg-transparent text-tg-text cursor-pointer text-[13px] shrink-0"
+            style={{ borderColor: 'var(--surface-overlay-border)' }}
           >
             ‹ Назад
           </button>
@@ -77,6 +78,15 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
 
 export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [section, setSection] = useState<Section>(null);
+  const [botUsername, setBotUsername] = useState('ZooParkBot');
+
+  useEffect(() => {
+    apiConfig()
+      .then((config) => {
+        if (config.bot_username) setBotUsername(config.bot_username);
+      })
+      .catch(() => {});
+  }, []);
 
   const back = () => setSection(null);
   const openSection = (nextSection: SectionId) => setSection(nextSection);
@@ -125,7 +135,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
   if (section === 'giveaway') return (
     <MoreSectionLayer title="💸 Раздача денег" onBack={back}>
-      <GiveawayPage gs={gs} onRefresh={onRefresh} />
+      <GiveawayPage gs={gs} onRefresh={onRefresh} botUsername={botUsername} />
     </MoreSectionLayer>
   );
 
@@ -154,7 +164,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                   <div className="flex items-center gap-2">
                     <p className="m-0 text-[15px] font-semibold">{item.title}</p>
                     {item.id === 'bonus' && gs.bonus === 1 && (
-                      <span className="text-[10px] font-bold bg-[var(--c-green)] text-white px-[6px] py-[2px] rounded-full">Доступен</span>
+                      <span className="text-[10px] font-bold bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] px-[6px] py-[2px] rounded-full">Доступен</span>
                     )}
                     {item.id === 'clan' && gs.clan && (
                       <span className="text-[10px] font-bold bg-[rgba(var(--c-purple-rgb),0.2)] text-[var(--c-purple)] px-[6px] py-[2px] rounded-full">«{gs.clan.name}»</span>
@@ -190,7 +200,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
 // ─── Inline sub-pages ─────────────────────────────────────────────────────────
 
-function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh: () => void }) {
+function GiveawayPage({ gs, onRefresh: _onRefresh, botUsername }: { gs: GameState; onRefresh: () => void; botUsername: string }) {
   const [amount, setAmount] = useState('');
   const [parts, setParts] = useState('5');
   const [creating, setCreating] = useState(false);
@@ -229,11 +239,12 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
   };
 
   const copyLink = (key: string) => {
-    const link = `https://t.me/ZooParkBot?start=transfer_${key}`;
-    navigator.clipboard.writeText(link).then(() => {
+    const link = `https://t.me/${botUsername}?start=transfer_${key}`;
+    void copyTmaText(link).then((copied) => {
+      if (!copied) return;
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 2000);
-    }).catch(() => {});
+    });
   };
 
   const total = parseFloat(amount) || 0;
@@ -249,18 +260,18 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
           value={amount}
           onChange={e => setAmount(e.target.value)}
           placeholder="Сумма ₽"
-          className="w-full px-3 py-[10px] rounded-[10px] mb-2 border border-white/[0.12] bg-black/20 text-white text-sm"
+          className="text-input mb-2 text-sm"
         />
         <input
           type="number"
           value={parts}
           onChange={e => setParts(e.target.value)}
           placeholder="Количество получателей"
-          className="w-full px-3 py-[10px] rounded-[10px] mb-[10px] border border-white/[0.12] bg-black/20 text-white text-sm"
+          className="text-input mb-[10px] text-sm"
         />
         {perPart > 0 && (
           <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
-            Каждый получит: <strong className="text-white">₽ {fmt(perPart)}</strong>
+            Каждый получит: <strong className="text-tg-text">₽ {fmt(perPart)}</strong>
           </p>
         )}
         {error && <p className="m-0 mb-2 text-[var(--c-red-soft)] text-[13px]">⚠️ {error}</p>}
@@ -268,7 +279,7 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
           onClick={() => void handleCreate()}
           disabled={creating || !total || !max || total > gs.rub}
           className="w-full py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm disabled:opacity-50"
-          style={{ background: 'var(--c-green)', color: 'white' }}
+          style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
         >
           {creating ? 'Создаём...' : 'Создать ссылку'}
         </button>
@@ -296,7 +307,7 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
                   <span
                     className="text-[11px] font-bold px-2 py-[3px] rounded-full"
                     style={{
-                      background: t.active ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(255,255,255,0.08)',
+                      background: t.active ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
                       color: t.active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
                     }}
                   >
@@ -309,7 +320,7 @@ function GiveawayPage({ gs, onRefresh: _onRefresh }: { gs: GameState; onRefresh:
                     onClick={() => copyLink(t.key)}
                     className="w-full py-2 rounded-[8px] border-none cursor-pointer font-semibold text-[13px]"
                     style={{
-                      background: copiedKey === t.key ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(255,255,255,0.08)',
+                      background: copiedKey === t.key ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
                       color: copiedKey === t.key ? 'var(--c-green)' : 'var(--tg-theme-text-color)',
                     }}
                   >

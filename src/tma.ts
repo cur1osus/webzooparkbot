@@ -1,4 +1,5 @@
-import { init, miniApp, viewport, popup } from '@tma.js/sdk';
+import { hapticFeedback, init, miniApp, openLink, openTelegramLink, popup, shareURL, themeParams, viewport } from '@tma.js/sdk';
+import { ensureTelegramMockEnv, hasRealTelegramRuntime } from './tmaEnv';
 
 const VIEWPORT_CSS_VAR_NAMES: Record<string, string> = {
   height: '--tg-viewport-height',
@@ -14,6 +15,17 @@ const VIEWPORT_CSS_VAR_NAMES: Record<string, string> = {
   contentSafeAreaInsetRight: '--tg-content-safe-area-inset-right',
 };
 
+type HapticStyle = 'light' | 'medium' | 'heavy';
+
+let sdkInitialized = false;
+let readyRequested = false;
+let readySent = false;
+
+ensureTelegramMockEnv();
+
+/** true если приложение запущено внутри реального Telegram */
+export const inTma = hasRealTelegramRuntime;
+
 /** Reads safe area insets from Telegram.WebApp and writes them to CSS vars */
 function syncSafeAreaVars() {
   const tg = (window as { Telegram?: { WebApp?: {
@@ -23,74 +35,120 @@ function syncSafeAreaVars() {
   if (!tg) return;
 
   const root = document.documentElement;
-  const sai  = tg.safeAreaInset        ?? { top: 0, bottom: 0, left: 0, right: 0 };
-  const csai = tg.contentSafeAreaInset ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const safeAreaInset = tg.safeAreaInset ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const contentSafeAreaInset = tg.contentSafeAreaInset ?? { top: 0, bottom: 0, left: 0, right: 0 };
 
-  root.style.setProperty('--tg-safe-area-inset-top',            `${sai.top}px`);
-  root.style.setProperty('--tg-safe-area-inset-bottom',         `${sai.bottom}px`);
-  root.style.setProperty('--tg-safe-area-inset-left',           `${sai.left}px`);
-  root.style.setProperty('--tg-safe-area-inset-right',          `${sai.right}px`);
-  root.style.setProperty('--tg-content-safe-area-inset-top',    `${csai.top}px`);
-  root.style.setProperty('--tg-content-safe-area-inset-bottom', `${csai.bottom}px`);
-  root.style.setProperty('--tg-content-safe-area-inset-left',   `${csai.left}px`);
-  root.style.setProperty('--tg-content-safe-area-inset-right',  `${csai.right}px`);
+  root.style.setProperty('--tg-safe-area-inset-top', `${safeAreaInset.top}px`);
+  root.style.setProperty('--tg-safe-area-inset-bottom', `${safeAreaInset.bottom}px`);
+  root.style.setProperty('--tg-safe-area-inset-left', `${safeAreaInset.left}px`);
+  root.style.setProperty('--tg-safe-area-inset-right', `${safeAreaInset.right}px`);
+  root.style.setProperty('--tg-content-safe-area-inset-top', `${contentSafeAreaInset.top}px`);
+  root.style.setProperty('--tg-content-safe-area-inset-bottom', `${contentSafeAreaInset.bottom}px`);
+  root.style.setProperty('--tg-content-safe-area-inset-left', `${contentSafeAreaInset.left}px`);
+  root.style.setProperty('--tg-content-safe-area-inset-right', `${contentSafeAreaInset.right}px`);
 }
 
-/** true если приложение запущено внутри Telegram */
-export let inTma = false;
-
-try {
-  init();
-  miniApp.mount();
-  miniApp.bindCssVars();
-  miniApp.ready();
-  viewport.mount();
-  viewport.expand();
-  if (viewport.requestFullscreen.isAvailable()) {
-    viewport.requestFullscreen();
-  }
-  viewport.bindCssVars((key) => VIEWPORT_CSS_VAR_NAMES[key]);
-
-  // Sync safe-area insets from Telegram.WebApp directly (reliable on all clients)
+function scheduleSafeAreaResync() {
   syncSafeAreaVars();
-  // Re-sync after fullscreen takes effect (async in Telegram)
-  setTimeout(syncSafeAreaVars, 150);
-  setTimeout(syncSafeAreaVars, 500);
-  const tgWa = (window as { Telegram?: { WebApp?: { onEvent?: (e: string, cb: () => void) => void } } }).Telegram?.WebApp;
-  tgWa?.onEvent?.('safeAreaChanged',        syncSafeAreaVars);
-  tgWa?.onEvent?.('contentSafeAreaChanged', syncSafeAreaVars);
-  tgWa?.onEvent?.('viewportChanged',        syncSafeAreaVars);
+  window.setTimeout(syncSafeAreaVars, 150);
+  window.setTimeout(syncSafeAreaVars, 500);
 
-  inTma = true;
-} catch {
-  inTma = false;
+  const tgWebApp = (window as { Telegram?: { WebApp?: { onEvent?: (event: string, cb: () => void) => void } } }).Telegram?.WebApp;
+  tgWebApp?.onEvent?.('safeAreaChanged', syncSafeAreaVars);
+  tgWebApp?.onEvent?.('contentSafeAreaChanged', syncSafeAreaVars);
+  tgWebApp?.onEvent?.('viewportChanged', syncSafeAreaVars);
 }
 
-type HapticStyle = 'light' | 'medium' | 'heavy';
+function buildTelegramShareUrl(url: string, text?: string): string {
+  const params = new URLSearchParams({ url });
+  if (text) params.set('text', text);
+  return `https://t.me/share/url?${params.toString()}`;
+}
+
+function isTelegramUrl(url: string | URL): boolean {
+  const parsed = typeof url === 'string' ? new URL(url, window.location.href) : url;
+  return parsed.hostname === 't.me' || parsed.hostname.endsWith('.t.me');
+}
+
+function openBrowserFallback(url: string): void {
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function mountThemeParams(): void {
+  if (!themeParams.mount.isAvailable()) return;
+  themeParams.mount();
+  themeParams.bindCssVars();
+}
+
+async function initializeTma(): Promise<void> {
+  try {
+    init();
+    mountThemeParams();
+    miniApp.mount();
+    miniApp.bindCssVars();
+    sdkInitialized = true;
+
+    if (readyRequested) {
+      readyTma();
+    }
+  } catch {
+    sdkInitialized = false;
+    return;
+  }
+
+  try {
+    await viewport.mount();
+    viewport.bindCssVars((key) => VIEWPORT_CSS_VAR_NAMES[key]);
+    viewport.expand();
+
+    if (viewport.requestFullscreen.isAvailable()) {
+      try {
+        await viewport.requestFullscreen();
+      } catch {
+        // Fullscreen is a progressive enhancement and should never block app startup.
+      }
+    }
+
+    scheduleSafeAreaResync();
+  } catch {
+    // Viewport/fullscreen integrations are progressive enhancements.
+  }
+}
+
+void initializeTma();
+
+/** Hides Telegram's loading placeholder once the React tree is mounted. */
+export function readyTma() {
+  readyRequested = true;
+  if (!sdkInitialized || readySent) return;
+  if (!miniApp.ready.isAvailable()) return;
+
+  try {
+    miniApp.ready();
+    readySent = true;
+  } catch {
+    // No-op outside Telegram.
+  }
+}
 
 /** Trigger haptic feedback */
 export function hapticImpact(style: HapticStyle = 'light') {
   if (!inTma) return;
+
   try {
-    const impactMap: Record<HapticStyle, 'light' | 'medium' | 'heavy' | 'rigid' | 'soft'> = {
-      light: 'light',
-      medium: 'medium',
-      heavy: 'heavy',
-    };
-    // @ts-expect-error - haptic might not be on miniApp in all versions
-    miniApp.haptic?.impactOccurred?.(impactMap[style]);
+    hapticFeedback.impactOccurred(style);
   } catch {
-    // Haptic not available
+    // Haptic feedback is optional across Telegram clients.
   }
 }
 
 export function hapticNotification(type: 'success' | 'warning' | 'error' = 'success') {
   if (!inTma) return;
+
   try {
-    // @ts-expect-error - haptic might not be on miniApp in all versions
-    miniApp.haptic?.notificationOccurred?.(type);
+    hapticFeedback.notificationOccurred(type);
   } catch {
-    // Haptic not available
+    // Haptic feedback is optional across Telegram clients.
   }
 }
 
@@ -105,8 +163,99 @@ export async function tmaConfirm(message: string, title?: string): Promise<boole
       });
       return buttonId === 'ok';
     } catch {
-      // Popup not supported or failed — fall through to window.confirm
+      // Popup is optional across Telegram clients.
     }
   }
+
   return window.confirm(title ? `${title}\n${message}` : message);
+}
+
+/** Shares a link using Telegram-native primitives when possible, with browser fallbacks for previews. */
+export async function shareTmaUrl(url: string, text?: string): Promise<void> {
+  const telegramShareUrl = buildTelegramShareUrl(url, text);
+
+  if (inTma) {
+    if (shareURL.isAvailable()) {
+      try {
+        shareURL(url, text);
+        return;
+      } catch {
+        // Fall through to the next Telegram-native fallback.
+      }
+    }
+
+    if (openLink.isAvailable()) {
+      try {
+        openLink(telegramShareUrl);
+        return;
+      } catch {
+        // Fall through to browser-level fallbacks.
+      }
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ text, url });
+      return;
+    } catch {
+      // If user cancels share sheet, silently keep the final fallback.
+    }
+  }
+
+  openBrowserFallback(telegramShareUrl);
+}
+
+/** Opens external URLs with Telegram-native APIs when available. */
+export function openTmaLink(url: string): void {
+  if (inTma) {
+    if (isTelegramUrl(url) && openTelegramLink.isAvailable()) {
+      try {
+        openTelegramLink(url);
+        return;
+      } catch {
+        // Fall through to generic link opening.
+      }
+    }
+
+    if (openLink.isAvailable()) {
+      try {
+        openLink(url);
+        return;
+      } catch {
+        // Fall through to browser fallback.
+      }
+    }
+  }
+
+  openBrowserFallback(url);
+}
+
+/** Copies text using the browser clipboard with a legacy fallback for older WebViews. */
+export async function copyTmaText(value: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fall through to execCommand fallback.
+    }
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'true');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    textarea.style.pointerEvents = 'none';
+    document.body.appendChild(textarea);
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  } catch {
+    return false;
+  }
 }

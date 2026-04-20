@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GameState } from '../../types';
 import { apiGetDonateInfo, apiCreateDonateInvoice } from '../../api';
+import { openTmaLink } from '../../tma';
 
 const STAR_OPTIONS = [1, 5, 10, 25, 50, 100, 250, 500];
 
@@ -23,7 +24,7 @@ export function DonatePage({ gs: _gs }: { gs: GameState }) {
     try {
       const res = await apiCreateDonateInvoice(stars);
       if (res.invoice_link) {
-        window.open(res.invoice_link, '_blank');
+        openTmaLink(res.invoice_link);
       }
     } catch (e) {
       setError((e as Error).message ?? 'Ошибка');
@@ -52,7 +53,7 @@ export function DonatePage({ gs: _gs }: { gs: GameState }) {
               onClick={() => setStars(s)}
               className="py-[10px] px-1 rounded-[10px] cursor-pointer text-[13px] transition-all"
               style={{
-                background: stars === s ? 'rgba(var(--c-gold-rgb),0.2)' : 'rgba(255,255,255,0.08)',
+                background: stars === s ? 'rgba(var(--c-gold-rgb),0.2)' : 'var(--surface-subtle)',
                 color: stars === s ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
                 fontWeight: stars === s ? 700 : 400,
                 border: `1px solid ${stars === s ? 'rgba(var(--c-gold-rgb),0.4)' : 'transparent'}`,
@@ -64,7 +65,7 @@ export function DonatePage({ gs: _gs }: { gs: GameState }) {
         </div>
 
         {stars && (
-          <div className="mt-3 px-3 py-[10px] rounded-[10px] bg-black/20">
+          <div className="surface-subtle mt-3 px-3 py-[10px] rounded-[10px]">
             <p className="m-0 text-[13px] text-tg-hint">За {stars} ⭐️ получишь:</p>
             <p className="mt-1 mb-0 text-lg font-extrabold text-[var(--c-purple)]">
               {stars * starsToPaw} 🐾 PawCoins
@@ -79,7 +80,7 @@ export function DonatePage({ gs: _gs }: { gs: GameState }) {
           disabled={!stars || buying}
           className="w-full py-[13px] rounded-[10px] border-none cursor-pointer font-extrabold text-[15px] mt-3 disabled:opacity-60 transition-all"
           style={{
-            background: stars ? 'var(--c-gold)' : 'rgba(255,255,255,0.08)',
+            background: stars ? 'var(--c-gold)' : 'var(--surface-subtle)',
             color: stars ? '#1c1c1e' : 'var(--tg-theme-hint-color)',
           }}
         >

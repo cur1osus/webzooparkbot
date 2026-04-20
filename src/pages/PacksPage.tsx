@@ -223,7 +223,7 @@ function PackCard({
             background: isFree
               ? 'linear-gradient(135deg, var(--c-green), #30b34e)'
               : 'linear-gradient(135deg, var(--c-blue), #0066dd)',
-            color:      '#fff',
+            color:      'var(--tg-theme-button-text-color)',
             boxShadow:  isFree ? '0 4px 12px rgba(var(--c-green-rgb),0.35)' : '0 4px 12px rgba(var(--c-blue-rgb),0.3)',
             opacity:    loading ? 0.6 : 1,
           }}

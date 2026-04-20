@@ -249,7 +249,7 @@ function CurrentExpeditionCard({
             onClick={onFinish}
             disabled={finishing}
             className="w-full py-[14px] rounded-2xl border-none font-extrabold text-[15px] cursor-pointer disabled:opacity-60"
-            style={{ background: 'var(--c-green)', color: '#fff' }}
+            style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
           >
             {finishing ? 'Завершаем...' : 'Завершить экспедицию'}
           </button>
@@ -295,7 +295,7 @@ function CurrentExpeditionCard({
             onClick={onDismiss}
             disabled={dismissing}
             className="w-full py-[14px] rounded-2xl border-none font-extrabold text-[15px] cursor-pointer disabled:opacity-60"
-            style={{ background: 'rgba(143,149,171,0.16)', color: '#fff' }}
+            style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-text-color)' }}
           >
             {dismissing ? 'Скрываем...' : 'Закрыть результат'}
           </button>
@@ -503,10 +503,11 @@ export function ExpeditionPage({
 
   return (
     <div className="page-content-safe">
-      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center gap-3 border-b border-white/[0.07]" style={{ top: 0 }}>
+      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center gap-3 border-b" style={{ top: 0, borderColor: 'var(--surface-overlay-border)' }}>
         <button
           onClick={onBack}
-          className="flex items-center gap-1 px-3 py-[6px] rounded-lg border border-white/[0.12] bg-transparent text-white cursor-pointer text-[13px]"
+          className="flex items-center gap-1 px-3 py-[6px] rounded-lg border bg-transparent text-tg-text cursor-pointer text-[13px]"
+          style={{ borderColor: 'var(--surface-overlay-border)' }}
         >
           ‹ Назад
         </button>
@@ -652,7 +653,7 @@ export function ExpeditionPage({
                   onClick={() => void handleStart()}
                   disabled={!canStart || busyAction === 'start'}
                   className="w-full py-[14px] rounded-2xl border-none font-extrabold text-[15px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ background: 'var(--c-blue)', color: '#fff' }}
+                  style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
                 >
                   {busyAction === 'start' ? 'Отправляем...' : info.active ? 'Сначала заверши текущую экспедицию' : 'Отправить в экспедицию'}
                 </button>
@@ -665,7 +666,7 @@ export function ExpeditionPage({
             <button
               onClick={() => void load()}
               className="px-4 py-[10px] rounded-xl border-none font-bold text-sm cursor-pointer"
-              style={{ background: 'var(--c-blue)', color: '#fff' }}
+              style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
             >
               Повторить
             </button>

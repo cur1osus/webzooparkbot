@@ -90,8 +90,8 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
                     disabled={buying === offer.slot || !affordable}
                     className="px-4 py-2 rounded-[10px] border-none cursor-pointer font-bold text-sm disabled:opacity-60"
                     style={{
-                      background: affordable ? 'var(--c-green)' : 'rgba(255,255,255,0.08)',
-                      color: affordable ? 'white' : 'var(--tg-theme-hint-color)',
+                      background: affordable ? 'var(--c-green)' : 'var(--surface-subtle)',
+                      color: affordable ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
                     }}
                   >
                     {buying === offer.slot ? '...' : 'Купить'}

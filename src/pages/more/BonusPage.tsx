@@ -56,8 +56,8 @@ export function BonusPage({ gs, onClaim }: { gs: GameState; onClaim: () => void 
         disabled={!available || claiming}
         className="py-[14px] rounded-xl border-none cursor-pointer font-extrabold text-base disabled:opacity-60 disabled:cursor-not-allowed"
         style={{
-          background: available ? 'var(--c-green)' : 'rgba(255,255,255,0.08)',
-          color: available ? 'white' : 'var(--tg-theme-hint-color)',
+          background: available ? 'var(--c-green)' : 'var(--surface-subtle)',
+          color: available ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
         }}
       >
         {claiming ? 'Получаем...' : available ? '🎁 Получить бонус' : '⏳ Уже получен сегодня'}

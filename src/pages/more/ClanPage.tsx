@@ -1,13 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ClanListResponse, ClanOut, GameState } from '../../types';
 import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan } from '../../api';
-
-const SPECIALTIES = [
-  { id: 'merchant',   label: '🧙 Торговец',  desc: 'Скидки у случайного торговца' },
-  { id: 'bank',       label: '🏦 Банкир',    desc: 'Льготный курс обмена в банке' },
-  { id: 'forge',      label: '⚒️ Кузнец',   desc: 'Бонусы к предметам кузницы' },
-  { id: 'collector',  label: '🦁 Зоолог',   desc: 'Бонус к доходу за разнообразие' },
-];
+import { CLAN_SPECIALTIES, getClanSpecialtyLabel } from '../../utils/clan';
 
 export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [data, setData] = useState<ClanListResponse | null>(null);
@@ -101,7 +95,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           <p className="m-0 mb-[6px] font-bold text-[15px]">🏰 «{gs.clan.name}»</p>
           <p className="m-0 mb-1 text-[13px] text-tg-hint">
             Ур. {gs.clan.level} · {gs.clan.member_count} уч.
-            {gs.clan.specialty ? ` · ${gs.clan.specialty}` : ' · Без специализации'}
+            {gs.clan.specialty ? ` · ${getClanSpecialtyLabel(gs.clan.specialty)}` : ' · Без специализации'}
           </p>
           <p className="m-0 mb-[10px] text-xs text-tg-hint">
             Роль: <strong>{gs.clan.role === 'owner' ? '👑 Владелец' : '👤 Участник'}</strong>
@@ -119,7 +113,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
         <>
           <button
             onClick={() => { setShowCreate(s => !s); clearMsgs(); }}
-            className="py-3 rounded-[10px] border-none cursor-pointer text-white font-bold text-sm"
+            className="py-3 rounded-[10px] border-none cursor-pointer text-[var(--tg-theme-button-text-color)] font-bold text-sm"
             style={{ background: showCreate ? 'rgba(var(--c-blue-rgb),0.3)' : 'var(--c-blue)' }}
           >
             {showCreate ? '✕ Отмена' : '+ Создать клан'}
@@ -133,18 +127,18 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                 onChange={e => setNewName(e.target.value)}
                 placeholder="Название клана (мин. 3 символа)"
                 maxLength={30}
-                className="w-full px-3 py-[10px] rounded-[10px] mb-[10px] border border-white/[0.12] bg-black/20 text-white text-sm"
+                className="text-input mb-[10px] text-sm"
               />
               <p className="m-0 mb-[8px] text-[13px] font-semibold">Специализация (необязательно):</p>
               <div className="flex flex-col gap-[6px] mb-[10px]">
-                {SPECIALTIES.map(s => (
+                {CLAN_SPECIALTIES.map(s => (
                   <button
                     key={s.id}
                     onClick={() => setNewSpec(prev => prev === s.id ? null : s.id)}
                     className="flex items-center gap-3 px-3 py-[10px] rounded-[10px] border cursor-pointer text-left"
                     style={{
-                      background: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.15)' : 'rgba(255,255,255,0.05)',
-                      borderColor: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.5)' : 'rgba(255,255,255,0.1)',
+                      background: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.15)' : 'var(--surface-subtle)',
+                      borderColor: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.5)' : 'var(--surface-overlay-border)',
                     }}
                   >
                     <div className="flex-1">
@@ -158,7 +152,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
               <button
                 onClick={() => void handleCreate()}
                 disabled={creating || newName.trim().length < 3}
-                className="w-full py-[10px] rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-white font-bold text-sm disabled:opacity-60"
+                className="w-full py-[10px] rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-sm disabled:opacity-60"
               >
                 {creating ? 'Создаём...' : 'Создать'}
               </button>
@@ -178,7 +172,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                     <p className="m-0 font-bold truncate">🏰 «{clan.name}»</p>
                     <p className="mt-[2px] mb-0 text-xs text-tg-hint">
                       Ур. {clan.level} · {clan.member_count} уч. · {clan.owner_nickname}
-                      {clan.specialty ? ` · ${clan.specialty}` : ''}
+                      {clan.specialty ? ` · ${getClanSpecialtyLabel(clan.specialty)}` : ''}
                     </p>
                   </div>
                   {!gs.clan && (

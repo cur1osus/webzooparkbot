@@ -156,7 +156,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
       {/* Toast */}
       {toast && (
         <div
-          className="fixed top-[60px] left-1/2 z-50 px-4 py-3 rounded-xl text-sm font-semibold text-white shadow-lg"
+          className="fixed top-[60px] left-1/2 z-50 px-4 py-3 rounded-xl text-sm font-semibold text-[var(--tg-theme-button-text-color)] shadow-lg"
           style={{
             transform: 'translateX(-50%)',
             background: toast.ok ? 'rgba(var(--c-green-rgb),0.95)' : 'rgba(var(--c-red-rgb),0.95)',
@@ -432,7 +432,7 @@ export function ShopPage({
                   className="w-full py-[10px] rounded-[10px] border-none font-bold text-sm disabled:opacity-60 cursor-pointer"
                   style={{
                     background: affordable ? 'var(--c-blue)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent)',
-                    color: affordable ? '#fff' : 'var(--tg-theme-hint-color)',
+                    color: affordable ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
                   }}
                 >
                   {affordable ? `Купить — ₽ ${fmt(av.price_rub)}` : 'Недостаточно средств'}
@@ -456,10 +456,10 @@ export function ShopPage({
             </p>
 
             <div className="flex gap-2 mb-3">
-              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-[var(--c-green)] text-white">
+              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)]">
                 Дешевле
               </button>
-              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-white/[0.08] text-tg-hint">
+              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold text-tg-hint" style={{ background: 'var(--surface-subtle)' }}>
                 Дороже
               </button>
             </div>

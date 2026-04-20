@@ -4,7 +4,7 @@ import { TabBar, type RootTab } from './components/TabBar';
 import { PageSkeleton, Skeleton } from './components/Skeleton';
 import { apiRegister, isDevMode, setDevUserId, clearDevUserId, apiBuyAviary } from './api';
 import { useLiveGameState } from './hooks/useLiveGameState';
-import { inTma, hapticImpact, hapticNotification } from './tma';
+import { inTma, hapticImpact, hapticNotification, readyTma } from './tma';
 import type { GameState } from './types';
 
 const AUTOSAVE_MS = 15_000;
@@ -43,7 +43,7 @@ function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) {
 
   return (
     <div className="min-h-dvh flex items-center px-6 max-w-[480px] mx-auto">
-      <div className="w-full bg-tg-secondary rounded-[20px] p-6 border border-white/[0.06]">
+      <div className="w-full bg-tg-secondary rounded-[20px] p-6 border" style={{ borderColor: 'var(--surface-overlay-border)' }}>
         <div className="text-center mb-6">
           <div className="text-[56px] mb-2">🦁</div>
           <p className="m-0 text-[22px] font-extrabold">ZooPark</p>
@@ -68,13 +68,13 @@ function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) {
           <button
             onClick={() => void handleRegister()}
             disabled={loading || nickname.trim().length < 3}
-            className="py-[14px] rounded-xl border-none bg-tg-button text-white font-extrabold text-base disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="py-[14px] rounded-xl border-none bg-tg-button text-[var(--tg-theme-button-text-color)] font-extrabold text-base disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {loading ? 'Создаём профиль...' : 'Начать игру 🚀'}
           </button>
         </div>
 
-        <div className="mt-5 p-[14px] bg-white/[0.04] rounded-xl">
+        <div className="surface-subtle mt-5 p-[14px] rounded-xl">
           <p className="m-0 mb-[6px] text-[13px] font-semibold">Как играть:</p>
           {[
             '🏗️ Купи вольер → размести животных',
@@ -95,24 +95,25 @@ function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) {
 function DevBar({ onLogin }: { onLogin: (id: string) => void }) {
   const [val, setVal] = useState('');
   return (
-    <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[200] bg-[rgba(15,17,26,0.97)] border-b border-white/[0.08] px-3 py-2 flex gap-2 items-center">
+    <div className="surface-overlay fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[200] px-3 py-2 flex gap-2 items-center backdrop-blur-xl">
       <input
         value={val}
         onChange={e => setVal(e.target.value)}
         placeholder="Dev user ID"
         onKeyDown={e => e.key === 'Enter' && val.trim() && onLogin(val.trim())}
-        className="flex-1 px-3 py-[7px] rounded-lg border border-white/[0.12] bg-black/30 text-white text-[13px]"
+        className="text-input flex-1 min-h-0 py-[7px] text-[13px]"
       />
       <button
         onClick={() => val.trim() && onLogin(val.trim())}
-        className="px-[14px] py-[7px] rounded-lg bg-[var(--c-blue)] text-white text-[13px] border-none cursor-pointer"
+        className="px-[14px] py-[7px] rounded-lg bg-[var(--c-blue)] text-[var(--tg-theme-button-text-color)] text-[13px] border-none cursor-pointer"
       >
         Войти
       </button>
       {isDevMode() && (
         <button
           onClick={() => { clearDevUserId(); window.location.reload(); }}
-          className="px-[10px] py-[7px] rounded-lg border border-white/[0.12] bg-transparent text-tg-hint text-[13px] cursor-pointer"
+          className="px-[10px] py-[7px] rounded-lg border bg-transparent text-tg-hint text-[13px] cursor-pointer"
+          style={{ borderColor: 'var(--surface-overlay-border)' }}
         >
           ✕
         </button>
@@ -129,12 +130,13 @@ function Toast({ msg }: { msg: { kind: 'ok' | 'err'; text: string } | null }) {
     <div
       className={[
         'fixed bottom-20 left-1/2 -translate-x-1/2 z-[500] pointer-events-none',
-        'rounded-[14px] px-[18px] py-3 text-sm font-semibold text-white',
-        'shadow-[0_4px_24px_rgba(0,0,0,0.4)] border border-white/[0.08]',
+        'rounded-[14px] px-[18px] py-3 text-sm font-semibold text-[var(--tg-theme-button-text-color)]',
+        'shadow-[0_4px_24px_rgba(0,0,0,0.4)] border',
         'max-w-[440px] text-center',
         'animate-slide-up',
         msg.kind === 'ok' ? 'bg-[rgba(46,117,76,0.95)]' : 'bg-[rgba(139,41,62,0.95)]',
       ].join(' ')}
+      style={{ borderColor: 'var(--surface-overlay-border)' }}
     >
       {msg.text}
     </div>
@@ -146,7 +148,7 @@ function Toast({ msg }: { msg: { kind: 'ok' | 'err'; text: string } | null }) {
 function ComingSoonScreen() {
   return (
     <div className="min-h-dvh flex items-center justify-center px-6 max-w-[480px] mx-auto">
-      <div className="w-full text-center bg-tg-secondary rounded-[20px] py-8 px-6 border border-white/[0.06]">
+      <div className="w-full text-center bg-tg-secondary rounded-[20px] py-8 px-6 border" style={{ borderColor: 'var(--surface-overlay-border)' }}>
         <div className="text-[64px] mb-4">🚧</div>
         <p className="m-0 mb-2 text-[22px] font-extrabold">Игра в разработке</p>
         <p className="m-0 text-sm text-tg-hint leading-relaxed">
@@ -199,6 +201,11 @@ export default function App() {
 
   // Initial load
   useEffect(() => { void loadFromServer(); }, [loadFromServer]);
+
+  // Tell Telegram to hide the launch placeholder once the root tree is mounted.
+  useEffect(() => {
+    readyTma();
+  }, []);
 
   // Autosave every 15s
   useEffect(() => {
@@ -306,12 +313,12 @@ export default function App() {
       {/* Error */}
       {error && !state && errorStatus !== 403 && (
         <div className={`max-w-[480px] mx-auto p-6 ${!inTma ? 'pt-[70px]' : ''}`}>
-          <div className="bg-tg-secondary rounded-2xl p-5 border border-[rgba(255,122,146,0.3)]">
+          <div className="bg-tg-secondary rounded-2xl p-5 border border-[rgba(var(--c-red-rgb),0.28)]">
             <p className="m-0 mb-[6px] text-lg font-bold">⚠️ Ошибка загрузки</p>
             <p className="m-0 mb-[14px] text-tg-hint text-[13px]">{error}</p>
             <button
               onClick={reloadFromServer}
-              className="w-full py-3 rounded-xl border-none bg-[var(--c-blue)] text-white cursor-pointer font-bold"
+              className="w-full py-3 rounded-xl border-none bg-[var(--c-blue)] text-[var(--tg-theme-button-text-color)] cursor-pointer font-bold"
             >
               Повторить
             </button>
@@ -346,7 +353,7 @@ export default function App() {
                 <LabPage gs={displayState} />
               )}
               {tab === 'games' && (
-                <GamesPage gs={displayState} />
+                <GamesPage gs={displayState} onRefresh={reloadFromServer} />
               )}
               {tab === 'more' && (
                 <MorePage gs={displayState} onRefresh={reloadFromServer} />

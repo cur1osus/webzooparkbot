@@ -3,6 +3,7 @@ import { fmt, fmtMin, formatDateShort } from '../utils/format';
 import type { GameState, ForgeItem, ForgeSet } from '../types';
 import { ANIMALS } from '../data/animals';
 import { ExpeditionOverviewCard, ExpeditionPage } from './ExpeditionPage';
+import { getClanSpecialtyLabel } from '../utils/clan';
 
 type ZooTab = 'overview' | 'forge' | 'aviaries' | 'medals';
 
@@ -54,7 +55,7 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
               <span className="text-[13px] text-[var(--c-green)] font-bold">{val}</span>
             </div>
           ))}
-        <div className="mt-2 pt-2 border-t border-white/[0.08]">
+        <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--surface-overlay-border)' }}>
           <span className="text-[13px] text-tg-hint">Активных предметов </span>
           <span className="text-[13px] font-bold">{activeItems.length} / 3</span>
         </div>
@@ -100,10 +101,10 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
 }) {
   return (
     <div className="page-content-safe">
-      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b border-white/[0.07]" style={{ top: 0 }}>
-        <button onClick={onBack} className="bg-transparent border-none text-white text-[22px]">✕</button>
+      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b" style={{ top: 0, borderColor: 'var(--surface-overlay-border)' }}>
+        <button onClick={onBack} className="bg-transparent border-none text-tg-text text-[22px]">✕</button>
         <span className="font-bold text-[15px]">Выбрать предметы</span>
-        <button onClick={onApply} className="px-[14px] py-[7px] rounded-lg border-none bg-[var(--c-green)] text-white font-bold text-[13px]">Применить ✓</button>
+        <button onClick={onApply} className="px-[14px] py-[7px] rounded-lg border-none bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-[13px]">Применить ✓</button>
       </div>
       <div className="px-[14px] pt-3 flex flex-col gap-[10px]">
         {items.map(item => {
@@ -137,8 +138,8 @@ function ItemDetailPage({ item, onActivate, onSell, onBack }: {
 }) {
   return (
     <div className="page-content-safe">
-      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b border-white/[0.07]" style={{ top: 0 }}>
-        <button onClick={onBack} className="bg-transparent border-none text-white text-[22px]">✕</button>
+      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b" style={{ top: 0, borderColor: 'var(--surface-overlay-border)' }}>
+        <button onClick={onBack} className="bg-transparent border-none text-tg-text text-[22px]">✕</button>
         <span className="font-bold text-[15px]">
           {item.name} · <span style={{ color: RARITY_COLOR[item.rarity] }}>{RARITY_LABEL[item.rarity] ?? item.rarity}</span>
         </span>
@@ -156,7 +157,7 @@ function ItemDetailPage({ item, onActivate, onSell, onBack }: {
         </div>
         <div className="flex gap-2">
           <button onClick={onActivate} className="flex-1 py-3 rounded-[10px] border-none font-bold text-sm"
-            style={{ background: item.is_active ? 'rgba(255,255,255,0.08)' : 'rgba(var(--c-green-rgb),0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
+            style={{ background: item.is_active ? 'var(--surface-subtle)' : 'rgba(var(--c-green-rgb),0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
             {item.is_active ? 'Деактивировать' : 'Активировать'}
           </button>
           <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(var(--c-orange-rgb),0.15)] text-[var(--c-orange)] font-bold text-sm">Продать $80k</button>
@@ -280,7 +281,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             >
               <span className="text-[18px] leading-none">{emoji}</span>
               {badgeVal != null && (
-                <span className="absolute top-[4px] right-[4px] bg-[var(--c-red)] text-white text-[9px] font-extrabold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-[3px]"
+                <span className="absolute top-[4px] right-[4px] bg-[var(--c-red)] text-[var(--tg-theme-button-text-color)] text-[9px] font-extrabold rounded-full min-w-[15px] h-[15px] flex items-center justify-center px-[3px]"
                   style={{ animation: 'badge-pop 0.3s ease' }}>
                   {badgeVal}
                 </span>
@@ -317,7 +318,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
               <div className="flex-1">
                 <p className="m-0 font-bold text-sm">«{gs.clan.name}»</p>
                 <p className="mt-[2px] mb-0 text-xs text-tg-hint">
-                  Ур. {gs.clan.level} · {gs.clan.member_count} уч.{gs.clan.specialty ? ` · ${gs.clan.specialty}` : ''}
+                  Ур. {gs.clan.level} · {gs.clan.member_count} уч.{gs.clan.specialty ? ` · ${getClanSpecialtyLabel(gs.clan.specialty)}` : ''}
                 </p>
               </div>
               <span className="text-base text-tg-hint">›</span>

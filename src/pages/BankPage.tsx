@@ -105,7 +105,8 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
               <button
                 key={v}
                 onClick={() => setAmount(String(v))}
-                className="px-3 py-2 rounded-lg border border-white/[0.12] bg-transparent text-white text-[13px] font-medium cursor-pointer"
+                className="px-3 py-2 rounded-lg border bg-transparent text-tg-text text-[13px] font-medium cursor-pointer"
+                style={{ borderColor: 'var(--surface-overlay-border)' }}
               >
                 ₽ {fmt(v)}
               </button>
@@ -126,7 +127,7 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder="Сумма в рублях"
-            className="w-full px-3 py-[10px] rounded-[10px] border border-white/[0.12] bg-black/20 text-white text-sm"
+            className="text-input text-sm"
           />
 
           {previewAmount != null && (
@@ -146,14 +147,15 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             <button
               onClick={() => void handleExchange(true)}
               disabled={exchLoading || gs.rub <= 0}
-              className="flex-1 py-3 rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-white font-bold text-sm disabled:opacity-60"
+              className="flex-1 py-3 rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-sm disabled:opacity-60"
             >
               {exchLoading ? 'Обмен...' : 'Обменять всё'}
             </button>
             <button
               onClick={() => void handleExchange(false)}
               disabled={exchLoading || !amount || parseFloat(amount) < minExchange}
-              className="flex-1 py-3 rounded-[10px] border border-white/[0.12] bg-transparent text-tg-hint font-bold text-sm disabled:opacity-40 cursor-pointer"
+              className="flex-1 py-3 rounded-[10px] border bg-transparent text-tg-hint font-bold text-sm disabled:opacity-40 cursor-pointer"
+              style={{ borderColor: 'var(--surface-overlay-border)' }}
             >
               Обменять
             </button>

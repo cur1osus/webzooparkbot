@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { GameState, ReferralResponse } from '../../types';
 import { apiGetReferrals, apiConfig } from '../../api';
+import { copyTmaText, shareTmaUrl } from '../../tma';
 import { fmt } from '../../utils/format';
 
 export function ReferralPage({ gs: _gs }: { gs: GameState }) {
@@ -22,25 +23,17 @@ export function ReferralPage({ gs: _gs }: { gs: GameState }) {
 
   const refLink = data ? `https://t.me/${botUsername}?start=${data.code}` : '';
 
-  const copyLink = () => {
+  const copyLink = async () => {
     if (!refLink) return;
-    navigator.clipboard.writeText(refLink).then(() => {
+    if (await copyTmaText(refLink)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
+    }
   };
 
   const shareLink = () => {
     if (!refLink) return;
-    const text = encodeURIComponent('Играй в ZooPark — строй зоопарк, зарабатывай!');
-    const url = encodeURIComponent(refLink);
-    const tg = (window as { Telegram?: { WebApp?: { openLink?: (url: string) => void } } }).Telegram?.WebApp;
-    const shareUrl = `https://t.me/share/url?url=${url}&text=${text}`;
-    if (tg?.openLink) {
-      tg.openLink(shareUrl);
-    } else {
-      window.open(shareUrl, '_blank');
-    }
+    void shareTmaUrl(refLink, 'Играй в ZooPark — строй зоопарк, зарабатывай!');
   };
 
   return (
@@ -55,20 +48,20 @@ export function ReferralPage({ gs: _gs }: { gs: GameState }) {
             <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
               За каждого приглашённого — <strong className="text-[var(--c-gold)]">$ {fmt(data.reward_usd_per_ref)}</strong>
             </p>
-            <div className="px-3 py-[10px] rounded-[10px] mb-[10px] bg-black/20 border border-white/[0.1] text-[13px] text-tg-hint break-all select-all">
+            <div className="surface-subtle px-3 py-[10px] rounded-[10px] mb-[10px] text-[13px] text-tg-hint break-all select-all">
               {refLink}
             </div>
             <div className="flex gap-2">
               <button
-                onClick={copyLink}
-                className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-white transition-all"
+                onClick={() => void copyLink()}
+                className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-[var(--tg-theme-button-text-color)] transition-all"
                 style={{ background: copied ? 'var(--c-green)' : 'var(--c-blue)' }}
               >
                 {copied ? '✅ Скопировано' : '📋 Копировать'}
               </button>
               <button
                 onClick={shareLink}
-                className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-white"
+                className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm"
                 style={{ background: 'rgba(var(--c-blue-rgb),0.25)', color: 'var(--c-blue)' }}
               >
                 🔗 Поделиться

@@ -34,6 +34,7 @@ import type {
   TopResponse,
   TransferOut,
 } from './types';
+import { getRawTelegramInitData } from './tmaEnv';
 
 const API = '/api';
 const DEV_KEY = 'dev_user_id';
@@ -64,12 +65,7 @@ export function clearDevUserId() {
 // ─── Headers ──────────────────────────────────────────────────────────────────
 
 export function getHeaders(): HeadersInit {
-  const initData = (() => {
-    try {
-      return (window as { Telegram?: { WebApp?: { initData?: string } } })
-        .Telegram?.WebApp?.initData ?? '';
-    } catch { return ''; }
-  })();
+  const initData = getRawTelegramInitData() ?? '';
 
   if (initData) {
     return { 'Content-Type': 'application/json', 'X-Init-Data': initData };

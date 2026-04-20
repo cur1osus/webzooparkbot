@@ -134,13 +134,11 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-end justify-center"
-      style={{ background: 'rgba(0,0,0,0.6)' }}
+      className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[70vh] overflow-y-auto"
-        style={{ background: 'var(--tg-theme-bg-color)', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[70vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -371,7 +369,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
                 onClick={() => void handleBuy()}
                 disabled={!selHabitat || buying || (info.next_price > 0 && gs.rub < info.next_price)}
                 className="w-full py-[11px] rounded-xl border-none font-extrabold text-[13px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: '#fff' }}
+                style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: 'var(--tg-theme-button-text-color)' }}
               >
                 {buying ? '...' : selHabitat ? `Открыть ${HABITAT_INFO[selHabitat].name}` : 'Выбери среду обитания'}
               </button>

@@ -2,9 +2,20 @@ import { useEffect, useState } from 'react';
 import { fmt } from '../utils/format';
 import type { GameState, MpGame, SoloStats } from '../types';
 import { GAMES } from '../data/games';
-import { apiGetOpenGames, apiGetSoloStats } from '../api';
+import {
+  apiCocktailGuess,
+  apiCreateMpGame,
+  apiGetOpenGames,
+  apiGetSoloStats,
+  apiJoinMpGame,
+  apiStartSoloGame,
+} from '../api';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail';
+type BetAmount = 100 | 1_000 | 10_000;
+type CocktailClueStatus = 'correct' | 'present' | 'absent';
+
+const BET_AMOUNTS: BetAmount[] = [100, 1_000, 10_000];
 
 const FRUITS = ['🍓', '🫐', '🍏', '🍐', '🍇', '🍒'];
 
@@ -15,24 +26,58 @@ const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = 
   football: { from: 'var(--c-gold)', to: 'var(--c-amber)', glow: 'rgba(var(--c-gold-rgb),0.35)' },
 };
 
+function getGameDef(gameType: string) {
+  return GAMES.find((game) => game.id === gameType);
+}
+
 /* ──────────────────────────── COCKTAIL ──────────────────────────────── */
-function CocktailTab({ gs: _gs }: { gs: GameState }) {
+function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
   const [slots, setSlots] = useState<string[]>([]);
-  const [attempt, setAttempt] = useState(1);
   const [attemptsLeft, setAttemptsLeft] = useState(10);
+  const [guessing, setGuessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ won: boolean; message: string } | null>(null);
+  const [history, setHistory] = useState<Array<{ fruits: string[]; clues: Array<{ pos: number; status: CocktailClueStatus }> }>>([]);
+
+  const gameFinished = attemptsLeft <= 0 || Boolean(result?.won);
 
   const addFruit = (fruit: string) => {
-    if (slots.length < 4) setSlots(s => [...s, fruit]);
+    if (slots.length < 4 && !gameFinished && !guessing) setSlots(s => [...s, fruit]);
   };
-  const removeAtIdx = (i: number) => setSlots(s => s.filter((_, idx) => idx !== i));
-  const clear = () => setSlots([]);
+  const removeAtIdx = (i: number) => {
+    if (guessing || gameFinished) return;
+    setSlots(s => s.filter((_, idx) => idx !== i));
+  };
+  const clear = () => {
+    if (guessing || gameFinished) return;
+    setSlots([]);
+  };
 
   const guess = async () => {
-    if (slots.length !== 4) return;
-    setAttempt(a => a + 1);
-    setAttemptsLeft(a => Math.max(0, a - 1));
-    void setResult;
+    if (slots.length !== 4 || guessing || gameFinished) return;
+    setGuessing(true);
+    setError(null);
+
+    try {
+      const response = await apiCocktailGuess(slots);
+      setAttemptsLeft(response.attempts_left);
+      setHistory((current) => [...current, { fruits: [...slots], clues: response.clues }]);
+
+      if (response.won) {
+        setResult({ won: true, message: `Рецепт угадан. Награда: ${response.reward_paw ?? 0} 🐾` });
+        onRefresh();
+      } else if (response.attempts_left === 0) {
+        setResult({ won: false, message: 'Попытки закончились. Завтра будет новый рецепт.' });
+      } else {
+        setResult({ won: false, message: 'Есть зацепки. Используй подсказки ниже и попробуй ещё раз.' });
+      }
+
+      setSlots([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка игры');
+    } finally {
+      setGuessing(false);
+    }
   };
 
   return (
@@ -68,7 +113,7 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
           />
         </div>
         <span className="text-[13px] font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          {attempt}/10
+          {10 - attemptsLeft}/10
         </span>
       </div>
 
@@ -82,8 +127,9 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
             style={{
               background: slots[i] ? 'rgba(var(--c-blue-rgb),0.12)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
               border: slots[i] ? '1px solid rgba(var(--c-blue-rgb),0.4)' : '1.5px dashed color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent)',
-              cursor: slots[i] ? 'pointer' : 'default',
+              cursor: slots[i] && !guessing && !gameFinished ? 'pointer' : 'default',
               boxShadow: slots[i] ? '0 0 12px rgba(var(--c-blue-rgb),0.2)' : 'none',
+              opacity: guessing || gameFinished ? 0.75 : 1,
             }}
           >
             {slots[i] ?? <span style={{ fontSize: 18, color: 'var(--tg-theme-hint-color)' }}>?</span>}
@@ -98,14 +144,16 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
       {/* Fruit picker */}
       <div className="flex gap-3 justify-center py-1">
         {FRUITS.map(f => (
-          <span
+          <button
             key={f}
             onClick={() => addFruit(f)}
-            className="text-[32px] cursor-pointer select-none transition-transform duration-100 active:scale-90"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}
+            type="button"
+            disabled={gameFinished || guessing}
+            className="text-[32px] cursor-pointer select-none transition-transform duration-100 active:scale-90 border-none bg-transparent p-0"
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))', opacity: gameFinished ? 0.4 : 1 }}
           >
             {f}
-          </span>
+          </button>
         ))}
       </div>
 
@@ -113,6 +161,7 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
       <div className="flex gap-2">
         <button
           onClick={clear}
+          disabled={guessing || gameFinished}
           className="flex-1 py-[13px] rounded-[14px] border-none font-bold text-sm"
           style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)', color: 'var(--tg-theme-text-color)' }}
         >
@@ -120,17 +169,17 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
         </button>
         <button
           onClick={() => void guess()}
-          disabled={slots.length !== 4}
+          disabled={slots.length !== 4 || guessing || gameFinished}
           className="flex-[2] py-[13px] rounded-[14px] border-none font-extrabold text-sm"
           style={{
-            background: slots.length === 4
+            background: slots.length === 4 && !guessing && !gameFinished
               ? 'linear-gradient(135deg, var(--c-blue), #0066dd)'
               : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
-            color: slots.length === 4 ? '#fff' : 'var(--tg-theme-hint-color)',
-            boxShadow: slots.length === 4 ? '0 4px 16px rgba(var(--c-blue-rgb),0.35)' : 'none',
+            color: slots.length === 4 && !guessing && !gameFinished ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
+            boxShadow: slots.length === 4 && !guessing && !gameFinished ? '0 4px 16px rgba(var(--c-blue-rgb),0.35)' : 'none',
           }}
         >
-          Угадать! 🔮
+          {guessing ? 'Проверяем...' : gameFinished ? 'Игра завершена' : 'Угадать! 🔮'}
         </button>
       </div>
 
@@ -159,6 +208,52 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
         </div>
       )}
 
+      {error && (
+        <div className="rounded-2xl p-4" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>
+          <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
+        </div>
+      )}
+
+      {gameFinished && !result?.won && (
+        <button
+          type="button"
+          onClick={() => {
+            setSlots([]);
+            setAttemptsLeft(10);
+            setHistory([]);
+            setResult(null);
+            setError(null);
+          }}
+          className="py-[13px] rounded-[14px] border-none font-bold text-sm"
+          style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-text-color)' }}
+        >
+          Начать заново
+        </button>
+      )}
+
+      {history.length > 0 && (
+        <div className="card flex flex-col gap-2">
+          <p className="m-0 font-bold text-[13px]">История попыток</p>
+          {history.slice().reverse().map((entry, index) => (
+            <div key={`${entry.fruits.join('')}-${index}`} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 surface-subtle">
+              <div className="flex gap-1 text-[20px] shrink-0">
+                {entry.fruits.map((fruit, i) => <span key={`${fruit}-${i}`}>{fruit}</span>)}
+              </div>
+              <div className="flex gap-1 shrink-0">
+                {entry.clues.map((clue) => {
+                  const color = clue.status === 'correct'
+                    ? 'var(--c-green)'
+                    : clue.status === 'present'
+                      ? 'var(--c-blue)'
+                      : 'var(--tg-theme-hint-color)';
+                  return <span key={clue.pos} className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />;
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* How to play */}
       <div className="card">
         <p className="m-0 mb-[6px] font-bold text-[13px]">Как играть:</p>
@@ -172,26 +267,118 @@ function CocktailTab({ gs: _gs }: { gs: GameState }) {
 }
 
 /* ──────────────────────────── MULTI ────────────────────────────────── */
-function MultiTab({ gs: _gs }: { gs: GameState }) {
+function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [games, setGames] = useState<MpGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<string>('dice');
+  const [bet, setBet] = useState<BetAmount>(100);
+  const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadGames = () => {
+    setLoading(true);
     apiGetOpenGames()
       .then(r => setGames(r.games))
       .catch(e => setError((e as Error).message ?? 'Ошибка загрузки игр'))
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(loadGames, []);
+
+  const createGame = async () => {
+    if (busy || gs.rub < bet) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await apiCreateMpGame(selectedGame, bet);
+      setMessage('Игра создана. Ждём второго игрока.');
+      onRefresh();
+      loadGames();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка создания игры');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const joinGame = async (gameId: number) => {
+    if (busy) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await apiJoinMpGame(gameId);
+      setMessage('Ты присоединился к игре.');
+      onRefresh();
+      loadGames();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка входа в игру');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      <button
-        className="py-[15px] rounded-2xl border-none font-extrabold text-base"
-        style={{ background: 'linear-gradient(135deg, var(--c-green), #30b34e)', color: '#fff', boxShadow: '0 4px 16px rgba(var(--c-green-rgb),0.3)' }}
-      >
-        + Создать игру
-      </button>
+      <div className="card flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="m-0 font-bold text-[15px]">Создать игру</p>
+          <span className="text-[12px] text-tg-hint">Баланс: ₽{fmt(gs.rub)}</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {GAMES.map((game) => {
+            const active = game.id === selectedGame;
+            return (
+              <button
+                key={game.id}
+                onClick={() => setSelectedGame(game.id)}
+                className="px-3 py-2 rounded-xl border-none text-left"
+                style={{
+                  background: active ? 'rgba(var(--c-blue-rgb),0.15)' : 'var(--surface-subtle)',
+                  color: active ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-hint-color)',
+                  border: `1px solid ${active ? 'rgba(var(--c-blue-rgb),0.35)' : 'var(--surface-overlay-border)'}`,
+                }}
+              >
+                <span className="block font-semibold text-[13px]">{game.emoji} {game.name}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-2">
+          {BET_AMOUNTS.map((amount) => {
+            const active = amount === bet;
+            return (
+              <button
+                key={amount}
+                onClick={() => setBet(amount)}
+                className="flex-1 py-2 rounded-xl border-none font-bold text-[13px]"
+                style={{
+                  background: active ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
+                  color: active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
+                  border: `1px solid ${active ? 'rgba(var(--c-green-rgb),0.3)' : 'var(--surface-overlay-border)'}`,
+                }}
+              >
+                ₽{fmt(amount)}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => void createGame()}
+          disabled={busy || gs.rub < bet}
+          className="py-[15px] rounded-2xl border-none font-extrabold text-base disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg, var(--c-green), #30b34e)', color: 'var(--tg-theme-button-text-color)', boxShadow: '0 4px 16px rgba(var(--c-green-rgb),0.3)' }}
+        >
+          {busy ? 'Создаём...' : '+ Создать игру'}
+        </button>
+      </div>
+
+      {message && <div className="card" style={{ background: 'rgba(var(--c-green-rgb),0.1)', borderColor: 'rgba(var(--c-green-rgb),0.25)' }}><p className="m-0 text-[13px]" style={{ color: 'var(--c-green)' }}>{message}</p></div>}
 
       {loading && (
         <div className="flex justify-center py-6">
@@ -212,37 +399,45 @@ function MultiTab({ gs: _gs }: { gs: GameState }) {
         </div>
       )}
 
-      {games.map(g => (
+      {games.map(g => {
+        const gameDef = getGameDef(g.game_type);
+        return (
         <div key={g.id} className="card flex items-center gap-3">
           <div
             className="w-10 h-10 rounded-xl grid place-items-center text-xl shrink-0"
             style={{ background: 'rgba(var(--c-blue-rgb),0.15)', border: '1px solid rgba(var(--c-blue-rgb),0.25)' }}
           >
-            🎲
+            {gameDef?.emoji ?? '🎲'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="m-0 font-bold text-sm truncate">{g.game_type}</p>
+            <p className="m-0 font-bold text-sm truncate">{gameDef ? `${gameDef.emoji} ${gameDef.name}` : g.game_type}</p>
             <p className="mt-[2px] mb-0 text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
               {g.creator_nickname} · ставка ₽{fmt(g.bet_rub)}
             </p>
           </div>
           <button
+            onClick={() => void joinGame(g.id)}
+            disabled={busy}
             className="px-4 py-2 rounded-xl border-none font-bold text-[13px] shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: '#fff', boxShadow: '0 2px 8px rgba(var(--c-blue-rgb),0.3)' }}
+            style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: 'var(--tg-theme-button-text-color)', boxShadow: '0 2px 8px rgba(var(--c-blue-rgb),0.3)' }}
           >
             Войти
           </button>
         </div>
-      ))}
+      )})}
     </div>
   );
 }
 
 /* ──────────────────────────── SOLO ─────────────────────────────────── */
-function SoloTab({ gs: _gs }: { gs: GameState }) {
+function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [selectedGame, setSelectedGame] = useState<string>('dice');
+  const [bet, setBet] = useState<BetAmount>(100);
   const [stats, setStats] = useState<SoloStats | null>(null);
   const [showStats, setShowStats] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [result, setResult] = useState<{ won: boolean; result: string; score: number; rub_delta: number; new_rub: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (showStats) {
@@ -253,6 +448,24 @@ function SoloTab({ gs: _gs }: { gs: GameState }) {
   const winRate = stats && stats.games_played > 0
     ? Math.round((stats.wins / stats.games_played) * 100)
     : 0;
+
+  const playSolo = async () => {
+    if (playing || gs.rub < bet) return;
+    setPlaying(true);
+    setError(null);
+    try {
+      const response = await apiStartSoloGame(selectedGame, bet);
+      setResult(response);
+      if (showStats) {
+        apiGetSoloStats().then(setStats).catch(() => {});
+      }
+      onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка запуска игры');
+    } finally {
+      setPlaying(false);
+    }
+  };
 
   return (
     <div className="p-[14px] flex flex-col gap-[10px]">
@@ -359,27 +572,66 @@ function SoloTab({ gs: _gs }: { gs: GameState }) {
         );
       })}
 
+      <div className="flex gap-2 mt-1">
+        {BET_AMOUNTS.map((amount) => {
+          const active = amount === bet;
+          return (
+            <button
+              key={amount}
+              onClick={() => setBet(amount)}
+              className="flex-1 py-2 rounded-xl border-none font-bold text-[13px]"
+              style={{
+                background: active ? 'rgba(var(--c-gold-rgb),0.18)' : 'var(--surface-subtle)',
+                color: active ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
+                border: `1px solid ${active ? 'rgba(var(--c-gold-rgb),0.3)' : 'var(--surface-overlay-border)'}`,
+              }}
+            >
+              ₽{fmt(amount)}
+            </button>
+          );
+        })}
+      </div>
+
       {selectedGame && (() => {
         const colors = GAME_COLORS[selectedGame] ?? GAME_COLORS.dice;
         return (
           <button
+            onClick={() => void playSolo()}
+            disabled={playing || gs.rub < bet}
             className="mt-1 py-[15px] rounded-2xl border-none font-extrabold text-[16px]"
             style={{
               background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
-              color: '#fff',
+              color: 'var(--tg-theme-button-text-color)',
               boxShadow: `0 6px 20px ${colors.glow}`,
+              opacity: playing || gs.rub < bet ? 0.6 : 1,
             }}
           >
-            Играть — ставка ₽{fmt(100)}
+            {playing ? 'Играем...' : `Играть — ставка ₽${fmt(bet)}`}
           </button>
         );
       })()}
+
+      {error && (
+        <div className="rounded-2xl p-4" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>
+          <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
+        </div>
+      )}
+
+      {result && (
+        <div className="card" style={{ background: result.won ? 'rgba(var(--c-green-rgb),0.1)' : 'rgba(var(--c-orange-rgb),0.1)', borderColor: result.won ? 'rgba(var(--c-green-rgb),0.25)' : 'rgba(var(--c-orange-rgb),0.25)' }}>
+          <p className="m-0 font-bold text-[15px]">{result.won ? 'Победа' : 'Поражение'}</p>
+          <p className="mt-1 mb-0 text-[13px] text-tg-hint">{result.result} · Счёт {result.score}</p>
+          <p className="mt-2 mb-0 text-[13px] font-semibold" style={{ color: result.won ? 'var(--c-green)' : 'var(--c-orange)' }}>
+            {result.rub_delta >= 0 ? '+' : ''}{fmt(result.rub_delta)} ₽
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ──────────────────────────── MAIN PAGE ────────────────────────────── */
-export function GamesPage({ gs }: { gs: GameState }) {
+export function GamesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [tab, setTab] = useState<GamesTab>('solo');
 
   const tabs: { id: GamesTab; emoji: string; label: string }[] = [
@@ -443,9 +695,9 @@ export function GamesPage({ gs }: { gs: GameState }) {
       </div>
 
       <div>
-        {tab === 'solo'     && <SoloTab gs={gs} />}
-        {tab === 'multi'    && <MultiTab gs={gs} />}
-        {tab === 'cocktail' && <CocktailTab gs={gs} />}
+        {tab === 'solo'     && <SoloTab gs={gs} onRefresh={onRefresh} />}
+        {tab === 'multi'    && <MultiTab gs={gs} onRefresh={onRefresh} />}
+        {tab === 'cocktail' && <CocktailTab onRefresh={onRefresh} />}
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ export function TopPage({ gs: _gs }: { gs: GameState }) {
           key={entry.tg_id}
           className="card flex items-center gap-3"
           style={{
-            border: entry.is_me ? '1px solid rgba(var(--c-blue-rgb),0.4)' : '1px solid rgba(255,255,255,0.06)',
+            border: entry.is_me ? '1px solid rgba(var(--c-blue-rgb),0.4)' : '1px solid var(--surface-overlay-border)',
             background: entry.is_me ? 'rgba(var(--c-blue-rgb),0.07)' : 'var(--tg-theme-secondary-bg-color)',
             padding: '10px 14px',
           }}
