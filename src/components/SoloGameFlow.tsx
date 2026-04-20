@@ -8,6 +8,14 @@ type SoloFlowScreen = 'setup' | 'match';
 
 const BET_OPTIONS: readonly BetAmount[] = [100, 1_000, 10_000];
 
+const GAME_POSTERS: Record<string, string> = {
+  basketball: '/telegram-dice/stills/basketball.png',
+  bowling: '/telegram-dice/stills/bowling.png',
+  darts: '/telegram-dice/stills/darts.png',
+  dice: '/telegram-dice/stills/dice.png',
+  football: '/telegram-dice/stills/football.png',
+};
+
 const GAME_ACCENTS: Record<string, { border: string; from: string; to: string; glow: string }> = {
   basketball: { border: 'rgba(var(--c-orange-rgb),0.25)', from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
   darts: { border: 'rgba(var(--c-orange-rgb),0.25)', from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
@@ -79,7 +87,23 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
           style={{ background: `radial-gradient(ellipse at 50% 0%, ${accents.glow} 0%, transparent 70%)` }}
         />
         <div className="relative">
-          <div className="text-[52px] mb-2">{game.emoji}</div>
+          <div className="mb-3 flex justify-center">
+            <div
+              className="w-[132px] h-[132px] rounded-2xl overflow-hidden"
+              style={{
+                background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
+                border: `1px solid ${accents.border}`,
+                boxShadow: `0 10px 30px ${accents.glow}`,
+              }}
+            >
+              <img
+                src={GAME_POSTERS[game.id]}
+                alt={game.name}
+                className="w-full h-full block"
+                style={{ objectFit: 'contain' }}
+              />
+            </div>
+          </div>
           <p className="m-0 mb-1 text-[18px] font-extrabold">{game.name}</p>
           <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             {game.description}
