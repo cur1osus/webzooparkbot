@@ -99,7 +99,6 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   async function handleMergeSelect(item: ForgeItem) {
     if (!mergeFirst) {
       setMergeFirst(item.id);
-      showToast(`Выбран «${item.name}». Теперь выбери второй предмет для слияния.`);
       return;
     }
     if (mergeFirst === item.id) {
