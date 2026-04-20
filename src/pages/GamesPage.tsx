@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fmt } from '../utils/format';
-import type { GameState, MpGame, SoloGameResult, SoloStats } from '../types';
+import type { GameState, MpGame, SoloStats } from '../types';
 import { GAMES } from '../data/games';
 import {
   apiCocktailGuess,
@@ -8,9 +8,8 @@ import {
   apiGetOpenGames,
   apiGetSoloStats,
   apiJoinMpGame,
-  apiStartSoloGame,
 } from '../api';
-import { BasketballSoloFlow } from '../components/BasketballSoloFlow';
+import { SoloGameFlow } from '../components/SoloGameFlow';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail';
 type BetAmount = 100 | 1_000 | 10_000;
@@ -439,14 +438,9 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
 /* ──────────────────────────── SOLO ─────────────────────────────────── */
 function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [selectedGame, setSelectedGame] = useState<string>('dice');
-  const [bet, setBet] = useState<BetAmount>(100);
   const [stats, setStats] = useState<SoloStats | null>(null);
   const [showStats, setShowStats] = useState(false);
-  const [basketballFlowOpen, setBasketballFlowOpen] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [result, setResult] = useState<SoloGameResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [activeGameId, setActiveGameId] = useState<string | null>(null);
 
   useEffect(() => {
     if (showStats) {
@@ -454,31 +448,17 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     }
   }, [showStats]);
 
-  useEffect(() => {
-    setResult(null);
-    setError(null);
-  }, [selectedGame]);
-
-  const openGame = (gameId: string) => {
-    if (gameId === 'basketball') {
-      setBasketballFlowOpen(true);
-      setResult(null);
-      setError(null);
-      return;
+  if (activeGameId) {
+    const activeGame = getGameDef(activeGameId);
+    if (!activeGame) {
+      return null;
     }
 
-    setBasketballFlowOpen(false);
-    setSelectedGame(gameId);
-  };
-
-  if (basketballFlowOpen) {
     return (
-      <BasketballSoloFlow
-        bet={bet}
-        betOptions={BET_AMOUNTS}
-        canStart={gs.rub >= bet}
-        onBetChange={(nextBet) => setBet(nextBet as BetAmount)}
-        onBack={() => setBasketballFlowOpen(false)}
+      <SoloGameFlow
+        game={activeGame}
+        availableRub={gs.rub}
+        onBack={() => setActiveGameId(null)}
         onRefresh={onRefresh}
       />
     );
@@ -487,25 +467,6 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const winRate = stats && stats.games_played > 0
     ? Math.round((stats.wins / stats.games_played) * 100)
     : 0;
-
-  const playSolo = async () => {
-    if (playing || gs.rub < bet) return;
-    setPlaying(true);
-    setError(null);
-    setResult(null);
-    try {
-      const response = await apiStartSoloGame(selectedGame, bet);
-      setResult(response);
-      if (showStats) {
-        apiGetSoloStats().then(setStats).catch(() => {});
-      }
-      onRefresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка запуска игры');
-    } finally {
-      setPlaying(false);
-    }
-  };
 
   return (
     <div className="p-[14px] flex flex-col gap-[10px]">
@@ -564,21 +525,16 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
       {/* Game list */}
       {GAMES.map(g => {
-        const isSelected = selectedGame === g.id;
         const colors = GAME_COLORS[g.id] ?? GAME_COLORS.dice;
         return (
           <div
             key={g.id}
-            onClick={() => openGame(g.id)}
+            onClick={() => setActiveGameId(g.id)}
             className="rounded-2xl p-[14px] flex items-center gap-[14px] cursor-pointer"
             style={{
-              background: isSelected
-                ? `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 10%, transparent), color-mix(in srgb, ${colors.to} 6%, transparent))`
-                : 'color-mix(in srgb, var(--tg-theme-hint-color) 7%, transparent)',
-              border: isSelected
-                ? `1.5px solid color-mix(in srgb, ${colors.from} 33%, transparent)`
-                : '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
-              boxShadow: isSelected ? `0 4px 20px ${colors.glow}` : 'none',
+              background: `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 10%, transparent), color-mix(in srgb, ${colors.to} 6%, transparent))`,
+              border: `1.5px solid color-mix(in srgb, ${colors.from} 22%, transparent)`,
+              boxShadow: `0 4px 20px ${colors.glow}`,
               transition: 'box-shadow 200ms, border 200ms',
             }}
           >
@@ -587,7 +543,7 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
               style={{
                 background: `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 15%, transparent), color-mix(in srgb, ${colors.to} 8%, transparent))`,
                 border: `1px solid color-mix(in srgb, ${colors.from} 19%, transparent)`,
-                boxShadow: isSelected ? `0 0 12px ${colors.glow}` : 'none',
+                boxShadow: `0 0 12px ${colors.glow}`,
               }}
             >
               {g.emoji}
@@ -597,76 +553,19 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
               <p className="mt-[3px] mb-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
                 {g.description}
               </p>
-              <p className="mt-[1px] mb-0 text-[11px]" style={{ color: isSelected ? colors.from : 'var(--tg-theme-hint-color)', opacity: 0.8 }}>
+              <p className="mt-[1px] mb-0 text-[11px]" style={{ color: colors.from, opacity: 0.8 }}>
                 {g.detail}
               </p>
             </div>
-            {isSelected && (
-              <div
-                className="w-6 h-6 rounded-full grid place-items-center shrink-0 text-[14px]"
-                style={{ background: `linear-gradient(135deg, ${colors.from}, ${colors.to})` }}
-              >
-                ✓
-              </div>
-            )}
+            <div
+              className="w-6 h-6 rounded-full grid place-items-center shrink-0 text-[14px]"
+              style={{ background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`, color: 'var(--tg-theme-button-text-color)' }}
+            >
+              →
+            </div>
           </div>
         );
       })}
-
-      <div className="flex gap-2 mt-1">
-        {BET_AMOUNTS.map((amount) => {
-          const active = amount === bet;
-          return (
-            <button
-              key={amount}
-              onClick={() => setBet(amount)}
-              className="flex-1 py-2 rounded-xl border-none font-bold text-[13px]"
-              style={{
-                background: active ? 'rgba(var(--c-gold-rgb),0.18)' : 'var(--surface-subtle)',
-                color: active ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
-                border: `1px solid ${active ? 'rgba(var(--c-gold-rgb),0.3)' : 'var(--surface-overlay-border)'}`,
-              }}
-            >
-              ₽{fmt(amount)}
-            </button>
-          );
-        })}
-      </div>
-
-      {(() => {
-        const colors = GAME_COLORS[selectedGame] ?? GAME_COLORS.dice;
-        return (
-          <button
-            onClick={() => void playSolo()}
-            disabled={playing || gs.rub < bet}
-            className="mt-1 py-[15px] rounded-2xl border-none font-extrabold text-[16px]"
-            style={{
-              background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
-              color: 'var(--tg-theme-button-text-color)',
-              boxShadow: `0 6px 20px ${colors.glow}`,
-              opacity: playing || gs.rub < bet ? 0.6 : 1,
-            }}
-          >
-            {playing ? 'Играем...' : `Играть — ставка ₽${fmt(bet)}`}
-          </button>
-        );
-      })()}
-
-      {error && (
-        <div className="rounded-2xl p-4" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>
-          <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
-        </div>
-      )}
-
-      {result && (
-        <div className="card" style={{ background: result.won ? 'rgba(var(--c-green-rgb),0.1)' : 'rgba(var(--c-orange-rgb),0.1)', borderColor: result.won ? 'rgba(var(--c-green-rgb),0.25)' : 'rgba(var(--c-orange-rgb),0.25)' }}>
-          <p className="m-0 font-bold text-[15px]">{result.won ? 'Победа' : 'Поражение'}</p>
-          <p className="mt-1 mb-0 text-[13px] text-tg-hint">{result.result} · Счёт {result.score}</p>
-          <p className="mt-2 mb-0 text-[13px] font-semibold" style={{ color: result.won ? 'var(--c-green)' : 'var(--c-orange)' }}>
-            {result.rub_delta >= 0 ? '+' : ''}{fmt(result.rub_delta)} ₽
-          </p>
-        </div>
-      )}
     </div>
   );
 }
