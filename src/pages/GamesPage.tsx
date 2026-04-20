@@ -32,7 +32,7 @@ function getGameDef(gameType: string) {
 
 /* ──────────────────────────── COCKTAIL ──────────────────────────────── */
 function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
-  const [slots, setSlots] = useState<string[]>([]);
+  const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null]);
   const [attemptsLeft, setAttemptsLeft] = useState(10);
   const [guessing, setGuessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,26 +42,33 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
   const gameFinished = attemptsLeft <= 0 || Boolean(result?.won);
 
   const addFruit = (fruit: string) => {
-    if (slots.length < 4 && !gameFinished && !guessing) setSlots(s => [...s, fruit]);
+    if (gameFinished || guessing) return;
+    setSlots(s => {
+      const idx = s.indexOf(null);
+      if (idx === -1) return s;
+      const next = [...s];
+      next[idx] = fruit;
+      return next;
+    });
   };
   const removeAtIdx = (i: number) => {
     if (guessing || gameFinished) return;
-    setSlots(s => s.filter((_, idx) => idx !== i));
+    setSlots(s => { const next = [...s]; next[i] = null; return next; });
   };
   const clear = () => {
     if (guessing || gameFinished) return;
-    setSlots([]);
+    setSlots([null, null, null, null]);
   };
 
   const guess = async () => {
-    if (slots.length !== 4 || guessing || gameFinished) return;
+    if (slots.some(s => s === null) || guessing || gameFinished) return;
     setGuessing(true);
     setError(null);
 
     try {
-      const response = await apiCocktailGuess(slots);
+      const response = await apiCocktailGuess(slots as string[]);
       setAttemptsLeft(response.attempts_left);
-      setHistory((current) => [...current, { fruits: [...slots], clues: response.clues }]);
+      setHistory((current) => [...current, { fruits: slots as string[], clues: response.clues }]);
 
       if (response.won) {
         setResult({ won: true, message: `Рецепт угадан. Награда: ${response.reward_paw ?? 0} 🐾` });
@@ -72,7 +79,7 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         setResult({ won: false, message: 'Есть зацепки. Используй подсказки ниже и попробуй ещё раз.' });
       }
 
-      setSlots([]);
+      setSlots([null, null, null, null]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка игры');
     } finally {
@@ -142,15 +149,22 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
       </p>
 
       {/* Fruit picker */}
-      <div className="flex gap-3 justify-center py-1">
+      <div className="flex gap-2 justify-center py-1">
         {FRUITS.map(f => (
           <button
             key={f}
             onClick={() => addFruit(f)}
             type="button"
             disabled={gameFinished || guessing}
-            className="text-[32px] cursor-pointer select-none transition-transform duration-100 active:scale-90 border-none bg-transparent p-0"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))', opacity: gameFinished ? 0.4 : 1 }}
+            className="text-[36px] cursor-pointer select-none transition-transform duration-100 active:scale-90 rounded-2xl"
+            style={{
+              border: '2px solid rgba(var(--c-teal-rgb), 0.4)',
+              background: 'rgba(var(--c-teal-rgb), 0.07)',
+              padding: '6px 8px',
+              lineHeight: 1,
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+              opacity: gameFinished || guessing ? 0.4 : 1,
+            }}
           >
             {f}
           </button>
@@ -169,14 +183,14 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         </button>
         <button
           onClick={() => void guess()}
-          disabled={slots.length !== 4 || guessing || gameFinished}
+          disabled={slots.some(s => s === null) || guessing || gameFinished}
           className="flex-[2] py-[13px] rounded-[14px] border-none font-extrabold text-sm"
           style={{
-            background: slots.length === 4 && !guessing && !gameFinished
+            background: slots.every(s => s !== null) && !guessing && !gameFinished
               ? 'linear-gradient(135deg, var(--c-blue), #0066dd)'
               : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
-            color: slots.length === 4 && !guessing && !gameFinished ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
-            boxShadow: slots.length === 4 && !guessing && !gameFinished ? '0 4px 16px rgba(var(--c-blue-rgb),0.35)' : 'none',
+            color: slots.every(s => s !== null) && !guessing && !gameFinished ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
+            boxShadow: slots.every(s => s !== null) && !guessing && !gameFinished ? '0 4px 16px rgba(var(--c-blue-rgb),0.35)' : 'none',
           }}
         >
           {guessing ? 'Проверяем...' : gameFinished ? 'Игра завершена' : 'Угадать! 🔮'}
@@ -218,7 +232,7 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         <button
           type="button"
           onClick={() => {
-            setSlots([]);
+            setSlots([null, null, null, null]);
             setAttemptsLeft(10);
             setHistory([]);
             setResult(null);
