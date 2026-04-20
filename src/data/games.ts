@@ -8,6 +8,13 @@ export interface GameDef {
 
 export const GAMES: GameDef[] = [
   {
+    id: 'basketball',
+    name: 'Баскетбол',
+    emoji: '🏀',
+    description: 'Серия бросков против соперника с анимацией Telegram.',
+    detail: '· 5 бросков за матч',
+  },
+  {
     id: 'darts',
     name: 'Дартс',
     emoji: '🎯',

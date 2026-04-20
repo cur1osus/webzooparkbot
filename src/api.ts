@@ -30,6 +30,7 @@ import type {
   ReferralResponse,
   RegisterResponse,
   SaveResponse,
+  SoloGameResult,
   SoloStats,
   TopResponse,
   TransferOut,
@@ -184,7 +185,7 @@ export const apiThrowMpGame = (game_id: number) =>
 // ─── Solo game ────────────────────────────────────────────────────────────────
 
 export const apiStartSoloGame = (game_type: string, bet_rub: number) =>
-  req<{ ok: boolean; result: string; score: number; won: boolean; rub_delta: number; new_rub: number }>
+  req<SoloGameResult>
   ('/start_solo_game', { method: 'POST', body: JSON.stringify({ game_type, bet_rub }) });
 export const apiGetSoloStats = () => req<SoloStats>('/get_solo_stats');
 

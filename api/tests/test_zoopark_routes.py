@@ -436,6 +436,23 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertEqual(result["game"]["status"], "finished")
         self.assertEqual(result["game"]["winner_nickname"], "host")
 
+    def test_start_solo_basketball_returns_history_and_refunds_draw(self) -> None:
+        module = importlib.import_module("api.app.zoopark.games")
+        db, cur = self._fake_db()
+
+        with patch.object(module, "get_db", return_value=db), \
+             patch.object(module, "get_user", return_value={"id": 11, "rub": 1000, "nickname": "neo"}), \
+             patch.object(module, "sync_passive_balance", return_value=({"id": 11, "rub": 1000, "nickname": "neo"}, 0, 0)), \
+             patch.object(module.random, "randint", side_effect=[5, 5, 0, 0, 4, 4, 1, 1, 3, 3]):
+            result = module.api_start_solo_game(77, module.SoloStartBody(game_type="basketball", bet_rub=100))
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["result"], "Счёт: 6 — 6")
+        self.assertEqual(result["rub_delta"], 0)
+        self.assertTrue(result["is_draw"])
+        self.assertEqual(len(result["history"]), 5)
+        self.assertEqual(result["history"][0], {"round": 1, "player_roll": 5, "ai_roll": 5})
+
     def test_get_expeditions_auto_resolves_expired_active_expedition(self) -> None:
         module = importlib.import_module("api.app.zoopark.progression")
         db, cur = self._fake_db()

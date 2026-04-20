@@ -322,6 +322,25 @@ export interface SoloStats {
   total_lost_rub: number;
 }
 
+export interface SoloBasketballThrow {
+  round: number;
+  player_roll: number;
+  ai_roll: number;
+}
+
+export interface SoloGameResult {
+  ok: boolean;
+  result: string;
+  score: number;
+  won: boolean;
+  rub_delta: number;
+  new_rub: number;
+  is_draw?: boolean;
+  player_score?: number;
+  ai_score?: number;
+  history?: SoloBasketballThrow[];
+}
+
 // ─── Register ─────────────────────────────────────────────────────────────────
 
 export interface RegisterResponse {
