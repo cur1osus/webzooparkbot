@@ -10,7 +10,7 @@ import {
   apiJoinMpGame,
   apiStartSoloGame,
 } from '../api';
-import { BasketballSoloPanel } from '../components/BasketballSoloPanel';
+import { BasketballSoloFlow } from '../components/BasketballSoloFlow';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail';
 type BetAmount = 100 | 1_000 | 10_000;
@@ -443,6 +443,7 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [bet, setBet] = useState<BetAmount>(100);
   const [stats, setStats] = useState<SoloStats | null>(null);
   const [showStats, setShowStats] = useState(false);
+  const [basketballFlowOpen, setBasketballFlowOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [result, setResult] = useState<SoloGameResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -457,6 +458,31 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     setResult(null);
     setError(null);
   }, [selectedGame]);
+
+  const openGame = (gameId: string) => {
+    if (gameId === 'basketball') {
+      setBasketballFlowOpen(true);
+      setResult(null);
+      setError(null);
+      return;
+    }
+
+    setBasketballFlowOpen(false);
+    setSelectedGame(gameId);
+  };
+
+  if (basketballFlowOpen) {
+    return (
+      <BasketballSoloFlow
+        bet={bet}
+        betOptions={BET_AMOUNTS}
+        canStart={gs.rub >= bet}
+        onBetChange={(nextBet) => setBet(nextBet as BetAmount)}
+        onBack={() => setBasketballFlowOpen(false)}
+        onRefresh={onRefresh}
+      />
+    );
+  }
 
   const winRate = stats && stats.games_played > 0
     ? Math.round((stats.wins / stats.games_played) * 100)
@@ -543,7 +569,7 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         return (
           <div
             key={g.id}
-            onClick={() => setSelectedGame(g.id)}
+            onClick={() => openGame(g.id)}
             className="rounded-2xl p-[14px] flex items-center gap-[14px] cursor-pointer"
             style={{
               background: isSelected
@@ -607,7 +633,7 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         })}
       </div>
 
-      {selectedGame !== 'basketball' && (() => {
+      {(() => {
         const colors = GAME_COLORS[selectedGame] ?? GAME_COLORS.dice;
         return (
           <button
@@ -626,17 +652,13 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         );
       })()}
 
-      {selectedGame === 'basketball' && (
-        <BasketballSoloPanel bet={bet} canStart={gs.rub >= bet} onRefresh={onRefresh} />
-      )}
-
-      {selectedGame !== 'basketball' && error && (
+      {error && (
         <div className="rounded-2xl p-4" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>
           <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
         </div>
       )}
 
-      {selectedGame !== 'basketball' && result && (
+      {result && (
         <div className="card" style={{ background: result.won ? 'rgba(var(--c-green-rgb),0.1)' : 'rgba(var(--c-orange-rgb),0.1)', borderColor: result.won ? 'rgba(var(--c-green-rgb),0.25)' : 'rgba(var(--c-orange-rgb),0.25)' }}>
           <p className="m-0 font-bold text-[15px]">{result.won ? 'Победа' : 'Поражение'}</p>
           <p className="mt-1 mb-0 text-[13px] text-tg-hint">{result.result} · Счёт {result.score}</p>
