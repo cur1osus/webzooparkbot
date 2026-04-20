@@ -530,22 +530,23 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           <div
             key={g.id}
             onClick={() => setSelectedGame(g.id)}
-            className="rounded-2xl p-[14px] flex items-center gap-[14px] cursor-pointer transition-all duration-200"
+            className="rounded-2xl p-[14px] flex items-center gap-[14px] cursor-pointer"
             style={{
               background: isSelected
-                ? `linear-gradient(135deg, ${colors.from}18, ${colors.to}10)`
+                ? `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 10%, transparent), color-mix(in srgb, ${colors.to} 6%, transparent))`
                 : 'color-mix(in srgb, var(--tg-theme-hint-color) 7%, transparent)',
               border: isSelected
-                ? `1.5px solid ${colors.from}55`
+                ? `1.5px solid color-mix(in srgb, ${colors.from} 33%, transparent)`
                 : '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
               boxShadow: isSelected ? `0 4px 20px ${colors.glow}` : 'none',
+              transition: 'box-shadow 200ms, border 200ms',
             }}
           >
             <div
               className="w-[48px] h-[48px] rounded-xl grid place-items-center text-[24px] shrink-0"
               style={{
-                background: `linear-gradient(135deg, ${colors.from}25, ${colors.to}15)`,
-                border: `1px solid ${colors.from}30`,
+                background: `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 15%, transparent), color-mix(in srgb, ${colors.to} 8%, transparent))`,
+                border: `1px solid color-mix(in srgb, ${colors.from} 19%, transparent)`,
                 boxShadow: isSelected ? `0 0 12px ${colors.glow}` : 'none',
               }}
             >
