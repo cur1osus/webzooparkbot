@@ -10,6 +10,7 @@ declare global {
 }
 
 let rlottiePromise: Promise<void> | null = null;
+const ANIMATION_FALLBACK_TIMEOUT_MS = 5000;
 
 function loadRLottie(): Promise<void> {
   if (window.RLottie) return Promise.resolve();
@@ -42,6 +43,27 @@ function syncPlayerCanvas(picture: HTMLPictureElement) {
   canvas.style.inset = '0';
 }
 
+function waitForAnimationEnd(picture: HTMLPictureElement): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let finished = false;
+
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      picture.removeEventListener('tg:pause', onPause);
+      window.clearTimeout(timeoutId);
+      resolve();
+    };
+
+    const onPause = () => {
+      finish();
+    };
+
+    const timeoutId = window.setTimeout(finish, ANIMATION_FALLBACK_TIMEOUT_MS);
+    picture.addEventListener('tg:pause', onPause, { once: true });
+  });
+}
+
 export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 }, ref) => {
   const pictureRef = useRef<HTMLPictureElement>(null);
   const sourceRef = useRef<HTMLSourceElement>(null);
@@ -56,16 +78,9 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
       window.RLottie.destroy(picture);
       source.setAttribute('srcset', src);
 
-      await new Promise<void>((resolve) => {
-        const onPause = () => {
-          picture.removeEventListener('tg:pause', onPause);
-          resolve();
-        };
-
-        picture.addEventListener('tg:pause', onPause);
-        window.RLottie!.init(picture, { playUntilEnd: true });
-        requestAnimationFrame(() => syncPlayerCanvas(picture));
-      });
+      window.RLottie!.init(picture, { playUntilEnd: true });
+      requestAnimationFrame(() => syncPlayerCanvas(picture));
+      await waitForAnimationEnd(picture);
     },
   }), []);
 
