@@ -175,15 +175,6 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         </div>
       )}
 
-      {/* Info */}
-      <div className="card">
-        <p className="m-0 mb-[6px] font-bold text-base">⚒️ Кузница предметов</p>
-        <p className="m-0 text-[13px] text-tg-hint">
-          До 3 активных предметов. Редкость выпадает случайно: Common 50%, Rare 30%, Epic 13%, Mythical 7%.
-          Каждый предмет в инвентаре поднимает стоимость создания на +15%.
-        </p>
-      </div>
-
       {/* Create */}
       <div className="card flex flex-col gap-[8px]">
         <div className="flex justify-between items-center mb-[4px]">
