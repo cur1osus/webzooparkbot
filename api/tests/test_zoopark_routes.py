@@ -313,6 +313,7 @@ class ZooParkRouteTests(unittest.TestCase):
             "/api/forge/create",
             "/api/forge/upgrade",
             "/api/forge/merge",
+            "/api/forge/sell",
             "/api/forge/activate",
         })
         self.assertNotIn("delegates", inspect.getsource(module))
@@ -395,12 +396,15 @@ class ZooParkRouteTests(unittest.TestCase):
         module = importlib.import_module("api.app.zoopark.forge")
         db, cur = self._fake_db()
         cur.lastrowid = 42
+        cur.fetchone.return_value = {"cnt": 0}
         with patch.object(module, "get_db", return_value=db), \
-             patch.object(module, "get_user", return_value={"id": 9, "paw_coins": 10}), \
-             patch.object(module, "make_forge_item", return_value={"item_type": "income_boost", "name": "Зелье дохода", "emoji": "💰", "rarity": "rare", "effect_label": "Доход +7%", "effect_value": 0.075, "sv": 3}):
-            result = module.api_forge_create(1, module.ForgeCreateBody(item_type="income_boost"))
+             patch.object(module, "get_user", return_value={"id": 9, "paw_coins": 500, "usd": 1000}), \
+             patch.object(module, "_make_properties", return_value=[{"type": "income_boost", "value": 7, "label": "Общий доход +7"}]), \
+             patch.object(module.random, "choices", return_value=["rare"]):
+            result = module.api_forge_create(1, module.ForgeCreateBody(currency="paw"))
         self.assertEqual(result["item"]["id"], "42")
-        self.assertEqual(result["new_paw_coins"], 5)
+        self.assertEqual(result["item"]["rarity"], "rare")
+        self.assertEqual(result["new_paw_coins"], 150)
 
     def test_top_contract(self) -> None:
         module = importlib.import_module("api.app.zoopark.social")

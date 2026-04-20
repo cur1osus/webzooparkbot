@@ -107,6 +107,7 @@ export function BasketballSoloPanel({ bet, canStart, onRefresh }: BasketballSolo
 
     if (finished) {
       resetSession();
+      await startMatch();
       return;
     }
 
