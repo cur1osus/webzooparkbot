@@ -55,7 +55,6 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
 
       window.RLottie.destroy(picture);
       source.setAttribute('srcset', src);
-      source.setAttribute('data-frames-align', 'center');
 
       await new Promise<void>((resolve) => {
         const onPause = () => {
@@ -97,7 +96,7 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
       }}
     >
       <source ref={sourceRef} type="application/x-tgsticker" srcSet="" />
-      <img alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+      <img alt="" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: 0 }} />
     </picture>
   );
 });
