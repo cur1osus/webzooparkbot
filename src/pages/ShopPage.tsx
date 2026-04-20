@@ -9,7 +9,6 @@ import {
   apiForgeUpgrade,
   apiForgeMerge,
   apiForgeSell,
-  apiForgeActivate,
 } from '../api';
 
 type ShopTab = 'packs' | 'localities' | 'aviaries' | 'forge' | 'cosmetics';
@@ -50,12 +49,14 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [mergeFirst, setMergeFirst] = useState<string | null>(null);
+  const [pendingItem, setPendingItem] = useState<ForgeItem | null>(null);
 
-  const items = gs.forge_items;
-  const itemCount = items.length;
+  const allItems = gs.forge_items;
+  // Exclude pending item from the regular list while it awaits decision
+  const items = pendingItem ? allItems.filter(i => i.id !== pendingItem.id) : allItems;
+  const itemCount = allItems.length;
   const usdCost = Math.round(1 * Math.pow(1.15, itemCount));
   const pawCost = 350;
-  const activeCount = items.filter(i => i.is_active).length;
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -68,13 +69,32 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     try {
       const r = await apiForgeCreate(currency);
       onRefresh();
-      const rLabel = RARITY_LABEL[r.item.rarity] ?? r.item.rarity;
-      showToast(`Создан ${rLabel} артефакт! ${r.item.properties?.map(p => p.label).join(', ')}`);
+      // Previous pending item is already saved in DB — just replace with new one
+      setPendingItem(r.item);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Ошибка', false);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handlePendingSell() {
+    if (!pendingItem || busy) return;
+    setBusy(true);
+    try {
+      await apiForgeSell(pendingItem.id);
+      setPendingItem(null);
+      onRefresh();
+      showToast('Продано за $80 000');
+    } catch (e: unknown) {
+      showToast((e as Error).message ?? 'Ошибка', false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handlePendingKeep() {
+    setPendingItem(null);
   }
 
   async function handleUpgrade(item: ForgeItem) {
@@ -127,34 +147,6 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     }
   }
 
-  async function handleSell(item: ForgeItem) {
-    if (busy) return;
-    if (!confirm(`Продать «${item.name}» за $80 000? Это нельзя отменить.`)) return;
-    setBusy(true);
-    try {
-      await apiForgeSell(item.id);
-      onRefresh();
-      showToast(`Продан за $80 000`);
-    } catch (e: unknown) {
-      showToast((e as Error).message ?? 'Ошибка', false);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleActivate(item: ForgeItem) {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await apiForgeActivate(item.id);
-      onRefresh();
-    } catch (e: unknown) {
-      showToast((e as Error).message ?? 'Ошибка', false);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const canAffordUsd = gs.usd >= usdCost;
   const canAffordPaw = gs.paw_coins >= pawCost;
 
@@ -198,17 +190,51 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         </button>
       </div>
 
-      {/* Active summary */}
-      {activeCount > 0 && (
-        <div className="card" style={{ border: '1px solid rgba(52,199,89,0.25)', background: 'rgba(52,199,89,0.06)' }}>
-          <p className="m-0 mb-[6px] text-[13px] font-semibold text-[#34c759]">Активных: {activeCount} / 3</p>
-          {items.filter(i => i.is_active).map(item => (
-            <div key={item.id} className="text-[12px] text-tg-hint mb-[2px]">
-              {forgeItemIcon(item)} {item.name} · {item.properties?.map(p => p.label).join(', ')}
+      {/* Pending item — sell or keep */}
+      {pendingItem && (() => {
+        const rc = RARITY_COLOR[pendingItem.rarity] ?? '#8f95ab';
+        return (
+          <div className="card flex flex-col gap-[10px]" style={{ border: `1px solid ${rc}55`, background: `${rc}0d` }}>
+            <div className="flex items-center gap-[10px]">
+              <span className="text-[32px] shrink-0">{forgeItemIcon(pendingItem)}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-[6px] flex-wrap">
+                  <span className="font-bold text-sm">{pendingItem.name}</span>
+                  <span className="text-[11px] px-[6px] py-[1px] rounded-full font-semibold"
+                    style={{ background: `${rc}22`, color: rc }}>
+                    {RARITY_LABEL[pendingItem.rarity] ?? pendingItem.rarity}
+                  </span>
+                </div>
+                <div className="mt-[4px] flex flex-col gap-[2px]">
+                  {(pendingItem.properties ?? []).map((p, i) => (
+                    <span key={i} className="text-[12px] text-tg-hint">
+                      {PROP_ICON[p.type] ?? '✨'} {p.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="flex gap-[8px]">
+              <button
+                onClick={handlePendingSell}
+                disabled={busy}
+                className="flex-1 py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
+                style={{ background: 'rgba(255,69,58,0.15)', color: '#ff453a' }}
+              >
+                Продать $80k
+              </button>
+              <button
+                onClick={handlePendingKeep}
+                disabled={busy}
+                className="flex-1 py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
+                style={{ background: 'rgba(52,199,89,0.15)', color: '#34c759' }}
+              >
+                Оставить
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Merge hint */}
       {mergeFirst && (
@@ -220,7 +246,7 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
       )}
 
       {/* Items list */}
-      {items.length === 0 ? (
+      {items.length === 0 && !pendingItem ? (
         <div className="card text-center">
           <p className="m-0 text-tg-hint text-[13px]">Предметов нет. Создай свой первый!</p>
         </div>
@@ -238,16 +264,8 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
               key={item.id}
               className="card flex flex-col gap-[8px]"
               style={{
-                border: isSelected
-                  ? '1px solid rgba(255,214,10,0.6)'
-                  : item.is_active
-                  ? `1px solid ${rarityColor}44`
-                  : undefined,
-                background: isSelected
-                  ? 'rgba(255,214,10,0.07)'
-                  : item.is_active
-                  ? `${rarityColor}0a`
-                  : undefined,
+                border: isSelected ? '1px solid rgba(255,214,10,0.6)' : undefined,
+                background: isSelected ? 'rgba(255,214,10,0.07)' : undefined,
               }}
             >
               {/* Header */}
@@ -286,52 +304,27 @@ function ForgeTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                 ))}
               </div>
 
-              {/* Actions */}
-              <div className="grid grid-cols-2 gap-[6px] mt-[2px]">
-                {/* Activate / Deactivate */}
-                <button
-                  onClick={() => handleActivate(item)}
-                  disabled={busy || (!item.is_active && activeCount >= 3)}
-                  className="py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
-                  style={{
-                    background: item.is_active ? 'rgba(255,255,255,0.08)' : 'rgba(52,199,89,0.15)',
-                    color: item.is_active ? 'var(--tg-theme-hint-color)' : '#34c759',
-                  }}
-                >
-                  {item.is_active ? 'Деактивировать' : 'Активировать'}
-                </button>
-
-                {/* Upgrade */}
+              {/* Actions — upgrade + merge only */}
+              <div className="flex gap-[6px] mt-[2px]">
                 <button
                   onClick={() => handleUpgrade(item)}
                   disabled={busy || level >= 12 || gs.usd < upgradeCost}
-                  className="py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
+                  className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
                   style={{ background: 'rgba(10,132,255,0.15)', color: '#0a84ff' }}
                 >
                   {level >= 12 ? 'Макс уровень' : `Улучш. $${fmt(upgradeCost)} (${successPct}%)`}
                 </button>
 
-                {/* Merge */}
                 <button
                   onClick={() => handleMergeSelect(item)}
                   disabled={busy || isLegendary}
-                  className="py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
+                  className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
                   style={{
                     background: isSelected ? 'rgba(255,214,10,0.2)' : 'rgba(255,214,10,0.1)',
                     color: '#ffd60a',
                   }}
                 >
                   {isLegendary ? 'Нельзя слить' : isSelected ? '✓ Выбран' : 'Слить'}
-                </button>
-
-                {/* Sell */}
-                <button
-                  onClick={() => handleSell(item)}
-                  disabled={busy}
-                  className="py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
-                  style={{ background: 'rgba(255,69,58,0.15)', color: '#ff453a' }}
-                >
-                  Продать $80k
                 </button>
               </div>
             </div>
