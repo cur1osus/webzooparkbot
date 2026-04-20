@@ -19,9 +19,9 @@ function Chip({ color, children }: { color: string; children: React.ReactNode })
     <span
       className="px-[10px] py-1 rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
       style={{
-        background: `${color}18`,
+        background: `color-mix(in srgb, ${color} 10%, transparent)`,
         color,
-        border: `1px solid ${color}30`,
+        border: `1px solid color-mix(in srgb, ${color} 19%, transparent)`,
       }}
     >
       {children}
