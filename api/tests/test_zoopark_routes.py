@@ -473,6 +473,17 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertEqual(module._solo_roll_bounds("football"), (1, 5))
         self.assertEqual(module._solo_roll_bounds("dice"), (1, 6))
 
+    def test_solo_throw_match_uses_random_round_count(self) -> None:
+        module = importlib.import_module("api.app.zoopark.games")
+
+        with patch.object(module.random, "randint", side_effect=[2, 6, 1, 6, 1]) as randint:
+            history, player_score, ai_score = module._simulate_throw_match("dice", require_winner=True)
+
+        self.assertEqual(len(history), 2)
+        self.assertEqual(player_score, 12)
+        self.assertEqual(ai_score, 2)
+        self.assertEqual(randint.call_args_list[0].args, (2, 7))
+
     def test_start_solo_dice_returns_history(self) -> None:
         module = importlib.import_module("api.app.zoopark.games")
         db, _cur = self._fake_db()

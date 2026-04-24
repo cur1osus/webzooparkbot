@@ -22,7 +22,8 @@ from api.app.zoopark.runtime import BOT_TOKEN, get_db
 
 COCKTAIL_FRUITS = ["🍓", "🍊", "🍋", "🍇", "🍒", "🍑", "🥝", "🍍"]
 MAX_COCKTAIL_ATTEMPTS = 10
-SOLO_MATCH_ROUNDS = 5
+SOLO_MATCH_MIN_ROUNDS = 2
+SOLO_MATCH_MAX_ROUNDS = 7
 
 
 class DonateInvoiceBody(BaseModel):
@@ -66,8 +67,9 @@ def _simulate_throw_match(game_type: str, *, require_winner: bool) -> tuple[list
     opponent_score = 0
     round_no = 1
     roll_min, roll_max = _solo_roll_bounds(game_type)
+    target_rounds = random.randint(SOLO_MATCH_MIN_ROUNDS, SOLO_MATCH_MAX_ROUNDS)
 
-    while round_no <= SOLO_MATCH_ROUNDS or (require_winner and player_score == opponent_score):
+    while round_no <= target_rounds or (require_winner and player_score == opponent_score):
         player_roll = random.randint(roll_min, roll_max)
         opponent_roll = random.randint(roll_min, roll_max)
         player_score += _solo_roll_score(game_type, player_roll)
