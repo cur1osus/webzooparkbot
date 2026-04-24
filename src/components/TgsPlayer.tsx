@@ -9,6 +9,8 @@ declare global {
   }
 }
 
+type TgsPictureElement = HTMLPictureElement & { rlPlayer?: unknown };
+
 let rlottiePromise: Promise<void> | null = null;
 const ANIMATION_FALLBACK_TIMEOUT_MS = 5000;
 
@@ -43,6 +45,12 @@ function syncPlayerCanvas(picture: HTMLPictureElement) {
   canvas.style.inset = '0';
 }
 
+function resetPlayer(picture: TgsPictureElement) {
+  window.RLottie?.destroy(picture);
+  picture.querySelectorAll('canvas').forEach((canvas) => canvas.remove());
+  delete picture.rlPlayer;
+}
+
 function waitForAnimationEnd(picture: HTMLPictureElement): Promise<void> {
   return new Promise<void>((resolve) => {
     let finished = false;
@@ -75,12 +83,13 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
       const source = sourceRef.current;
       if (!picture || !source || !window.RLottie) return;
 
-      window.RLottie.destroy(picture);
+      resetPlayer(picture);
       source.setAttribute('srcset', src);
 
+      const animationEnd = waitForAnimationEnd(picture);
       window.RLottie!.init(picture, { playUntilEnd: true });
       requestAnimationFrame(() => syncPlayerCanvas(picture));
-      await waitForAnimationEnd(picture);
+      await animationEnd;
     },
   }), []);
 
@@ -93,9 +102,7 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
 
     return () => {
       observer.disconnect();
-      if (window.RLottie) {
-        window.RLottie.destroy(picture);
-      }
+      resetPlayer(picture);
     };
   }, []);
 
