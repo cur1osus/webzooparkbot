@@ -12,7 +12,7 @@ from api.app.zoopark.db_tables import ZOOPARK_BOOTSTRAP_META_TABLE, ZOOPARK_EXTR
 class _BootstrapCursor:
     def __init__(self) -> None:
         self.tables: dict[str, set[str]] = {
-            "webapp_extra": {"user_id", "balance_seq", "data_version", "profile_emoji", "packs_today", "packs_today_date", "last_income_at"},
+            "webapp_extra": {"user_id", "balance_seq", "data_version", "profile_emoji", "forge_sets_json", "packs_today", "packs_today_date", "last_income_at"},
             "pack_animals": {
                 "id",
                 "user_id",
@@ -188,7 +188,7 @@ class ZooParkBootstrapTests(unittest.TestCase):
 
         self.assertEqual(
             cursor.copy_columns[ZOOPARK_EXTRA_TABLE],
-            ("user_id", "balance_seq", "data_version", "profile_emoji", "packs_today", "packs_today_date", "last_income_at"),
+            ("user_id", "balance_seq", "data_version", "profile_emoji", "forge_sets_json", "packs_today", "packs_today_date", "last_income_at"),
         )
         self.assertEqual(
             cursor.copy_columns[ZOOPARK_PACK_ANIMALS_TABLE],

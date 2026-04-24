@@ -109,6 +109,7 @@ class ApiGatewayTests(unittest.TestCase):
         zoopark_forge_routes = types.ModuleType("api.app.api.routes.zoopark_forge")
         zoopark_forge_router = _FakeRouter(tags=["zoopark-forge"])
         zoopark_forge_router.add_api_route("/api/forge/items", lambda: None, methods=["GET"])
+        zoopark_forge_router.add_api_route("/api/forge/sets", lambda: None, methods=["GET"])
         zoopark_forge_routes.router = zoopark_forge_router
         sys.modules["api.app.api.routes.zoopark_forge"] = zoopark_forge_routes
 
@@ -154,6 +155,7 @@ class ApiGatewayTests(unittest.TestCase):
         self.assertIn("/api/claim_bonus", route_paths)
         self.assertIn("/api/merchant/animals", route_paths)
         self.assertIn("/api/forge/items", route_paths)
+        self.assertIn("/api/forge/sets", route_paths)
         self.assertIn("/api/top", route_paths)
         self.assertIn("/api/mpgame/open", route_paths)
         self.assertIn("/api/expeditions/finish", route_paths)

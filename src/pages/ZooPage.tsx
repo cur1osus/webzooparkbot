@@ -4,6 +4,8 @@ import type { GameState, ForgeItem, ForgeSet } from '../types';
 import { ANIMALS } from '../data/animals';
 import { ExpeditionOverviewCard, ExpeditionPage } from './ExpeditionPage';
 import { getClanSpecialtyLabel } from '../utils/clan';
+import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet } from '../api';
+import { tmaConfirm } from '../tma';
 
 type ZooTab = 'overview' | 'forge' | 'aviaries' | 'medals';
 
@@ -31,9 +33,11 @@ const RARITY_LABEL: Record<string, string> = {
 
 // ─── Forge sub-pages ──────────────────────────────────────────────────────────
 
-function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
+function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems, onItemDetail }: {
   items: ForgeItem[]; sets: ForgeSet[];
-  onApplySet: (id: string) => void; onSelectItems: (id: string) => void;
+  busy: boolean; message: string | null;
+  onApplySet: (id: string) => void; onCreateSet: () => void; onDeleteSet: (id: string) => void;
+  onSelectItems: (id: string) => void; onItemDetail: (id: string) => void;
 }) {
   const activeItems = items.filter(i => i.is_active);
   const bonuses: Record<string, number> = {};
@@ -63,9 +67,10 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
 
       <div className="flex justify-between items-center">
         <p className="m-0 font-bold text-[15px]">Сеты предметов</p>
-        <button className="px-3 py-[5px] rounded-lg border-none bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] text-[13px] font-semibold">+ Добавить</button>
+        <button onClick={onCreateSet} disabled={busy} className="px-3 py-[5px] rounded-lg border-none bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] text-[13px] font-semibold disabled:opacity-50">+ Добавить</button>
       </div>
       <p className="m-0 -mt-2 text-xs text-tg-hint">Выбери до 3 предметов для каждого слота и переключай наборы одним нажатием.</p>
+      {message && <p className="m-0 text-[13px] text-[var(--c-orange)]">{message}</p>}
 
       {sets.map(s => {
         const setItems = items.filter(i => s.item_ids.includes(i.id));
@@ -79,18 +84,41 @@ function ForgeTab({ items, sets, onApplySet, onSelectItems }: {
                 <span className="font-bold text-sm">{s.icon} {s.name} 🔨 🗑️</span>
                 {s.is_active
                   ? <span className="ml-2 text-[11px] text-[var(--c-blue)]">Сейчас активен</span>
-                  : <p className="mt-[2px] mb-0 text-[11px] text-tg-hint">{setItems.length} предмет{setItems.length === 1 ? '' : 'а'} в слоте</p>}
+                  : <p className="mt-[2px] mb-0 text-[11px] text-tg-hint">{setItems.length} предмет{setItems.length === 1 ? '' : 'а'} в сете</p>}
               </div>
               <div className="flex gap-[6px]">{setItems.slice(0, 3).map(i => <span key={i.id} className="text-lg">{forgeItemIcon(i)}</span>)}</div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => onSelectItems(s.id)} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-gold-rgb),0.15)] text-[var(--c-gold)] text-[13px] font-semibold">Выбрать предметы</button>
-              <button onClick={() => onApplySet(s.id)} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] text-[13px] font-semibold">Применить</button>
+              <button onClick={() => onSelectItems(s.id)} disabled={busy} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-gold-rgb),0.15)] text-[var(--c-gold)] text-[13px] font-semibold disabled:opacity-50">Выбрать</button>
+              <button onClick={() => onApplySet(s.id)} disabled={busy || setItems.length === 0} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] text-[13px] font-semibold disabled:opacity-50">Применить</button>
+              <button onClick={() => onDeleteSet(s.id)} disabled={busy} className="px-3 py-2 rounded-lg border-none bg-[rgba(var(--c-red-rgb),0.12)] text-[var(--c-red)] text-[13px] font-semibold disabled:opacity-50">🗑️</button>
             </div>
           </div>
         );
       })}
       {sets.length === 0 && <div className="card text-center"><p className="m-0 text-tg-hint">Нет сетов. Нажми «+ Добавить»</p></div>}
+
+      <div className="flex justify-between items-center mt-1">
+        <p className="m-0 font-bold text-[15px]">Мои предметы</p>
+        <span className="text-xs text-tg-hint">{items.length} шт.</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="card text-center"><p className="m-0 text-tg-hint text-sm">Предметов пока нет. Создай их в магазине → Кузница.</p></div>
+      ) : items.map(item => {
+        const color = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
+        return (
+          <button key={item.id} onClick={() => onItemDetail(item.id)} className="card flex items-center gap-3 text-left border-none cursor-pointer">
+            <span className="text-[28px] shrink-0">{forgeItemIcon(item)}</span>
+            <span className="flex-1 min-w-0">
+              <span className="block font-semibold text-sm truncate">{item.name}</span>
+              <span className="block mt-[2px] text-xs text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</span>
+            </span>
+            <span className="text-[11px] px-[7px] py-[3px] rounded-full font-semibold" style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}>
+              {item.is_active ? 'Активен' : (RARITY_LABEL[item.rarity] ?? item.rarity)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -107,6 +135,7 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
         <button onClick={onApply} className="px-[14px] py-[7px] rounded-lg border-none bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-[13px]">Применить ✓</button>
       </div>
       <div className="px-[14px] pt-3 flex flex-col gap-[10px]">
+        {items.length === 0 && <div className="card text-center"><p className="m-0 text-tg-hint text-sm">Нет предметов для выбора.</p></div>}
         {items.map(item => {
           const sel = selectedIds.includes(item.id);
           return (
@@ -185,6 +214,27 @@ const ZOO_TABS: { id: ZooTab; emoji: string; label: string; badge?: (gs: GameSta
 export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [tab, setTab] = useState<ZooTab>('overview');
   const [subPage, setSubPage] = useState<SubPage>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  function showMessage(text: string) {
+    setMessage(text);
+    window.setTimeout(() => setMessage(null), 3000);
+  }
+
+  async function runForgeAction(action: () => Promise<void>, fallback: string) {
+    if (busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await action();
+      onRefresh();
+    } catch (e) {
+      showMessage(e instanceof Error ? e.message : fallback);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (subPage?.type === 'expeditions') {
     return <ExpeditionPage onRefresh={onRefresh} onBack={() => setSubPage(null)} />;
@@ -201,14 +251,27 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             : prev.selectedIds.length < 3 ? [...prev.selectedIds, id] : prev.selectedIds;
           return { ...prev, selectedIds: ids };
         })}
-        onApply={() => setSubPage(null)} onBack={() => setSubPage(null)}
+        onApply={() => void runForgeAction(async () => {
+          await apiForgeUpdateSet(subPage.setId, subPage.selectedIds);
+          setSubPage(null);
+        }, 'Ошибка сохранения сета')} onBack={() => setSubPage(null)}
       />
     );
   }
 
   if (subPage?.type === 'forge_item_detail') {
     const item = gs.forge_items.find(i => i.id === subPage.itemId);
-    if (item) return <ItemDetailPage item={item} onActivate={() => setSubPage(null)} onSell={() => setSubPage(null)} onBack={() => setSubPage(null)} />;
+    if (item) return <ItemDetailPage item={item}
+      onActivate={() => void runForgeAction(async () => {
+        await apiForgeActivate(item.id);
+        setSubPage(null);
+      }, 'Ошибка активации предмета')}
+      onSell={() => void runForgeAction(async () => {
+        if (!(await tmaConfirm(`Продать «${item.name}» за $80k?`, 'Продать предмет?'))) return;
+        await apiForgeSell(item.id);
+        setSubPage(null);
+      }, 'Ошибка продажи предмета')}
+      onBack={() => setSubPage(null)} />;
   }
 
   const netPerMin = gs.income_rub_per_min - gs.expenses_rub_per_min;
@@ -354,8 +417,23 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
       {tab === 'forge' && (
         <ForgeTab items={gs.forge_items} sets={gs.forge_sets}
-          onApplySet={() => {}}
-          onSelectItems={(setId) => setSubPage({ type: 'forge_select', setId, selectedIds: [] })}
+          busy={busy}
+          message={message}
+          onApplySet={(setId) => void runForgeAction(async () => {
+            await apiForgeApplySet(setId);
+          }, 'Ошибка применения сета')}
+          onCreateSet={() => void runForgeAction(async () => {
+            await apiForgeCreateSet([]);
+          }, 'Ошибка создания сета')}
+          onDeleteSet={(setId) => void runForgeAction(async () => {
+            if (!(await tmaConfirm('Удалить этот сет? Предметы останутся у тебя.', 'Удалить сет?'))) return;
+            await apiForgeDeleteSet(setId);
+          }, 'Ошибка удаления сета')}
+          onSelectItems={(setId) => {
+            const itemSet = gs.forge_sets.find(s => s.id === setId);
+            setSubPage({ type: 'forge_select', setId, selectedIds: [...(itemSet?.item_ids ?? [])] });
+          }}
+          onItemDetail={(itemId) => setSubPage({ type: 'forge_item_detail', itemId })}
         />
       )}
 

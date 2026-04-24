@@ -30,7 +30,7 @@ def get_extra(cur, user_id: int) -> dict:
         f"INSERT INTO {ZOOPARK_EXTRA_TABLE} (user_id, balance_seq, data_version) VALUES (%s,0,0)",
         (user_id,),
     )
-    return {"user_id": user_id, "balance_seq": 0, "data_version": 0, "profile_emoji": None}
+    return {"user_id": user_id, "balance_seq": 0, "data_version": 0, "profile_emoji": None, "forge_sets_json": None}
 
 
 def bump_data_version(cur, user_id: int) -> int:
@@ -110,6 +110,49 @@ def get_forge_items(cur, user_id: int) -> list[dict]:
     return result
 
 
+def get_forge_sets(cur, user_id: int, items: list[dict] | None = None) -> list[dict]:
+    extra = get_extra(cur, user_id)
+    try:
+        raw_sets = json.loads(extra.get("forge_sets_json") or "[]")
+    except Exception:
+        raw_sets = []
+    if not isinstance(raw_sets, list):
+        raw_sets = []
+
+    owned_ids = {str(item["id"]) for item in items} if items is not None else None
+    active_ids = {str(item["id"]) for item in items or [] if item.get("is_active")}
+    result: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for index, raw in enumerate(raw_sets, start=1):
+        if not isinstance(raw, dict):
+            continue
+        set_id = str(raw.get("id") or index)
+        if set_id in seen_ids:
+            continue
+        seen_ids.add(set_id)
+
+        item_ids: list[str] = []
+        for raw_id in raw.get("item_ids") or []:
+            item_id = str(raw_id)
+            if item_id in item_ids:
+                continue
+            if owned_ids is not None and item_id not in owned_ids:
+                continue
+            item_ids.append(item_id)
+            if len(item_ids) >= 3:
+                break
+
+        result.append({
+            "id": set_id,
+            "name": str(raw.get("name") or f"Сет {index}")[:32],
+            "icon": str(raw.get("icon") or "⚒️")[:8],
+            "item_ids": item_ids,
+            "is_active": bool(item_ids) and set(item_ids) == active_ids,
+        })
+    return result
+
+
 def get_clan(cur, user_id: int, unity_id) -> dict | None:
     if not unity_id:
         return None
@@ -141,6 +184,7 @@ def build_state(cur, user: dict, income_rub_per_min: int) -> dict:
     aviaries = get_aviaries(cur, uid)
     sick = get_sick(cur, uid)
     forge = get_forge_items(cur, uid)
+    forge_sets = get_forge_sets(cur, uid, forge)
     clan = get_clan(cur, uid, user.get("unity_id"))
 
     total_seats = sum(
@@ -167,7 +211,7 @@ def build_state(cur, user: dict, income_rub_per_min: int) -> dict:
         "diversity_bonus_per_species": DIVERSITY_BONUS_PER_SPECIES,
         "sick_animals": sick,
         "forge_items": forge,
-        "forge_sets": [],
+        "forge_sets": forge_sets,
         "clan": clan,
         "season_end": season_end(),
         "bonus": int(user["bonus"]),

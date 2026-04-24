@@ -7,10 +7,17 @@ from api.app.zoopark.forge import (
     ForgeCreateBody,
     ForgeItemIdBody,
     ForgeMergeBody,
+    ForgeSetBody,
+    ForgeSetIdBody,
     api_forge_activate,
     api_forge_create,
     api_forge_items,
     api_forge_merge,
+    api_forge_set_apply,
+    api_forge_set_create,
+    api_forge_set_delete,
+    api_forge_set_update,
+    api_forge_sets,
     api_forge_sell,
     api_forge_upgrade,
 )
@@ -28,6 +35,14 @@ def forge_items(
     return api_forge_items(auth(x_init_data, x_dev_user_id))
 
 
+@router.get("/api/forge/sets")
+def forge_sets(
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_sets(auth(x_init_data, x_dev_user_id))
+
+
 @router.post("/api/forge/create")
 def forge_create(
     body: ForgeCreateBody,
@@ -35,6 +50,42 @@ def forge_create(
     x_dev_user_id: str = Header(default=""),
 ):
     return api_forge_create(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/sets/create")
+def forge_set_create(
+    body: ForgeSetBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_set_create(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/sets/update")
+def forge_set_update(
+    body: ForgeSetBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_set_update(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/sets/delete")
+def forge_set_delete(
+    body: ForgeSetIdBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_set_delete(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.post("/api/forge/sets/apply")
+def forge_set_apply(
+    body: ForgeSetIdBody,
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_forge_set_apply(auth(x_init_data, x_dev_user_id), body)
 
 
 @router.post("/api/forge/upgrade")

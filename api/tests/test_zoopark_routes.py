@@ -310,7 +310,12 @@ class ZooParkRouteTests(unittest.TestCase):
         route_paths = {path for path, _methods, _endpoint in module.router.routes}
         self.assertEqual(route_paths, {
             "/api/forge/items",
+            "/api/forge/sets",
             "/api/forge/create",
+            "/api/forge/sets/create",
+            "/api/forge/sets/update",
+            "/api/forge/sets/delete",
+            "/api/forge/sets/apply",
             "/api/forge/upgrade",
             "/api/forge/merge",
             "/api/forge/sell",
@@ -405,6 +410,24 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertEqual(result["item"]["id"], "42")
         self.assertEqual(result["item"]["rarity"], "rare")
         self.assertEqual(result["new_paw_coins"], 150)
+
+    def test_forge_set_apply_activates_selected_items(self) -> None:
+        module = importlib.import_module("api.app.zoopark.forge")
+        db, cur = self._fake_db()
+        items = [{"id": "5", "is_active": False}, {"id": "6", "is_active": False}]
+        item_sets = [{"id": "abc", "name": "Сет 1", "icon": "⚒️", "item_ids": ["5", "6"], "is_active": False}]
+        with patch.object(module, "get_db", return_value=db), \
+             patch.object(module, "get_user", return_value={"id": 9}), \
+             patch.object(module, "get_forge_items", return_value=items), \
+             patch.object(module, "get_forge_sets", return_value=item_sets), \
+             patch.object(module, "bump_data_version"):
+            result = module.api_forge_set_apply(1, module.ForgeSetIdBody(set_id="abc"))
+
+        self.assertEqual(result, {"ok": True})
+        self.assertIn(
+            (f"UPDATE {module.ZOOPARK_ITEMS_TABLE} SET is_active=CASE WHEN id IN (%s,%s) THEN 1 ELSE 0 END WHERE user_id=%s", (5, 6, 9)),
+            [call.args for call in cur.execute.call_args_list],
+        )
 
     def test_top_contract(self) -> None:
         module = importlib.import_module("api.app.zoopark.social")

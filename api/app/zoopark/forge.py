@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import random
+import uuid
 
 from fastapi import HTTPException
 from pydantic import BaseModel
 
 from api.app.zoopark.catalog import ANIMALS
-from api.app.zoopark.db_tables import ZOOPARK_ITEMS_TABLE, ZOOPARK_USERS_TABLE
-from api.app.zoopark.profile import get_forge_items, get_user
+from api.app.zoopark.db_tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_ITEMS_TABLE, ZOOPARK_USERS_TABLE
+from api.app.zoopark.profile import bump_data_version, get_forge_items, get_forge_sets, get_user
 from api.app.zoopark.runtime import get_db
 
 # ─── Catalog helpers ──────────────────────────────────────────────────────────
@@ -88,6 +89,17 @@ class ForgeActivateBody(BaseModel):
     set_id: str
 
 
+class ForgeSetBody(BaseModel):
+    set_id: str | None = None
+    name: str | None = None
+    icon: str | None = None
+    item_ids: list[str] = []
+
+
+class ForgeSetIdBody(BaseModel):
+    set_id: str
+
+
 class ForgeMergeBody(BaseModel):
     item_id1: str
     item_id2: str
@@ -146,6 +158,48 @@ def _item_dict(item_id: int, emoji: str, name: str, rarity: str, level: int, pro
     }
 
 
+def _set_payload(raw: dict) -> dict:
+    item_ids: list[str] = []
+    for raw_id in raw.get("item_ids") or []:
+        item_id = str(raw_id)
+        if item_id not in item_ids:
+            item_ids.append(item_id)
+        if len(item_ids) >= MAX_ACTIVE_ITEMS:
+            break
+    return {
+        "id": str(raw["id"]),
+        "name": str(raw.get("name") or "Сет")[:32],
+        "icon": str(raw.get("icon") or "⚒️")[:8],
+        "item_ids": item_ids,
+    }
+
+
+def _save_forge_sets(cur, user_id: int, sets: list[dict]) -> None:
+    payload = json.dumps([_set_payload(item_set) for item_set in sets], ensure_ascii=False)
+    bump_data_version(cur, user_id)
+    cur.execute(f"UPDATE {ZOOPARK_EXTRA_TABLE} SET forge_sets_json=%s WHERE user_id=%s", (payload, user_id))
+
+
+def _validate_set_item_ids(item_ids: list[str], owned_ids: set[str]) -> list[str]:
+    result: list[str] = []
+    for raw_id in item_ids:
+        item_id = str(raw_id)
+        if item_id not in owned_ids:
+            raise HTTPException(404, "Предмет не найден")
+        if item_id not in result:
+            result.append(item_id)
+        if len(result) > MAX_ACTIVE_ITEMS:
+            raise HTTPException(400, f"Максимум {MAX_ACTIVE_ITEMS} предмета в сете")
+    return result
+
+
+def _find_set(sets: list[dict], set_id: str) -> dict:
+    item_set = next((s for s in sets if str(s["id"]) == str(set_id)), None)
+    if not item_set:
+        raise HTTPException(404, "Сет не найден")
+    return item_set
+
+
 # ─── API handlers ─────────────────────────────────────────────────────────────
 
 def api_forge_items(tg_id: int):
@@ -156,6 +210,117 @@ def api_forge_items(tg_id: int):
             if not user:
                 raise HTTPException(404, "Нет игрока")
             return {"items": get_forge_items(cur, user["id"])}
+    finally:
+        db.close()
+
+
+def api_forge_sets(tg_id: int):
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            user = get_user(cur, tg_id)
+            if not user:
+                raise HTTPException(404, "Нет игрока")
+            items = get_forge_items(cur, user["id"])
+            return {"sets": get_forge_sets(cur, user["id"], items)}
+    finally:
+        db.close()
+
+
+def api_forge_set_create(tg_id: int, body: ForgeSetBody):
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            user = get_user(cur, tg_id)
+            if not user:
+                raise HTTPException(404, "Нет игрока")
+            user_id = user["id"]
+            items = get_forge_items(cur, user_id)
+            owned_ids = {str(item["id"]) for item in items}
+            sets = get_forge_sets(cur, user_id, items)
+            item_ids = _validate_set_item_ids(getattr(body, "item_ids", []) or [], owned_ids)
+            item_set = {
+                "id": uuid.uuid4().hex[:10],
+                "name": (getattr(body, "name", None) or f"Сет {len(sets) + 1}")[:32],
+                "icon": (getattr(body, "icon", None) or "⚒️")[:8],
+                "item_ids": item_ids,
+            }
+            sets.append(item_set)
+            _save_forge_sets(cur, user_id, sets)
+        db.commit()
+        return {"ok": True, "set": {**item_set, "is_active": False}}
+    finally:
+        db.close()
+
+
+def api_forge_set_update(tg_id: int, body: ForgeSetBody):
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            user = get_user(cur, tg_id)
+            if not user:
+                raise HTTPException(404, "Нет игрока")
+            if not getattr(body, "set_id", None):
+                raise HTTPException(400, "Неверный ID")
+            user_id = user["id"]
+            items = get_forge_items(cur, user_id)
+            owned_ids = {str(item["id"]) for item in items}
+            sets = get_forge_sets(cur, user_id, items)
+            item_set = _find_set(sets, str(body.set_id))
+            item_set["item_ids"] = _validate_set_item_ids(getattr(body, "item_ids", []) or [], owned_ids)
+            if getattr(body, "name", None):
+                item_set["name"] = body.name[:32]
+            if getattr(body, "icon", None):
+                item_set["icon"] = body.icon[:8]
+            _save_forge_sets(cur, user_id, sets)
+        db.commit()
+        return {"ok": True, "set": item_set}
+    finally:
+        db.close()
+
+
+def api_forge_set_delete(tg_id: int, body: ForgeSetIdBody):
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            user = get_user(cur, tg_id)
+            if not user:
+                raise HTTPException(404, "Нет игрока")
+            user_id = user["id"]
+            items = get_forge_items(cur, user_id)
+            sets = get_forge_sets(cur, user_id, items)
+            _find_set(sets, body.set_id)
+            sets = [item_set for item_set in sets if str(item_set["id"]) != str(body.set_id)]
+            _save_forge_sets(cur, user_id, sets)
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+
+def api_forge_set_apply(tg_id: int, body: ForgeSetIdBody):
+    db = get_db()
+    try:
+        with db.cursor() as cur:
+            user = get_user(cur, tg_id)
+            if not user:
+                raise HTTPException(404, "Нет игрока")
+            user_id = user["id"]
+            items = get_forge_items(cur, user_id)
+            owned_ids = {str(item["id"]) for item in items}
+            item_set = _find_set(get_forge_sets(cur, user_id, items), body.set_id)
+            item_ids = _validate_set_item_ids(item_set["item_ids"], owned_ids)
+            if item_ids:
+                placeholders = ",".join(["%s"] * len(item_ids))
+                cur.execute(
+                    f"UPDATE {ZOOPARK_ITEMS_TABLE} SET is_active=CASE WHEN id IN ({placeholders}) THEN 1 ELSE 0 END WHERE user_id=%s",
+                    tuple(int(item_id) for item_id in item_ids) + (user_id,),
+                )
+            else:
+                cur.execute(f"UPDATE {ZOOPARK_ITEMS_TABLE} SET is_active=0 WHERE user_id=%s", (user_id,))
+            bump_data_version(cur, user_id)
+        db.commit()
+        return {"ok": True}
     finally:
         db.close()
 

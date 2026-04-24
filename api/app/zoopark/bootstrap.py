@@ -103,6 +103,7 @@ CREATE_TABLES_SQL: Sequence[str] = (
         balance_seq BIGINT NOT NULL DEFAULT 0,
         data_version BIGINT NOT NULL DEFAULT 0,
         profile_emoji VARCHAR(20) DEFAULT NULL,
+        forge_sets_json LONGTEXT NULL,
         packs_today INT NOT NULL DEFAULT 0,
         packs_today_date DATE NULL,
         last_income_at DATETIME NULL,
@@ -223,6 +224,7 @@ CREATE_TABLES_SQL: Sequence[str] = (
 MISSING_COLUMN_SQL: Sequence[str] = (
     f"ALTER TABLE {ZOOPARK_EXTRA_TABLE} ADD COLUMN packs_today INT NOT NULL DEFAULT 0",
     f"ALTER TABLE {ZOOPARK_EXTRA_TABLE} ADD COLUMN packs_today_date DATE NULL",
+    f"ALTER TABLE {ZOOPARK_EXTRA_TABLE} ADD COLUMN forge_sets_json LONGTEXT NULL",
     f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN dies_at DATETIME NULL",
     f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN locality_id INT NULL",
     f"ALTER TABLE {ZOOPARK_PACK_ANIMALS_TABLE} ADD COLUMN last_bred_date DATE NULL",
@@ -265,7 +267,7 @@ COPY_COMPAT_TABLES: Sequence[tuple[str, str, tuple[str, ...], tuple[str, ...]]] 
         "webapp_extra",
         ZOOPARK_EXTRA_TABLE,
         ("user_id", "balance_seq", "data_version"),
-        ("profile_emoji", "packs_today", "packs_today_date", "last_income_at"),
+        ("profile_emoji", "forge_sets_json", "packs_today", "packs_today_date", "last_income_at"),
     ),
     (
         "sick_events",

@@ -14,6 +14,7 @@
 - ZooPark business logic lives in `api/app/zoopark/`.
 - Schema/bootstrap is initialized from `api/app/main.py`.
 - Core endpoints are hosted under `/api/*`, including `/api/health`, `/api/me`, `/api/save`, `/api/register`, `/api/config`, `/api/buy_animal`, `/api/buy_aviary`, `/api/bank`, `/api/bank/exchange`, `/api/claim_bonus`, `/api/cure_animal`.
+- Forge endpoints are hosted by `zoopark_forge.py`, including `/api/forge/items`, `/api/forge/sets`, `/api/forge/create`, `/api/forge/sets/create`, `/api/forge/sets/update`, `/api/forge/sets/delete`, `/api/forge/sets/apply`, `/api/forge/activate`, `/api/forge/upgrade`, `/api/forge/merge`, `/api/forge/sell`.
 - `api/app/api/routes/zoopark_economy.py` preserves the current bank exchange request contract: frontend still sends `{ "from": "rub" | "usd", "amount": number }`.
 - Remaining ZooPark domains are split by business area in `api/app/zoopark/merchant.py`, `forge.py`, `social.py`, `games.py`, and `progression.py`.
 
