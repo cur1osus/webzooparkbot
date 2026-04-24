@@ -8,17 +8,9 @@ type SoloFlowScreen = 'setup' | 'match';
 
 const BET_OPTIONS: readonly BetAmount[] = [100, 1_000, 10_000];
 
-const GAME_POSTERS: Record<string, string> = {
-  basketball: '/telegram-dice/stills/basketball.png',
-  bowling: '/telegram-dice/stills/bowling.png',
-  darts: '/telegram-dice/stills/darts.png',
-  dice: '/telegram-dice/stills/dice.png',
-  football: '/telegram-dice/stills/football.png',
-};
-
 const GAME_ACCENTS: Record<string, { border: string; from: string; to: string; glow: string }> = {
   basketball: { border: 'rgba(var(--c-orange-rgb),0.25)', from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
-  darts: { border: 'rgba(var(--c-orange-rgb),0.25)', from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
+  darts: { border: 'rgba(var(--c-purple-rgb),0.25)', from: 'var(--c-purple)', to: 'var(--c-blue)', glow: 'rgba(var(--c-purple-rgb),0.35)' },
   bowling: { border: 'rgba(var(--c-green-rgb),0.25)', from: 'var(--c-green)', to: 'var(--c-teal)', glow: 'rgba(var(--c-green-rgb),0.35)' },
   dice: { border: 'rgba(var(--c-blue-rgb),0.25)', from: 'var(--c-blue)', to: 'var(--c-cyan)', glow: 'rgba(var(--c-blue-rgb),0.35)' },
   football: { border: 'rgba(var(--c-gold-rgb),0.25)', from: 'var(--c-gold)', to: 'var(--c-amber)', glow: 'rgba(var(--c-gold-rgb),0.35)' },
@@ -96,12 +88,9 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
                 boxShadow: `0 10px 30px ${accents.glow}`,
               }}
             >
-              <img
-                src={GAME_POSTERS[game.id]}
-                alt={game.name}
-                className="w-full h-full block"
-                style={{ objectFit: 'contain' }}
-              />
+              <div className="w-full h-full flex items-center justify-center text-[72px] leading-none">
+                {game.emoji}
+              </div>
             </div>
           </div>
           <p className="m-0 mb-1 text-[18px] font-extrabold">{game.name}</p>

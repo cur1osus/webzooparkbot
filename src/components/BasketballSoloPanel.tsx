@@ -40,7 +40,7 @@ const GAME_RULES: Record<string, {
   },
   darts: {
     assetDir: 'dart',
-    accent: 'var(--c-orange)',
+    accent: 'var(--c-purple)',
     playerIcon: '🎯',
     successIcon: '🎯',
     failIcon: '🎯',

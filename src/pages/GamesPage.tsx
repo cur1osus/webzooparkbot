@@ -21,7 +21,7 @@ const FRUITS = ['🍓', '🫐', '🍏', '🍐', '🍇', '🍒'];
 
 const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = {
   basketball: { from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
-  darts:    { from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
+  darts:    { from: 'var(--c-purple)', to: 'var(--c-blue)', glow: 'rgba(var(--c-purple-rgb),0.35)' },
   bowling:  { from: 'var(--c-green)', to: 'var(--c-teal)', glow: 'rgba(var(--c-green-rgb),0.35)' },
   dice:     { from: 'var(--c-blue)', to: 'var(--c-cyan)', glow: 'rgba(var(--c-blue-rgb),0.35)' },
   football: { from: 'var(--c-gold)', to: 'var(--c-amber)', glow: 'rgba(var(--c-gold-rgb),0.35)' },
