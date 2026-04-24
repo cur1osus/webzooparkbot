@@ -242,7 +242,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefres
 
         <div style={{ position: 'relative', width: 180, height: 180, flexShrink: 0 }}>
           <TgsPlayer ref={tgsRef} size={180} />
-          {!isAnimating && (
+          {!isAnimating && (!lastRound || finished) && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               {finished ? (
                 <span style={{ fontSize: 64 }}>

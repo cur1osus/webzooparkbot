@@ -457,6 +457,13 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertFalse(result["is_draw"])
         self.assertEqual(result["history"], [{"round": 1, "player_roll": 5, "ai_roll": 4}])
 
+    def test_solo_basketball_uses_playable_roll_bounds(self) -> None:
+        module = importlib.import_module("api.app.zoopark.games")
+
+        self.assertEqual(module._solo_roll_bounds("basketball"), (1, 5))
+        self.assertEqual(module._solo_roll_bounds("football"), (1, 5))
+        self.assertEqual(module._solo_roll_bounds("dice"), (1, 6))
+
     def test_start_solo_dice_returns_history(self) -> None:
         module = importlib.import_module("api.app.zoopark.games")
         db, _cur = self._fake_db()

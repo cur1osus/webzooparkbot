@@ -41,7 +41,7 @@ class SoloStartBody(BaseModel):
 
 def _solo_roll_bounds(game_type: str) -> tuple[int, int]:
     if game_type in {"basketball", "football"}:
-        return 0, 5
+        return 1, 5
     return 1, 6
 
 
