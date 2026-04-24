@@ -61,3 +61,18 @@ export function getRawTelegramInitData(): string | undefined {
     return undefined;
   }
 }
+
+export function getTelegramStartParam(): string | undefined {
+  if (!hasWindow) return undefined;
+
+  try {
+    const launchParams = retrieveLaunchParams() as unknown as {
+      tgWebAppStartParam?: string;
+      startParam?: string;
+    };
+    return launchParams.tgWebAppStartParam || launchParams.startParam || undefined;
+  } catch {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tgWebAppStartParam') || params.get('startapp') || params.get('start') || undefined;
+  }
+}

@@ -5,10 +5,17 @@ import { PageSkeleton, Skeleton } from './components/Skeleton';
 import { apiRegister, isDevMode, setDevUserId, clearDevUserId, apiBuyAviary } from './api';
 import { useLiveGameState } from './hooks/useLiveGameState';
 import { inTma, hapticImpact, hapticNotification, readyTma } from './tma';
+import { getTelegramStartParam } from './tmaEnv';
 import type { GameState } from './types';
 
 const AUTOSAVE_MS = 15_000;
 const HIDDEN_RELOAD_MS = 30_000;
+
+function getInviteGameId(): number | null {
+  const startParam = getTelegramStartParam();
+  const match = startParam?.match(/^mpgame_(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
 
@@ -175,6 +182,7 @@ export default function App() {
   const { state, loading, error, errorStatus, loadFromServer, persistStateSilently, setGameState, patchState } = useZooStore();
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useState<RootTab>('zoo');
+  const [inviteGameId] = useState<number | null>(() => getInviteGameId());
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const displayStateRef = useRef<GameState | null>(null);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -201,6 +209,10 @@ export default function App() {
 
   // Initial load
   useEffect(() => { void loadFromServer(); }, [loadFromServer]);
+
+  useEffect(() => {
+    if (inviteGameId) setTab('games');
+  }, [inviteGameId]);
 
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {
@@ -353,7 +365,7 @@ export default function App() {
                 <LabPage gs={displayState} />
               )}
               {tab === 'games' && (
-                <GamesPage gs={displayState} onRefresh={reloadFromServer} />
+                <GamesPage gs={displayState} onRefresh={reloadFromServer} initialTab={inviteGameId ? 'multi' : undefined} inviteGameId={inviteGameId ?? undefined} />
               )}
               {tab === 'more' && (
                 <MorePage gs={displayState} onRefresh={reloadFromServer} />

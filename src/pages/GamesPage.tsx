@@ -3,6 +3,7 @@ import { fmt } from '../utils/format';
 import type { GameState, MpGame, SoloStats } from '../types';
 import { GAMES } from '../data/games';
 import {
+  apiConfig,
   apiCocktailGuess,
   apiCreateMpGame,
   apiGetOpenGames,
@@ -10,6 +11,7 @@ import {
   apiJoinMpGame,
 } from '../api';
 import { SoloGameFlow } from '../components/SoloGameFlow';
+import { copyTmaText, shareTmaUrl } from '../tma';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail';
 type BetAmount = 100 | 1_000 | 10_000;
@@ -29,6 +31,10 @@ const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = 
 
 function getGameDef(gameType: string) {
   return GAMES.find((game) => game.id === gameType);
+}
+
+function parseRubInput(value: string): number {
+  return Number(value.replace(/\D/g, '') || 0);
 }
 
 /* ──────────────────────────── COCKTAIL ──────────────────────────────── */
@@ -274,14 +280,27 @@ function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
 }
 
 /* ──────────────────────────── MULTI ────────────────────────────────── */
-function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: () => void; inviteGameId?: number }) {
   const [games, setGames] = useState<MpGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [selectedGame, setSelectedGame] = useState<string>('dice');
-  const [bet, setBet] = useState<BetAmount>(100);
+  const [betInput, setBetInput] = useState('100');
   const [message, setMessage] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState('ZooParkBot');
+  const [createdGame, setCreatedGame] = useState<MpGame | null>(null);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+
+  const bet = parseRubInput(betInput);
+  const betTooHigh = bet > gs.rub;
+  const canCreate = bet > 0 && !betTooHigh;
+  const createdGameDef = createdGame ? getGameDef(createdGame.game_type) : null;
+  const createdGameLink = createdGame ? `https://t.me/${botUsername}?start=mpgame_${createdGame.id}` : '';
+  const invitedGameAvailable = inviteGameId ? games.some((game) => game.id === inviteGameId) : false;
+  const visibleGames = inviteGameId
+    ? [...games].sort((a, b) => Number(b.id === inviteGameId) - Number(a.id === inviteGameId))
+    : games;
 
   const loadGames = () => {
     setLoading(true);
@@ -293,13 +312,32 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
   useEffect(loadGames, []);
 
+  useEffect(() => {
+    apiConfig()
+      .then((config) => {
+        if (config.bot_username) setBotUsername(config.bot_username);
+      })
+      .catch(() => {});
+  }, []);
+
+  const setPresetBet = (amount: BetAmount) => {
+    setBetInput(String(amount));
+  };
+
+  const updateBetInput = (value: string) => {
+    setBetInput(value.replace(/\D/g, '').slice(0, 15));
+  };
+
   const createGame = async () => {
-    if (busy || gs.rub < bet) return;
+    if (busy || !canCreate) return;
     setBusy(true);
     setMessage(null);
     setError(null);
+    setCreatedGame(null);
+    setCopiedInvite(false);
     try {
-      await apiCreateMpGame(selectedGame, bet);
+      const result = await apiCreateMpGame(selectedGame, bet);
+      setCreatedGame(result.game);
       setMessage('Игра создана. Ждём второго игрока.');
       onRefresh();
       loadGames();
@@ -308,6 +346,20 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const copyInviteLink = async () => {
+    if (!createdGameLink) return;
+    if (await copyTmaText(createdGameLink)) {
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
+    }
+  };
+
+  const shareInviteLink = () => {
+    if (!createdGame || !createdGameLink) return;
+    const title = createdGameDef?.name ?? createdGame.game_type;
+    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ₽${fmt(createdGame.bet_rub)}`);
   };
 
   const joinGame = async (gameId: number) => {
@@ -361,7 +413,7 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
             return (
               <button
                 key={amount}
-                onClick={() => setBet(amount)}
+                onClick={() => setPresetBet(amount)}
                 className="flex-1 py-2 rounded-xl border-none font-bold text-[13px]"
                 style={{
                   background: active ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
@@ -375,9 +427,29 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           })}
         </div>
 
+        <div className="flex flex-col gap-2">
+          <label className="text-[12px] font-semibold" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Произвольная ставка
+          </label>
+          <input
+            value={betInput}
+            onChange={(event) => updateBetInput(event.target.value)}
+            inputMode="numeric"
+            placeholder="Введите сумму в рублях"
+            className="text-input text-[15px]"
+            style={{ padding: '12px 14px' }}
+          />
+          {betInput && bet === 0 && (
+            <p className="m-0 text-[12px]" style={{ color: 'var(--c-red-soft)' }}>Ставка должна быть больше нуля</p>
+          )}
+          {betTooHigh && (
+            <p className="m-0 text-[12px]" style={{ color: 'var(--c-red-soft)' }}>Недостаточно рублей для ставки ₽{fmt(bet)}</p>
+          )}
+        </div>
+
         <button
           onClick={() => void createGame()}
-          disabled={busy || gs.rub < bet}
+          disabled={busy || !canCreate}
           className="py-[15px] rounded-2xl border-none font-extrabold text-base disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg, var(--c-green), #30b34e)', color: 'var(--tg-theme-button-text-color)', boxShadow: '0 4px 16px rgba(var(--c-green-rgb),0.3)' }}
         >
@@ -387,13 +459,51 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 
       {message && <div className="card" style={{ background: 'rgba(var(--c-green-rgb),0.1)', borderColor: 'rgba(var(--c-green-rgb),0.25)' }}><p className="m-0 text-[13px]" style={{ color: 'var(--c-green)' }}>{message}</p></div>}
 
+      {inviteGameId && !loading && !invitedGameAvailable && (
+        <div className="card" style={{ background: 'rgba(var(--c-orange-rgb),0.1)', borderColor: 'rgba(var(--c-orange-rgb),0.25)' }}>
+          <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-orange)' }}>
+            Игра по ссылке уже недоступна или была сыграна.
+          </p>
+        </div>
+      )}
+
+      {createdGame && (
+        <div className="card flex flex-col gap-3" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', borderColor: 'rgba(var(--c-blue-rgb),0.24)' }}>
+          <div>
+            <p className="m-0 font-bold text-[15px]">Поделиться игрой</p>
+            <p className="m-0 mt-1 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              {createdGameDef?.emoji ?? '🎲'} {createdGameDef?.name ?? createdGame.game_type} · ставка ₽{fmt(createdGame.bet_rub)}
+            </p>
+          </div>
+          <div className="surface-subtle px-3 py-[10px] rounded-xl text-[12px] break-all select-all" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {createdGameLink}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={shareInviteLink}
+              className="flex-1 py-3 rounded-xl border-none font-bold text-[13px]"
+              style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
+            >
+              Поделиться в Telegram
+            </button>
+            <button
+              onClick={() => void copyInviteLink()}
+              className="flex-1 py-3 rounded-xl border-none font-bold text-[13px]"
+              style={{ background: copiedInvite ? 'rgba(var(--c-green-rgb),0.2)' : 'rgba(var(--c-blue-rgb),0.18)', color: copiedInvite ? 'var(--c-green)' : 'var(--c-blue)' }}
+            >
+              {copiedInvite ? 'Скопировано' : 'Копировать ссылку'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="flex justify-center py-6">
           <div className="spinner" />
         </div>
       )}
       {error && (
-        <p className="text-center text-sm" style={{ color: 'var(--c-red-soft)' }}>Ошибка загрузки игр</p>
+        <p className="text-center text-sm" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
       )}
 
       {!loading && !error && games.length === 0 && (
@@ -406,10 +516,15 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         </div>
       )}
 
-      {games.map(g => {
+      {visibleGames.map(g => {
         const gameDef = getGameDef(g.game_type);
+        const invited = inviteGameId === g.id;
         return (
-        <div key={g.id} className="card flex items-center gap-3">
+        <div
+          key={g.id}
+          className="card flex items-center gap-3"
+          style={invited ? { borderColor: 'rgba(var(--c-blue-rgb),0.45)', boxShadow: '0 0 18px rgba(var(--c-blue-rgb),0.18)' } : undefined}
+        >
           <div
             className="w-10 h-10 rounded-xl grid place-items-center text-xl shrink-0"
             style={{ background: 'rgba(var(--c-blue-rgb),0.15)', border: '1px solid rgba(var(--c-blue-rgb),0.25)' }}
@@ -417,7 +532,14 @@ function MultiTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
             {gameDef?.emoji ?? '🎲'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="m-0 font-bold text-sm truncate">{gameDef ? `${gameDef.emoji} ${gameDef.name}` : g.game_type}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="m-0 font-bold text-sm truncate">{gameDef ? `${gameDef.emoji} ${gameDef.name}` : g.game_type}</p>
+              {invited && (
+                <span className="text-[10px] font-bold px-2 py-[2px] rounded-full shrink-0" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
+                  По ссылке
+                </span>
+              )}
+            </div>
             <p className="mt-[2px] mb-0 text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
               {g.creator_nickname} · ставка ₽{fmt(g.bet_rub)}
             </p>
@@ -571,8 +693,8 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 }
 
 /* ──────────────────────────── MAIN PAGE ────────────────────────────── */
-export function GamesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [tab, setTab] = useState<GamesTab>('solo');
+export function GamesPage({ gs, onRefresh, initialTab = 'solo', inviteGameId }: { gs: GameState; onRefresh: () => void; initialTab?: GamesTab; inviteGameId?: number }) {
+  const [tab, setTab] = useState<GamesTab>(initialTab);
 
   const tabs: { id: GamesTab; emoji: string; label: string }[] = [
     { id: 'solo',     emoji: '🤖', label: 'Соло' },
@@ -636,7 +758,7 @@ export function GamesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
 
       <div>
         {tab === 'solo'     && <SoloTab gs={gs} onRefresh={onRefresh} />}
-        {tab === 'multi'    && <MultiTab gs={gs} onRefresh={onRefresh} />}
+        {tab === 'multi'    && <MultiTab gs={gs} onRefresh={onRefresh} inviteGameId={inviteGameId} />}
         {tab === 'cocktail' && <CocktailTab onRefresh={onRefresh} />}
       </div>
     </div>

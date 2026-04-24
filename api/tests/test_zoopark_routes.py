@@ -440,6 +440,15 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertEqual(result["game"]["status"], "finished")
         self.assertEqual(result["game"]["winner_nickname"], "host")
 
+    def test_mpgame_create_rejects_non_positive_bet(self) -> None:
+        module = importlib.import_module("api.app.zoopark.games")
+
+        with self.assertRaises(_FakeHTTPException) as ctx:
+            module.api_mpgame_create(77, module.MpCreateBody(game_type="dice", bet_rub=0))
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail, "Ставка должна быть больше нуля")
+
     def test_start_solo_basketball_returns_history(self) -> None:
         module = importlib.import_module("api.app.zoopark.games")
         db, cur = self._fake_db()

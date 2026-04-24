@@ -39,6 +39,13 @@ class SoloStartBody(BaseModel):
     bet_rub: float
 
 
+def _normalize_bet(value: float) -> int:
+    bet_rub = int(value)
+    if bet_rub <= 0:
+        raise HTTPException(400, "Ставка должна быть больше нуля")
+    return bet_rub
+
+
 def _solo_roll_bounds(game_type: str) -> tuple[int, int]:
     if game_type in {"basketball", "football"}:
         return 1, 5
@@ -105,7 +112,7 @@ def api_mpgame_create(
     tg_id: int,
     body: MpCreateBody,
 ):
-    bet_rub = int(body.bet_rub)
+    bet_rub = _normalize_bet(body.bet_rub)
     db = get_db()
     try:
         with db.cursor() as cur:
@@ -237,7 +244,7 @@ def api_start_solo_game(
     tg_id: int,
     body: SoloStartBody,
 ):
-    bet_rub = int(body.bet_rub)
+    bet_rub = _normalize_bet(body.bet_rub)
     db = get_db()
     try:
         with db.cursor() as cur:
