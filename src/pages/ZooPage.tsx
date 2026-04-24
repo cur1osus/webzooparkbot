@@ -19,9 +19,25 @@ const PROP_ICON: Record<string, string> = {
   last_chance: '🍀',
   bonus_rerolls: '🎁',
 };
+const PROP_LABEL: Record<string, string> = {
+  bank_rate: 'Курс банка',
+  income_boost: 'Общий доход',
+  animal_income: 'Доход животных',
+  aviary_discount: 'Вольеры',
+  animal_discount: 'Животные',
+  extra_turns: 'Доп. ходы',
+  last_chance: 'Последний шанс',
+  bonus_rerolls: 'Перебросы',
+};
 function forgeItemIcon(item: ForgeItem): string {
   const first = item.properties?.[0]?.type;
   return first ? (PROP_ICON[first] ?? '✨') : '✨';
+}
+
+function itemBonusSummary(item: ForgeItem): string {
+  const props = item.properties ?? [];
+  if (props.length === 0) return 'Нет свойств';
+  return props.map(p => p.label).join(' · ');
 }
 
 const RARITY_COLOR: Record<string, string> = {
@@ -40,81 +56,175 @@ function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, onDelet
   onSelectItems: (id: string) => void; onItemDetail: (id: string) => void;
 }) {
   const activeItems = items.filter(i => i.is_active);
+  const activeSet = sets.find(s => s.is_active) ?? null;
+  const orderedSets = [...sets].sort((a, b) => Number(b.is_active) - Number(a.is_active));
   const bonuses: Record<string, number> = {};
   for (const item of activeItems) {
     for (const p of item.properties ?? []) {
       bonuses[p.type] = (bonuses[p.type] ?? 0) + p.value;
     }
   }
+  const bonusEntries = Object.entries(bonuses);
 
   return (
     <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
-      <div className="card">
-        <p className="m-0 mb-[10px] font-bold text-[15px]">Суммарные бонусы активных предметов:</p>
-        {Object.entries(bonuses).length === 0
-          ? <p className="m-0 text-tg-hint text-[13px]">Нет активных предметов</p>
-          : Object.entries(bonuses).map(([type, val]) => (
-            <div key={type} className="flex justify-between mb-1">
-              <span className="text-[13px] text-tg-hint">{PROP_ICON[type] ?? '✨'} {type.replace(/_/g, ' ')}</span>
-              <span className="text-[13px] text-[var(--c-green)] font-bold">{val}</span>
-            </div>
-          ))}
-        <div className="mt-2 pt-2 border-t" style={{ borderColor: 'var(--surface-overlay-border)' }}>
-          <span className="text-[13px] text-tg-hint">Активных предметов </span>
-          <span className="text-[13px] font-bold">{activeItems.length} / 3</span>
+      <div className="card overflow-hidden relative" style={{ background: 'linear-gradient(135deg, rgba(var(--c-blue-rgb),0.14), rgba(var(--c-purple-rgb),0.08))', borderColor: 'rgba(var(--c-blue-rgb),0.25)' }}>
+        <div className="absolute -right-8 -top-10 w-28 h-28 rounded-full" style={{ background: 'rgba(var(--c-blue-rgb),0.12)' }} />
+        <div className="relative flex items-start justify-between gap-3">
+          <div>
+            <p className="m-0 text-[11px] font-extrabold uppercase tracking-[1px] text-tg-hint">Активная сборка</p>
+            <p className="mt-1 mb-0 text-[18px] font-extrabold leading-tight">{activeSet ? `${activeSet.icon} ${activeSet.name}` : 'Ручной набор'}</p>
+            <p className="mt-[4px] mb-0 text-xs text-tg-hint">{activeItems.length}/3 предмета дают бонусы прямо сейчас</p>
+          </div>
+          <div className="grid grid-cols-3 gap-[6px] shrink-0">
+            {[0, 1, 2].map(index => {
+              const item = activeItems[index];
+              return (
+                <button
+                  key={index}
+                  onClick={() => item && onItemDetail(item.id)}
+                  disabled={!item}
+                  className="w-11 h-11 rounded-2xl border-none grid place-items-center text-[22px] disabled:opacity-70"
+                  style={{ background: item ? 'rgba(var(--c-green-rgb),0.16)' : 'rgba(var(--tg-theme-hint-color-rgb,128,128,128),0.08)', color: 'var(--tg-theme-text-color)' }}
+                >
+                  {item ? forgeItemIcon(item) : '＋'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="relative mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(var(--c-green-rgb),0.10)' }}>
+            <p className="m-0 text-[10px] uppercase tracking-[0.8px] text-tg-hint">Бонусов</p>
+            <p className="mt-[2px] mb-0 text-lg font-extrabold">{bonusEntries.length}</p>
+          </div>
+          <div className="rounded-2xl px-3 py-2" style={{ background: 'rgba(var(--c-gold-rgb),0.10)' }}>
+            <p className="m-0 text-[10px] uppercase tracking-[0.8px] text-tg-hint">Предметов</p>
+            <p className="mt-[2px] mb-0 text-lg font-extrabold">{items.length}</p>
+          </div>
+        </div>
+
+        {bonusEntries.length > 0 && (
+          <div className="relative mt-3 flex flex-wrap gap-[6px]">
+            {bonusEntries.map(([type, val]) => (
+              <span key={type} className="px-[9px] py-[5px] rounded-full text-[12px] font-semibold" style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)' }}>
+                {PROP_ICON[type] ?? '✨'} {PROP_LABEL[type] ?? type}: {val}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {message && (
+        <div className="rounded-2xl px-3 py-2 text-[13px] font-semibold" style={{ background: 'rgba(var(--c-orange-rgb),0.12)', color: 'var(--c-orange)' }}>
+          {message}
+        </div>
+      )}
+
+      <div className="card flex flex-col gap-2" style={{ borderColor: 'rgba(var(--c-gold-rgb),0.22)' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl grid place-items-center text-xl" style={{ background: 'rgba(var(--c-gold-rgb),0.14)' }}>✨</div>
+          <div className="flex-1 min-w-0">
+            <p className="m-0 font-bold text-sm">Следующее действие</p>
+            <p className="mt-[2px] mb-0 text-xs text-tg-hint">
+              {items.length === 0 ? 'Создай предметы в магазине, потом собери из них сет.' : sets.length === 0 ? 'Создай первый сет и выбери до 3 предметов.' : activeSet ? 'Текущий сет можно быстро настроить или заменить.' : 'Примени готовый сет, чтобы включить его бонусы.'}
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={onCreateSet} disabled={busy || items.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
+            + Новый сет
+          </button>
+          <button onClick={() => activeSet ? onSelectItems(activeSet.id) : orderedSets[0] && onApplySet(orderedSets[0].id)} disabled={busy || orderedSets.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-green-rgb),0.16)', color: 'var(--c-green)' }}>
+            {activeSet ? 'Настроить' : 'Применить'}
+          </button>
         </div>
       </div>
 
-      <div className="flex justify-between items-center">
-        <p className="m-0 font-bold text-[15px]">Сеты предметов</p>
-        <button onClick={onCreateSet} disabled={busy} className="px-3 py-[5px] rounded-lg border-none bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] text-[13px] font-semibold disabled:opacity-50">+ Добавить</button>
+      <div className="flex justify-between items-end">
+        <div>
+          <p className="m-0 font-bold text-[15px]">Сеты</p>
+          <p className="mt-[2px] mb-0 text-xs text-tg-hint">Переключай сборки одним нажатием</p>
+        </div>
+        <span className="text-xs text-tg-hint">{sets.length} шт.</span>
       </div>
-      <p className="m-0 -mt-2 text-xs text-tg-hint">Выбери до 3 предметов для каждого слота и переключай наборы одним нажатием.</p>
-      {message && <p className="m-0 text-[13px] text-[var(--c-orange)]">{message}</p>}
 
-      {sets.map(s => {
-        const setItems = items.filter(i => s.item_ids.includes(i.id));
+      {orderedSets.length === 0 ? (
+        <div className="card text-center py-6">
+          <p className="m-0 text-[34px]">⚒️</p>
+          <p className="mt-2 mb-0 font-bold text-sm">Сетов пока нет</p>
+          <p className="mt-[4px] mb-3 text-xs text-tg-hint">Создай сет, чтобы быстро включать нужные бонусы.</p>
+          <button onClick={onCreateSet} disabled={busy || items.length === 0} className="px-4 py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)' }}>
+            Создать сет
+          </button>
+        </div>
+      ) : orderedSets.map(itemSet => {
+        const setItems = items.filter(i => itemSet.item_ids.includes(i.id));
         return (
-          <div key={s.id} className="card" style={{
-            border: s.is_active ? '1px solid rgba(var(--c-blue-rgb),0.4)' : undefined,
-            background: s.is_active ? 'rgba(var(--c-blue-rgb),0.07)' : undefined,
+          <div key={itemSet.id} className="card flex flex-col gap-3" style={{
+            border: itemSet.is_active ? '1px solid rgba(var(--c-blue-rgb),0.45)' : undefined,
+            background: itemSet.is_active ? 'rgba(var(--c-blue-rgb),0.08)' : undefined,
           }}>
-            <div className="flex items-center justify-between mb-[6px]">
-              <div>
-                <span className="font-bold text-sm">{s.icon} {s.name} 🔨 🗑️</span>
-                {s.is_active
-                  ? <span className="ml-2 text-[11px] text-[var(--c-blue)]">Сейчас активен</span>
-                  : <p className="mt-[2px] mb-0 text-[11px] text-tg-hint">{setItems.length} предмет{setItems.length === 1 ? '' : 'а'} в сете</p>}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm truncate">{itemSet.icon} {itemSet.name}</span>
+                  {itemSet.is_active && <span className="px-[7px] py-[2px] rounded-full text-[10px] font-bold" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>Активен</span>}
+                </div>
+                <p className="mt-[3px] mb-0 text-xs text-tg-hint">{setItems.length}/3 слота заполнено</p>
               </div>
-              <div className="flex gap-[6px]">{setItems.slice(0, 3).map(i => <span key={i.id} className="text-lg">{forgeItemIcon(i)}</span>)}</div>
+              <button onClick={() => onDeleteSet(itemSet.id)} disabled={busy} className="w-8 h-8 rounded-xl border-none disabled:opacity-45" style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red)' }}>×</button>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => onSelectItems(s.id)} disabled={busy} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-gold-rgb),0.15)] text-[var(--c-gold)] text-[13px] font-semibold disabled:opacity-50">Выбрать</button>
-              <button onClick={() => onApplySet(s.id)} disabled={busy || setItems.length === 0} className="flex-1 py-2 rounded-lg border-none bg-[rgba(var(--c-green-rgb),0.15)] text-[var(--c-green)] text-[13px] font-semibold disabled:opacity-50">Применить</button>
-              <button onClick={() => onDeleteSet(s.id)} disabled={busy} className="px-3 py-2 rounded-lg border-none bg-[rgba(var(--c-red-rgb),0.12)] text-[var(--c-red)] text-[13px] font-semibold disabled:opacity-50">🗑️</button>
+
+            <div className="grid grid-cols-3 gap-2">
+              {[0, 1, 2].map(index => {
+                const item = setItems[index];
+                return (
+                  <button key={index} onClick={() => item ? onItemDetail(item.id) : onSelectItems(itemSet.id)} className="min-h-[62px] rounded-2xl border-none flex flex-col items-center justify-center gap-[3px]" style={{ background: item ? 'rgba(var(--c-purple-rgb),0.10)' : 'var(--surface-subtle)', color: 'var(--tg-theme-text-color)' }}>
+                    <span className="text-[22px]">{item ? forgeItemIcon(item) : '＋'}</span>
+                    <span className="max-w-full px-1 text-[10px] text-tg-hint truncate">{item ? item.name : 'Пусто'}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => onSelectItems(itemSet.id)} disabled={busy} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-gold-rgb),0.14)', color: 'var(--c-gold)' }}>Изменить</button>
+              <button onClick={() => onApplySet(itemSet.id)} disabled={busy || setItems.length === 0 || itemSet.is_active} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-green-rgb),0.14)', color: 'var(--c-green)' }}>{itemSet.is_active ? 'Уже активен' : 'Применить'}</button>
             </div>
           </div>
         );
       })}
-      {sets.length === 0 && <div className="card text-center"><p className="m-0 text-tg-hint">Нет сетов. Нажми «+ Добавить»</p></div>}
 
-      <div className="flex justify-between items-center mt-1">
-        <p className="m-0 font-bold text-[15px]">Мои предметы</p>
+      <div className="flex justify-between items-end mt-1">
+        <div>
+          <p className="m-0 font-bold text-[15px]">Инвентарь</p>
+          <p className="mt-[2px] mb-0 text-xs text-tg-hint">Нажми на предмет, чтобы посмотреть свойства</p>
+        </div>
         <span className="text-xs text-tg-hint">{items.length} шт.</span>
       </div>
+
       {items.length === 0 ? (
-        <div className="card text-center"><p className="m-0 text-tg-hint text-sm">Предметов пока нет. Создай их в магазине → Кузница.</p></div>
+        <div className="card text-center py-7">
+          <p className="m-0 text-[36px]">🧰</p>
+          <p className="mt-2 mb-0 font-bold text-sm">Инвентарь пуст</p>
+          <p className="mt-[4px] mb-0 text-xs text-tg-hint">Открой Магазин → Кузница и создай первый предмет.</p>
+        </div>
       ) : items.map(item => {
         const color = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
         return (
           <button key={item.id} onClick={() => onItemDetail(item.id)} className="card flex items-center gap-3 text-left border-none cursor-pointer">
-            <span className="text-[28px] shrink-0">{forgeItemIcon(item)}</span>
+            <span className="w-11 h-11 rounded-2xl grid place-items-center text-[25px] shrink-0" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>{forgeItemIcon(item)}</span>
             <span className="flex-1 min-w-0">
-              <span className="block font-semibold text-sm truncate">{item.name}</span>
-              <span className="block mt-[2px] text-xs text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</span>
+              <span className="flex items-center gap-[6px] min-w-0">
+                <span className="font-bold text-sm truncate">{item.name}</span>
+                {item.is_active && <span className="shrink-0 text-[10px] font-bold" style={{ color: 'var(--c-green)' }}>ON</span>}
+              </span>
+              <span className="block mt-[2px] text-xs text-tg-hint truncate">Ур. {item.level} · {itemBonusSummary(item)}</span>
             </span>
-            <span className="text-[11px] px-[7px] py-[3px] rounded-full font-semibold" style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}>
-              {item.is_active ? 'Активен' : (RARITY_LABEL[item.rarity] ?? item.rarity)}
+            <span className="text-[11px] px-[7px] py-[3px] rounded-full font-semibold shrink-0" style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}>
+              {RARITY_LABEL[item.rarity] ?? item.rarity}
             </span>
           </button>
         );
@@ -127,33 +237,55 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
   items: ForgeItem[]; setId: string; selectedIds: string[];
   onSelect: (id: string) => void; onApply: () => void; onBack: () => void;
 }) {
+  const selectedItems = selectedIds.map(id => items.find(item => item.id === id)).filter((item): item is ForgeItem => Boolean(item));
   return (
     <div className="page-content-safe">
-      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b" style={{ top: 0, borderColor: 'var(--surface-overlay-border)' }}>
-        <button onClick={onBack} className="bg-transparent border-none text-tg-text text-[22px]">✕</button>
-        <span className="font-bold text-[15px]">Выбрать предметы</span>
-        <button onClick={onApply} className="px-[14px] py-[7px] rounded-lg border-none bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-[13px]">Применить ✓</button>
+      <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] border-b" style={{ top: 0, borderColor: 'var(--surface-overlay-border)' }}>
+        <div className="flex items-center justify-between gap-3">
+          <button onClick={onBack} className="w-9 h-9 rounded-xl border-none bg-[var(--surface-subtle)] text-tg-text text-[18px]">✕</button>
+          <div className="text-center min-w-0">
+            <p className="m-0 font-bold text-[15px]">Настрой сет</p>
+            <p className="mt-[2px] mb-0 text-[11px] text-tg-hint">Выбрано {selectedIds.length}/3</p>
+          </div>
+          <button onClick={onApply} className="px-[14px] py-[9px] rounded-xl border-none bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-[13px]">Сохранить</button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {[0, 1, 2].map(index => {
+            const item = selectedItems[index];
+            return (
+              <div key={index} className="min-h-[58px] rounded-2xl flex flex-col items-center justify-center gap-[2px]" style={{ background: item ? 'rgba(var(--c-green-rgb),0.12)' : 'var(--surface-subtle)' }}>
+                <span className="text-[22px]">{item ? forgeItemIcon(item) : '＋'}</span>
+                <span className="max-w-full px-1 text-[10px] text-tg-hint truncate">{item ? item.name : 'Слот'}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
+
       <div className="px-[14px] pt-3 flex flex-col gap-[10px]">
-        {items.length === 0 && <div className="card text-center"><p className="m-0 text-tg-hint text-sm">Нет предметов для выбора.</p></div>}
+        {items.length === 0 && <div className="card text-center py-7"><p className="m-0 text-[34px]">🧰</p><p className="mt-2 mb-0 text-tg-hint text-sm">Нет предметов для выбора.</p></div>}
         {items.map(item => {
           const sel = selectedIds.includes(item.id);
+          const color = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
           return (
             <div key={item.id} onClick={() => onSelect(item.id)}
-              className={`card flex items-center gap-3 cursor-pointer ${sel ? 'card-rare' : ''}`}
-              style={sel ? { border: `1px solid ${RARITY_COLOR[item.rarity] ?? 'var(--c-green)'}` } : undefined}>
-              <span className="text-[26px] shrink-0">{forgeItemIcon(item)}</span>
+              className="card flex items-center gap-3 cursor-pointer"
+              style={{ border: sel ? `1px solid ${color}` : undefined, background: sel ? `color-mix(in srgb, ${color} 9%, transparent)` : undefined }}>
+              <span className="w-11 h-11 rounded-2xl grid place-items-center text-[25px] shrink-0" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>{forgeItemIcon(item)}</span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-[6px]">
-                  <span className="font-semibold text-sm">{item.name}</span>
+                <div className="flex items-center gap-[6px] min-w-0">
+                  <span className="font-bold text-sm truncate">{item.name}</span>
                   <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `color-mix(in srgb, ${RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)'} 13%, transparent)`, color: RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)' }}>
                     {RARITY_LABEL[item.rarity] ?? item.rarity}
                   </span>
-                  {item.is_active && <span className="text-[11px] text-[var(--c-green)]">АКТИВЕН</span>}
+                  {item.is_active && <span className="text-[10px] font-bold text-[var(--c-green)]">ON</span>}
                 </div>
-                <p className="mt-[2px] mb-0 text-xs text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</p>
+                <p className="mt-[2px] mb-0 text-xs text-tg-hint truncate">Ур. {item.level} · {itemBonusSummary(item)}</p>
               </div>
-              <span className="text-base text-tg-hint">▼</span>
+              <span className="w-7 h-7 rounded-full grid place-items-center text-sm font-bold" style={{ background: sel ? 'var(--c-green)' : 'var(--surface-subtle)', color: sel ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)' }}>
+                {sel ? '✓' : '+'}
+              </span>
             </div>
           );
         })}
@@ -165,21 +297,34 @@ function ItemSelectPage({ items, setId: _setId, selectedIds, onSelect, onApply, 
 function ItemDetailPage({ item, onActivate, onSell, onBack }: {
   item: ForgeItem; onActivate: () => void; onSell: () => void; onBack: () => void;
 }) {
+  const color = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
   return (
     <div className="page-content-safe">
       <div className="sticky z-10 bg-tg-bg px-[14px] pt-3 pb-[10px] flex items-center justify-between border-b" style={{ top: 0, borderColor: 'var(--surface-overlay-border)' }}>
-        <button onClick={onBack} className="bg-transparent border-none text-tg-text text-[22px]">✕</button>
-        <span className="font-bold text-[15px]">
-          {item.name} · <span style={{ color: RARITY_COLOR[item.rarity] }}>{RARITY_LABEL[item.rarity] ?? item.rarity}</span>
-        </span>
-        <div />
+        <button onClick={onBack} className="w-9 h-9 rounded-xl border-none bg-[var(--surface-subtle)] text-tg-text text-[18px]">✕</button>
+        <span className="font-bold text-[15px]">Предмет</span>
+        <span className="w-9" />
       </div>
       <div className="p-[14px] flex flex-col gap-[10px]">
+        <div className="card text-center overflow-hidden relative" style={{ borderColor: `color-mix(in srgb, ${color} 35%, transparent)`, background: `color-mix(in srgb, ${color} 8%, transparent)` }}>
+          <div className="absolute -right-10 -top-10 w-28 h-28 rounded-full" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }} />
+          <div className="relative">
+            <div className="mx-auto w-[74px] h-[74px] rounded-3xl grid place-items-center text-[40px]" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>{forgeItemIcon(item)}</div>
+            <p className="mt-3 mb-0 text-lg font-extrabold">{item.name}</p>
+            <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+              <span className="px-[9px] py-[4px] rounded-full text-[11px] font-bold" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)`, color }}>{RARITY_LABEL[item.rarity] ?? item.rarity}</span>
+              <span className="px-[9px] py-[4px] rounded-full text-[11px] font-bold bg-[var(--surface-subtle)] text-tg-hint">Уровень {item.level}</span>
+              {item.is_active && <span className="px-[9px] py-[4px] rounded-full text-[11px] font-bold" style={{ background: 'rgba(var(--c-green-rgb),0.14)', color: 'var(--c-green)' }}>Активен</span>}
+            </div>
+          </div>
+        </div>
+
         <div className="card">
-          <p className="m-0 mb-2 text-[13px] text-tg-hint">Уровень {item.level} · {item.properties?.length ?? 0} св-в</p>
+          <p className="m-0 mb-3 font-bold text-sm">Свойства</p>
+          {(item.properties ?? []).length === 0 && <p className="m-0 text-[13px] text-tg-hint">У предмета нет свойств.</p>}
           {(item.properties ?? []).map((p, i) => (
-            <div key={i} className="flex justify-between mb-1">
-              <span className="text-[13px] text-tg-hint">{PROP_ICON[p.type] ?? '✨'} {p.label.split(' ').slice(0, -1).join(' ')}</span>
+            <div key={i} className="flex items-center justify-between gap-3 mb-2 rounded-xl px-3 py-2" style={{ background: 'var(--surface-subtle)' }}>
+              <span className="text-[13px] text-tg-hint">{PROP_ICON[p.type] ?? '✨'} {PROP_LABEL[p.type] ?? p.label.split(' ').slice(0, -1).join(' ')}</span>
               <span className="text-[13px] text-[var(--c-green)] font-bold">{p.label.split(' ').pop()}</span>
             </div>
           ))}
@@ -423,7 +568,8 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             await apiForgeApplySet(setId);
           }, 'Ошибка применения сета')}
           onCreateSet={() => void runForgeAction(async () => {
-            await apiForgeCreateSet([]);
+            const result = await apiForgeCreateSet([]);
+            setSubPage({ type: 'forge_select', setId: result.set.id, selectedIds: [] });
           }, 'Ошибка создания сета')}
           onDeleteSet={(setId) => void runForgeAction(async () => {
             if (!(await tmaConfirm('Удалить этот сет? Предметы останутся у тебя.', 'Удалить сет?'))) return;
