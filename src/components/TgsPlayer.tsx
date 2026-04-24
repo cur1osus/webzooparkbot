@@ -32,6 +32,7 @@ function loadRLottie(): Promise<void> {
 
 export interface TgsHandle {
   playAnimation(src: string): Promise<void>;
+  clearAnimation(): void;
 }
 
 function syncPlayerCanvas(picture: HTMLPictureElement) {
@@ -77,6 +78,14 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
   const sourceRef = useRef<HTMLSourceElement>(null);
 
   useImperativeHandle(ref, () => ({
+    clearAnimation(): void {
+      const picture = pictureRef.current;
+      const source = sourceRef.current;
+      if (!picture || !source) return;
+
+      resetPlayer(picture);
+      source.setAttribute('srcset', '');
+    },
     async playAnimation(src: string): Promise<void> {
       await loadRLottie();
       const picture = pictureRef.current;

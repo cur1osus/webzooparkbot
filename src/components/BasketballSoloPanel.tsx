@@ -131,6 +131,9 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefres
     await tgsRef.current?.playAnimation(`/telegram-dice/${gameRule.assetDir}/${round.ai_roll}.tgs`);
 
     setVisibleHistory((current) => [...current, round]);
+    if (isLastRound) {
+      tgsRef.current?.clearAnimation();
+    }
     setAnimLabel('');
     setPhase(isLastRound ? 'result' : 'idle');
   };
@@ -324,7 +327,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefres
                 style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)' }}
               >
                 <span className="text-[11px] font-bold w-[44px] shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  Р{item.round}
+                  {item.round}
                 </span>
                 <div className="flex-1 flex items-center gap-1">
                   <span className="text-[11px]" style={{ color: player.color }}>{player.icon} Вы +{player.delta}</span>
