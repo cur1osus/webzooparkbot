@@ -16,6 +16,7 @@ import { copyTmaText, shareTmaUrl } from '../tma';
 type GamesTab = 'solo' | 'multi' | 'cocktail';
 type BetAmount = 100 | 1_000 | 10_000;
 type CocktailClueStatus = 'correct' | 'present' | 'absent';
+type MultiScreen = 'list' | 'share';
 
 const BET_AMOUNTS: BetAmount[] = [100, 1_000, 10_000];
 
@@ -288,6 +289,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const [selectedGame, setSelectedGame] = useState<string>('dice');
   const [betInput, setBetInput] = useState('100');
   const [message, setMessage] = useState<string | null>(null);
+  const [screen, setScreen] = useState<MultiScreen>('list');
   const [botUsername, setBotUsername] = useState('ZooParkBot');
   const [createdGame, setCreatedGame] = useState<MpGame | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -296,7 +298,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const betTooHigh = bet > gs.rub;
   const canCreate = bet > 0 && !betTooHigh;
   const createdGameDef = createdGame ? getGameDef(createdGame.game_type) : null;
-  const createdGameLink = createdGame ? `https://t.me/${botUsername}?start=mpgame_${createdGame.id}` : '';
+  const createdGameLink = createdGame ? `https://t.me/${botUsername}?startapp=mpgame_${createdGame.id}` : '';
   const invitedGameAvailable = inviteGameId ? games.some((game) => game.id === inviteGameId) : false;
   const visibleGames = inviteGameId
     ? [...games].sort((a, b) => Number(b.id === inviteGameId) - Number(a.id === inviteGameId))
@@ -338,6 +340,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     try {
       const result = await apiCreateMpGame(selectedGame, bet);
       setCreatedGame(result.game);
+      setScreen('share');
       setMessage('Игра создана. Ждём второго игрока.');
       onRefresh();
       loadGames();
@@ -346,6 +349,11 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     } finally {
       setBusy(false);
     }
+  };
+
+  const backToList = () => {
+    setScreen('list');
+    setCopiedInvite(false);
   };
 
   const copyInviteLink = async () => {
@@ -378,6 +386,66 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
       setBusy(false);
     }
   };
+
+  if (screen === 'share' && createdGame) {
+    return (
+      <div className="p-[14px] flex flex-col gap-3">
+        <div className="flex items-center gap-3 mb-1">
+          <button
+            type="button"
+            onClick={backToList}
+            className="w-10 h-10 rounded-xl border-none text-[18px] shrink-0"
+            style={{ background: 'var(--tg-theme-secondary-bg-color)', color: 'var(--tg-theme-text-color)' }}
+          >
+            ←
+          </button>
+          <div className="min-w-0">
+            <p className="m-0 text-[18px] font-extrabold">Поделиться игрой</p>
+            <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Отправь приглашение в чат или скопируй ссылку</p>
+          </div>
+        </div>
+
+        <div className="card flex flex-col items-center text-center gap-3" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', borderColor: 'rgba(var(--c-blue-rgb),0.24)' }}>
+          <div className="w-[88px] h-[88px] rounded-3xl grid place-items-center text-[44px]" style={{ background: 'rgba(var(--c-blue-rgb),0.15)', border: '1px solid rgba(var(--c-blue-rgb),0.25)' }}>
+            {createdGameDef?.emoji ?? '🎲'}
+          </div>
+          <div>
+            <p className="m-0 font-extrabold text-[18px]">Игра создана</p>
+            <p className="m-0 mt-1 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              {createdGameDef?.name ?? createdGame.game_type} · ставка ₽{fmt(createdGame.bet_rub)}
+            </p>
+          </div>
+          <div className="surface-subtle w-full px-3 py-[10px] rounded-xl text-[12px] break-all select-all text-left" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {createdGameLink}
+          </div>
+        </div>
+
+        <button
+          onClick={shareInviteLink}
+          className="py-[15px] rounded-2xl border-none font-extrabold text-[16px]"
+          style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)', boxShadow: '0 4px 16px rgba(var(--c-blue-rgb),0.3)' }}
+        >
+          Поделиться в Telegram
+        </button>
+
+        <button
+          onClick={() => void copyInviteLink()}
+          className="py-[14px] rounded-2xl border-none font-bold text-[15px]"
+          style={{ background: copiedInvite ? 'rgba(var(--c-green-rgb),0.2)' : 'rgba(var(--c-blue-rgb),0.18)', color: copiedInvite ? 'var(--c-green)' : 'var(--c-blue)' }}
+        >
+          {copiedInvite ? 'Ссылка скопирована' : 'Копировать ссылку'}
+        </button>
+
+        <button
+          onClick={backToList}
+          className="py-[12px] rounded-2xl border-none font-bold text-[14px]"
+          style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-hint-color)' }}
+        >
+          К списку игр
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
@@ -464,36 +532,6 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
           <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-orange)' }}>
             Игра по ссылке уже недоступна или была сыграна.
           </p>
-        </div>
-      )}
-
-      {createdGame && (
-        <div className="card flex flex-col gap-3" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', borderColor: 'rgba(var(--c-blue-rgb),0.24)' }}>
-          <div>
-            <p className="m-0 font-bold text-[15px]">Поделиться игрой</p>
-            <p className="m-0 mt-1 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {createdGameDef?.emoji ?? '🎲'} {createdGameDef?.name ?? createdGame.game_type} · ставка ₽{fmt(createdGame.bet_rub)}
-            </p>
-          </div>
-          <div className="surface-subtle px-3 py-[10px] rounded-xl text-[12px] break-all select-all" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {createdGameLink}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={shareInviteLink}
-              className="flex-1 py-3 rounded-xl border-none font-bold text-[13px]"
-              style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
-            >
-              Поделиться в Telegram
-            </button>
-            <button
-              onClick={() => void copyInviteLink()}
-              className="flex-1 py-3 rounded-xl border-none font-bold text-[13px]"
-              style={{ background: copiedInvite ? 'rgba(var(--c-green-rgb),0.2)' : 'rgba(var(--c-blue-rgb),0.18)', color: copiedInvite ? 'var(--c-green)' : 'var(--c-blue)' }}
-            >
-              {copiedInvite ? 'Скопировано' : 'Копировать ссылку'}
-            </button>
-          </div>
         </div>
       )}
 
