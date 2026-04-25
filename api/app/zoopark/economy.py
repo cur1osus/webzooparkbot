@@ -70,7 +70,7 @@ def bank() -> dict:
 
 def bank_exchange(tg_id: int, body: BankExchangeBody) -> dict:
     amount = float(body.amount)
-    if amount <= 0:
+    if not body.exchange_all and amount <= 0:
         raise HTTPException(400, "Сумма должна быть > 0")
 
     # Transaction 1: sync passive income (short lock, separate from exchange)
