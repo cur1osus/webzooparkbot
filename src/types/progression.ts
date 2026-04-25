@@ -3,11 +3,13 @@ export type Habitat = 'desert' | 'mountains' | 'forest' | 'fields' | 'antarctica
 
 export interface PackAnimal {
   id: number;
+  animal_info_id?: number;
   survival: GeneTier;
   reproduction: GeneTier;
   appearance: GeneTier;
   size_trait: GeneTier;
   habitat: Habitat;
+  source?: 'pack' | 'breeding' | 'expedition' | 'merchant' | string;
   acquired_at: string;
   dies_at: string | null;
   locality_id: number | null;

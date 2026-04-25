@@ -16,10 +16,10 @@ npm run build
 echo "[2/8] Upload frontend + API"
 ssh "$REMOTE" "mkdir -p '${REMOTE_DIR}/dist' '${REMOTE_DIR}/api' '/var/www/webzooparkbot'"
 rsync -az --delete ./dist/ "${REMOTE}:${REMOTE_DIR}/dist/"
-rsync -az --exclude '__pycache__' --exclude '.venv' ./api/ "${REMOTE}:${REMOTE_DIR}/api/"
+rsync -az --delete --exclude '__pycache__' --exclude '.venv' ./api/ "${REMOTE}:${REMOTE_DIR}/api/"
 ssh "$REMOTE" "rsync -a --delete '${REMOTE_DIR}/dist/' /var/www/webzooparkbot/ && chown -R caddy:caddy /var/www/webzooparkbot"
 
-echo "[3/8] Install Python deps + migration dry-run + DB migration"
+echo "[3/8] Install Python deps + run DB migrations"
 remote_bash "$REMOTE_DIR" << 'ENDSSH'
 set -euo pipefail
 REMOTE_DIR="$1"
@@ -45,29 +45,33 @@ for item in shlex.split(sys.argv[1]):
 PY
 }
 
+load_service_env_files() {
+    local service="$1"
+    local env_files
+    env_files="$(systemctl show "$service" --property=EnvironmentFiles --value 2>/dev/null || true)"
+    while read -r file _; do
+        case "$file" in
+            /*)
+                if [ -r "$file" ]; then
+                    set -a
+                    # shellcheck disable=SC1090
+                    . "$file"
+                    set +a
+                fi
+                ;;
+        esac
+    done <<< "$env_files"
+}
+
+load_service_env_files webzooparkbot-api
 eval "$(load_service_env webzooparkbot-api)"
 
-: "${DB_PASSWORD:?DB_PASSWORD is not configured in webzooparkbot-api systemd environment}"
 : "${DB_USER:?DB_USER is not configured in webzooparkbot-api systemd environment}"
 : "${DB_NAME:?DB_NAME is not configured in webzooparkbot-api systemd environment}"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
-TMP_DB="${DB_NAME}_deploycheck_$(date +%Y%m%d_%H%M%S)"
-
-mysql_root_cmd() {
-    mysql --protocol=socket --user=root "$@"
-}
-
-mysql_cmd() {
-    mysql \
-      --host="$DB_HOST" \
-      --port="$DB_PORT" \
-      --user="$DB_USER" \
-      --password="$DB_PASSWORD" \
-      --default-character-set=utf8mb4 \
-      "$@"
-}
+DB_PASSWORD="${DB_PASSWORD:-}"
 
 mysqldump_cmd() {
     mysqldump \
@@ -84,38 +88,42 @@ mysqldump_cmd() {
       "$@"
 }
 
-cleanup_tmp_db() {
-    mysql_root_cmd -e "DROP DATABASE IF EXISTS \`$TMP_DB\`" >/dev/null 2>&1 || true
-}
-
-trap cleanup_tmp_db EXIT
-
 cd "$REMOTE_DIR/api"
 [ -x .venv/bin/python ] || python3.12 -m venv .venv
 .venv/bin/pip install -q -r requirements.txt
-.venv/bin/python -m pip install -q alembic pymysql >/dev/null 2>&1 || true
 
-echo "[migration-dry-run] Cloning current DB into temporary schema"
-DB_USER_HOSTS="$(mysql_root_cmd -Nse "SELECT Host FROM mysql.user WHERE User = '${DB_USER}'")"
-if [ -z "$DB_USER_HOSTS" ]; then
-    echo "No MySQL host entries found for DB_USER=$DB_USER" >&2
-    exit 1
-fi
+echo "[migration] Checking Alembic revision graph"
+.venv/bin/alembic heads
+.venv/bin/alembic current || true
 
-grant_sql="DROP DATABASE IF EXISTS \`$TMP_DB\`; CREATE DATABASE \`$TMP_DB\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-while IFS= read -r db_host_entry; do
-    [ -n "$db_host_entry" ] || continue
-    grant_sql+=" GRANT ALL PRIVILEGES ON \`$TMP_DB\`.* TO '${DB_USER}'@'${db_host_entry}';"
-done <<< "$DB_USER_HOSTS"
-grant_sql+=" FLUSH PRIVILEGES;"
-mysql_root_cmd -e "$grant_sql"
-mysqldump_cmd "$DB_NAME" | mysql_cmd "$TMP_DB"
-env -u DB_URL DB_NAME="$TMP_DB" .venv/bin/alembic upgrade head >/dev/null
-cleanup_tmp_db
+echo "[db-backup] Creating MySQL backup before Alembic upgrade"
+backup_dir="$REMOTE_DIR/backups"
+mkdir -p "$backup_dir"
+backup_file="$backup_dir/${DB_NAME}_$(date +%Y%m%d_%H%M%S).sql.gz"
+mysqldump_cmd "$DB_NAME" | gzip -c > "$backup_file"
+chmod 600 "$backup_file"
+echo "[db-backup] Saved $backup_file"
 
-echo "[db-backup] Creating MySQL backup before migrations"
-bash ./backup_db.sh
-env -u DB_URL .venv/bin/alembic upgrade head
+echo "[migration] Running alembic upgrade head"
+.venv/bin/alembic upgrade head
+
+echo "[migration] Verifying database is at Alembic head"
+.venv/bin/python - <<'PY'
+import subprocess
+
+
+def revisions(*args: str) -> set[str]:
+    output = subprocess.check_output([".venv/bin/alembic", *args], text=True)
+    return {line.split()[0] for line in output.splitlines() if line.strip()}
+
+
+heads = revisions("heads")
+current = revisions("current")
+if current != heads:
+    raise SystemExit(f"database revision mismatch: current={sorted(current)} heads={sorted(heads)}")
+
+print(f"[migration] Current revision: {', '.join(sorted(current))}")
+PY
 ENDSSH
 
 echo "[4/8] Verify backend startup entrypoints"

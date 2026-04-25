@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { fmt } from '@/utils/format';
 import type { GameState, PackAnimal, PackInfo } from '@/types';
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
+import { getAnimalByInfoId } from '@/data/animals';
 
 // ─── Display helpers ──────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ function qualityLabel(score: number): { text: string; color: string } {
 
 function AnimalCard({ animal, isNew }: { animal: PackAnimal; isNew: boolean }) {
   const hab  = HABITAT_INFO[animal.habitat];
+  const def  = getAnimalByInfoId(animal.animal_info_id);
   const ql   = qualityLabel(qualityScore(animal));
   const genes: [string, string][] = [
     ['survival',     animal.survival],
@@ -96,11 +98,11 @@ function AnimalCard({ animal, isNew }: { animal: PackAnimal; isNew: boolean }) {
           className="w-12 h-12 rounded-2xl grid place-items-center text-[26px] shrink-0"
           style={{ background: `${hab.color}20`, border: `1px solid ${hab.color}40` }}
         >
-          {hab.emoji}
+          {def?.emoji ?? hab.emoji}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-extrabold text-[15px]">{hab.name}</span>
+            <span className="font-extrabold text-[15px]">{def?.name ?? hab.name}</span>
             <span
               className="text-[11px] font-bold px-2 py-[2px] rounded-full"
               style={{ background: `${ql.color}20`, color: ql.color, border: `1px solid ${ql.color}30` }}
@@ -117,7 +119,7 @@ function AnimalCard({ animal, isNew }: { animal: PackAnimal; isNew: boolean }) {
             )}
           </div>
           <p className="m-0 mt-[2px] text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {new Date(animal.acquired_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+            {hab.emoji} {hab.name} · {new Date(animal.acquired_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
           </p>
         </div>
       </div>
@@ -237,7 +239,7 @@ function PackCard({
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export function PacksPage({ gs }: { gs: GameState }) {
+export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [info, setInfo]       = useState<PackInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
@@ -265,6 +267,7 @@ export function PacksPage({ gs }: { gs: GameState }) {
         next_price:     res.next_price,
         animals:        [res.animal, ...prev.animals],
       } : prev);
+      onRefresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {

@@ -1,19 +1,4 @@
-export interface BuyAnimalResponse {
-  ok: boolean;
-  new_rub: number;
-  new_quantity: number;
-  new_total_animals: number;
-  new_free_seats: number;
-  message?: string;
-}
-
-export interface BuyAviaryResponse {
-  ok: boolean;
-  new_rub: number;
-  new_count: number;
-  new_total_seats: number;
-  new_free_seats: number;
-}
+import type { GeneTier, Habitat, PackAnimal } from './progression';
 
 export interface BankInfo {
   rub_rate: number;
@@ -53,10 +38,17 @@ export interface CureResponse {
 export interface MerchantAnimal {
   slot: 1 | 2 | 3;
   animal_id: string;
+  animal_info_id: number;
   quantity: number;
   original_price: number;
   discount_pct: number;
   final_price: number;
+  survival: GeneTier;
+  reproduction: GeneTier;
+  appearance: GeneTier;
+  size_trait: GeneTier;
+  habitat: Habitat;
+  bought: boolean;
 }
 
 export interface MerchantResponse {
@@ -67,6 +59,6 @@ export interface MerchantResponse {
 export interface MerchantBuyResponse {
   ok: boolean;
   new_rub: number;
-  new_quantity: number;
+  animal: PackAnimal;
   message?: string;
 }

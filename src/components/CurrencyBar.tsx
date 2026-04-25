@@ -8,7 +8,7 @@ export function CurrencyBar({ gs, showSeats = false }: { gs: GameState; showSeat
       <Chip color="var(--c-gold)">{fmtUsd(gs.usd)}</Chip>
       <Chip color="var(--c-purple)">🐾 {gs.paw_coins}</Chip>
       {showSeats && (
-        <Chip color="var(--tg-theme-hint-color)">🏗️ {fmtRub(gs.free_seats).replace('₽ ', '')} мест</Chip>
+        <Chip color="var(--tg-theme-hint-color)">🌍 {gs.localities_count} местн.</Chip>
       )}
     </div>
   );

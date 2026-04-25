@@ -199,7 +199,7 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
-export function LocalitiesPage({ gs }: { gs: GameState }) {
+export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [info, setInfo]           = useState<LocalitiesInfo | null>(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
@@ -227,6 +227,7 @@ export function LocalitiesPage({ gs }: { gs: GameState }) {
       await apiBuyLocality(selHabitat);
       setSelHab(null);
       await load();
+      onRefresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {

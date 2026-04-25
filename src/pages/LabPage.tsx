@@ -163,7 +163,7 @@ function AnimalPicker({ animals, exclude, onPick, onClose }: {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export function LabPage({ gs }: { gs: GameState }) {
+export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   void gs;
   const [animals, setAnimals]   = useState<PackAnimal[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -203,6 +203,7 @@ export function LabPage({ gs }: { gs: GameState }) {
       const p2 = info.animals.find(a => a.id === parent2.id);
       if (p1) setParent1(p1);
       if (p2) setParent2(p2);
+      onRefresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {

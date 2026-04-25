@@ -71,3 +71,7 @@ export const ANIMALS: AnimalDef[] = [
 export function getAnimalById(id: string): AnimalDef | undefined {
   return ANIMALS.find(a => a.id === id);
 }
+
+export function getAnimalByInfoId(id: number | null | undefined): AnimalDef | undefined {
+  return typeof id === 'number' ? ANIMALS[id - 1] : undefined;
+}

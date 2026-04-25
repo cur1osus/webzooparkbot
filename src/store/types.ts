@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand';
-import type { BuyAnimalResponse, BuyAviaryResponse, GameState } from '@/types';
+import type { GameState } from '@/types';
 
 export interface PersistOptions {
   keepalive?: boolean;
@@ -19,10 +19,5 @@ export interface CoreSlice {
   patchState: (patch: Partial<GameState>) => void;
 }
 
-export interface ShopSlice {
-  buyAviary: (aviaryId: string) => Promise<BuyAviaryResponse | null>;
-  buyAnimal: (animalId: string, quantity: number) => Promise<BuyAnimalResponse | null>;
-}
-
-export type ZooStore = CoreSlice & ShopSlice;
+export type ZooStore = CoreSlice;
 export type ZooSliceCreator<T> = StateCreator<ZooStore, [], [], T>;

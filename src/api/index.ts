@@ -4,5 +4,4 @@ export * from './core';
 export * from './economy';
 export * from './forge';
 export * from './games';
-export * from './shop';
 export * from './social';

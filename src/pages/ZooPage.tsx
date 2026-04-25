@@ -1,7 +1,8 @@
 import { useEffect, useState, type SetStateAction } from 'react';
 import { fmt, fmtMin, formatDateShort } from '@/utils/format';
 import type { GameState } from '@/types';
-import { ANIMALS } from '@/data/animals';
+import { getAnimalByInfoId } from '@/data/animals';
+import { HABITAT_INFO } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
 import { getClanSpecialtyLabel } from '@/utils/clan';
@@ -217,10 +218,10 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <StatTile icon="🦁" label="Животных"    value={fmt(gs.animals.reduce((s, a) => s + a.quantity, 0))} accent="var(--c-green)" />
+            <StatTile icon="🦁" label="Животных"    value={fmt(gs.live_animals_count)} accent="var(--c-green)" />
             <StatTile icon="🌿" label={`Видов (+${Math.round(gs.diversity_bonus_per_species * gs.species_count * 100)}%)`} value={String(gs.species_count)} accent="var(--c-cyan)" />
-            <StatTile icon="🏗️" label="Мест всего"  value={fmt(gs.total_seats)} accent="var(--c-cyan)" />
-            <StatTile icon="✅" label="Свободно"    value={fmt(gs.free_seats)}  accent="var(--c-gold)" />
+            <StatTile icon="🌍" label="Местностей"  value={fmt(gs.localities_count)} accent="var(--c-cyan)" />
+            <StatTile icon="📅" label="Сезон"       value={String(gs.season_id)}  accent="var(--c-gold)" />
           </div>
 
           {gs.clan && (
@@ -238,20 +239,20 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
           <ExpeditionOverviewCard onOpen={() => setSubPage({ type: 'expeditions' })} />
 
-          {gs.animals.filter(a => a.quantity > 0).length > 0 && (
+          {gs.pack_animals.length > 0 && (
             <div>
               <p className="m-0 mb-2 text-[11px] font-extrabold text-tg-hint tracking-[1px] uppercase">Мои животные</p>
               <div className="grid grid-cols-2 gap-2">
-                {gs.animals.filter(a => a.quantity > 0).slice(0, 10).map(a => {
-                  const def = ANIMALS.find(d => d.id === a.animal_id);
-                  if (!def) return null;
+                {gs.pack_animals.slice(0, 10).map(a => {
+                  const def = getAnimalByInfoId(a.animal_info_id);
+                  const habitat = HABITAT_INFO[a.habitat];
                   return (
-                    <div key={a.animal_id} className="card" style={{ padding: '10px 12px' }}>
+                    <div key={a.id} className="card" style={{ padding: '10px 12px' }}>
                       <div className="flex items-center gap-[10px]">
-                        <span className="text-[24px]">{def.emoji}</span>
+                        <span className="text-[24px]">{def?.emoji ?? habitat.emoji}</span>
                         <div className="min-w-0">
-                          <p className="m-0 text-[13px] font-semibold truncate">{def.name}</p>
-                          <p className="m-0 text-[11px] text-tg-hint">{fmt(a.quantity)} шт.</p>
+                          <p className="m-0 text-[13px] font-semibold truncate">{def?.name ?? habitat.name}</p>
+                          <p className="m-0 text-[11px] text-tg-hint">{habitat.emoji} {habitat.name} · ₽{fmt(a.income)}/мин</p>
                         </div>
                       </div>
                     </div>

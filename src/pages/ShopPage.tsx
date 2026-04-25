@@ -1,17 +1,15 @@
 import { useState } from 'react';
 import { fmt } from '@/utils/format';
 import type { GameState } from '@/types';
-import { AVIARIES } from '@/data/aviaries';
 import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
 
-type ShopTab = 'packs' | 'localities' | 'aviaries' | 'forge' | 'cosmetics';
+type ShopTab = 'packs' | 'localities' | 'forge' | 'cosmetics';
 
 const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
   { id: 'packs',      emoji: '📦', label: 'Паки' },
   { id: 'localities', emoji: '🌍', label: 'Местности' },
-  { id: 'aviaries',   emoji: '🏗️', label: 'Вольеры' },
   { id: 'forge',      emoji: '🔨', label: 'Кузница' },
   { id: 'cosmetics',  emoji: '🎨', label: 'Мета' },
 ];
@@ -20,16 +18,12 @@ const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
 
 export function ShopPage({
   gs,
-  onBuyAviary,
   onRefresh,
 }: {
   gs: GameState;
-  onBuyAviary: (id: string) => void;
   onRefresh: () => void;
 }) {
   const [tab, setTab] = useState<ShopTab>('packs');
-
-  const canAfford = (price: number) => gs.rub >= price;
 
   return (
     <div className="page-content-safe">
@@ -51,7 +45,7 @@ export function ShopPage({
           ))}
           <span className="px-[10px] py-1 rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
             style={{ background: 'rgba(143,149,171,0.15)', color: 'var(--tg-theme-hint-color)', border: '1px solid rgba(143,149,171,0.2)' }}>
-            🏗️ {fmt(gs.free_seats)} мест
+            🌍 {fmt(gs.localities_count)} местн.
           </span>
         </div>
       </div>
@@ -81,47 +75,10 @@ export function ShopPage({
       </div>
 
       {/* PACKS */}
-      {tab === 'packs' && <PacksPage gs={gs} />}
+      {tab === 'packs' && <PacksPage gs={gs} onRefresh={onRefresh} />}
 
       {/* LOCALITIES */}
-      {tab === 'localities' && <LocalitiesPage gs={gs} />}
-
-      {/* AVIARIES */}
-      {tab === 'aviaries' && (
-        <div className="px-[14px] flex flex-col gap-[10px] pt-3">
-          {AVIARIES.map(av => {
-            const owned = gs.aviaries.find(x => x.aviary_id === av.id)?.count ?? 0;
-            const affordable = canAfford(av.price_rub);
-            return (
-              <div key={av.id} className="card">
-                <div className="flex items-center gap-3 mb-[10px]">
-                  <span className="text-[36px]">{av.emoji}</span>
-                  <div>
-                    <p className="m-0 font-bold text-[15px]">{av.name}</p>
-                    <p className="mt-[2px] mb-0 text-[13px] text-tg-hint">
-                      {av.seats} мест · ₽ {fmt(av.price_rub)}
-                    </p>
-                    {owned > 0 && (
-                      <p className="mt-[2px] mb-0 text-xs text-[var(--c-green)]">У вас: {owned} шт.</p>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => onBuyAviary(av.id)}
-                  disabled={!affordable}
-                  className="w-full py-[10px] rounded-[10px] border-none font-bold text-sm disabled:opacity-60 cursor-pointer"
-                  style={{
-                    background: affordable ? 'var(--c-blue)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent)',
-                    color: affordable ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
-                  }}
-                >
-                  {affordable ? `Купить — ₽ ${fmt(av.price_rub)}` : 'Недостаточно средств'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {tab === 'localities' && <LocalitiesPage gs={gs} onRefresh={onRefresh} />}
 
       {/* FORGE */}
       {tab === 'forge' && <ForgeShopTab gs={gs} onRefresh={onRefresh} />}

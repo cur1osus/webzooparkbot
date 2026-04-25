@@ -4,7 +4,6 @@ import { TabBar } from '@/components/TabBar';
 import { PageSkeleton, Skeleton } from '@/components/Skeleton';
 import { setDevUserId } from '@/api';
 import { useLiveGameState } from '@/hooks/useLiveGameState';
-import { useShopActions } from '@/hooks/useShopActions';
 import { useHashTab } from '@/lib/hashRoute';
 import { inTma, hapticImpact, readyTma } from '@/lib/tma';
 import { getTelegramStartParam } from '@/lib/tmaEnv';
@@ -30,27 +29,6 @@ const LabPage   = lazy(() => import('./pages/LabPage').then(m => ({ default: m.L
 const GamesPage = lazy(() => import('./pages/GamesPage').then(m => ({ default: m.GamesPage })));
 const MorePage  = lazy(() => import('./pages/MorePage').then(m => ({ default: m.MorePage })));
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
-
-function Toast({ msg }: { msg: { kind: 'ok' | 'err'; text: string } | null }) {
-  if (!msg) return null;
-  return (
-    <div
-      className={[
-        'fixed bottom-20 left-1/2 -translate-x-1/2 z-[500] pointer-events-none',
-        'rounded-[14px] px-[18px] py-3 text-sm font-semibold text-[var(--tg-theme-button-text-color)]',
-        'shadow-[0_4px_24px_rgba(0,0,0,0.4)] border',
-        'max-w-[440px] text-center',
-        'animate-slide-up',
-        msg.kind === 'ok' ? 'bg-[rgba(46,117,76,0.95)]' : 'bg-[rgba(139,41,62,0.95)]',
-      ].join(' ')}
-      style={{ borderColor: 'var(--surface-overlay-border)' }}
-    >
-      {msg.text}
-    </div>
-  );
-}
-
 // ─── Page suspense fallback ───────────────────────────────────────────────────
 
 function PageFallback() {
@@ -68,18 +46,9 @@ export default function App() {
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useHashTab();
   const [inviteGameId] = useState<number | null>(() => getInviteGameId());
-  const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const displayStateRef = useRef<GameState | null>(null);
-  const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const showToast = useCallback((kind: 'ok' | 'err', text: string) => {
-    setToast({ kind, text });
-    if (toastRef.current) clearTimeout(toastRef.current);
-    toastRef.current = setTimeout(() => setToast(null), 3500);
-  }, []);
-  const { buyAviary } = useShopActions({ showToast });
 
   useEffect(() => {
     displayStateRef.current = displayState;
@@ -152,8 +121,6 @@ export default function App() {
 
   return (
     <div className="h-full bg-tg-bg overflow-hidden">
-      <Toast msg={toast} />
-
       {!inTma && <DevBar onLogin={handleLogin} />}
 
       {/* Loading */}
@@ -217,12 +184,11 @@ export default function App() {
               {tab === 'shop' && (
                 <ShopPage
                   gs={displayState}
-                  onBuyAviary={id => void buyAviary(id)}
                   onRefresh={reloadFromServer}
                 />
               )}
               {tab === 'lab' && (
-                <LabPage gs={displayState} />
+                <LabPage gs={displayState} onRefresh={reloadFromServer} />
               )}
               {tab === 'games' && (
                 <GamesPage gs={displayState} onRefresh={reloadFromServer} initialTab={inviteGameId ? 'multi' : undefined} inviteGameId={inviteGameId ?? undefined} />
