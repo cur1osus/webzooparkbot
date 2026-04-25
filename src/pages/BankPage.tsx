@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
 import type { GameState } from '@/types';
 import { apiGetBank, apiExchange } from '@/api';
@@ -8,11 +8,33 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const [amount, setAmount] = useState('');
   const [exchLoading, setExchLoading] = useState(false);
   const [exchResult, setExchResult] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+
   const { data: bankInfo = null, error, isLoading } = useQuery({
     queryKey: ['bank'],
     queryFn: apiGetBank,
-    staleTime: 30_000,
+    staleTime: 55_000,
+    refetchInterval: 65_000,
   });
+
+  // Reset countdown when new bank data arrives
+  useEffect(() => {
+    if (bankInfo?.next_update_in != null) {
+      setCountdown(bankInfo.next_update_in);
+    }
+  }, [bankInfo?.next_update_in]);
+
+  // Tick countdown every second
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      void queryClient.invalidateQueries({ queryKey: ['bank'] });
+      return;
+    }
+    const timer = setTimeout(() => setCountdown(c => (c ?? 1) - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown, queryClient]);
 
   const handleExchange = async (all: boolean) => {
     const n = all ? gs.rub : parseFloat(amount);
@@ -60,7 +82,9 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
         </div>
         <div className="flex-1 card text-center" style={{ borderColor: 'rgba(var(--c-orange-rgb),0.3)' }}>
           <p className="m-0 text-[11px] text-tg-hint">Обновление через</p>
-          <p className="mt-1 mb-0 text-lg font-extrabold text-[var(--c-orange)]">57с</p>
+          <p className="mt-1 mb-0 text-lg font-extrabold text-[var(--c-orange)]">
+            {countdown != null ? `${countdown}с` : '—'}
+          </p>
         </div>
       </div>
 
