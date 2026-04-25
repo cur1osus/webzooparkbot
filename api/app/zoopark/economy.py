@@ -9,6 +9,7 @@ from api.app.db.connection import get_session
 from api.app.db.models import BankVault, User
 from api.app.schemas.economy import BankExchangeBody, BuyAnimalBody, BuyAviaryBody
 from api.app.zoopark.catalog import RUB_PER_USD
+from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
 
 
@@ -72,11 +73,17 @@ def bank_exchange(tg_id: int, body: BankExchangeBody) -> dict:
     if amount <= 0:
         raise HTTPException(400, "Сумма должна быть > 0")
 
+    # Transaction 1: sync passive income (short lock, separate from exchange)
     with get_session() as session:
         user = get_user(session, tg_id)
         if not user:
             raise HTTPException(404, "Нет игрока")
+        sync_passive_balance(session, user)
+        session.commit()
 
+    # Transaction 2: do the exchange (short lock)
+    with get_session() as session:
+        user = get_user(session, tg_id)
         rate, _ = _current_rate()
         vault = _get_vault(session)
         if body.from_ == "rub":
