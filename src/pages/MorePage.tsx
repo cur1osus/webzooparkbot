@@ -240,7 +240,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   };
 
   const copyLink = (key: string) => {
-    const link = `https://t.me/${botUsername}?start=transfer_${key}`;
+    const link = `https://t.me/${botUsername}?startapp=transfer_${key}`;
     void copyTmaText(link).then((copied) => {
       if (!copied) return;
       setCopiedKey(key);
@@ -251,6 +251,9 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   const total = parseFloat(amount) || 0;
   const max = parseInt(parts) || 0;
   const perPart = total && max ? Math.floor(total / max) : 0;
+
+  const amountPresets = [100, 500, 1000, 5000].filter(v => v <= gs.rub);
+  const partsPresets = [1, 2, 5, 10, 25, 50];
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
@@ -263,13 +266,57 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
           placeholder="Сумма ₽"
           className="text-input mb-2 text-sm"
         />
+        {(amountPresets.length > 0 || gs.rub > 0) && (
+          <div className="flex gap-[6px] mb-[10px] flex-wrap">
+            {amountPresets.map(v => (
+              <button
+                key={v}
+                onClick={() => setAmount(String(v))}
+                className="px-3 py-[5px] rounded-[8px] border-none cursor-pointer text-[12px] font-semibold transition-all"
+                style={{
+                  background: total === v ? 'var(--c-blue)' : 'var(--surface-subtle)',
+                  color: total === v ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-text-color)',
+                }}
+              >
+                {v >= 1000 ? `${v / 1000}к` : v}
+              </button>
+            ))}
+            {gs.rub > 0 && (
+              <button
+                onClick={() => setAmount(String(Math.floor(gs.rub)))}
+                className="px-3 py-[5px] rounded-[8px] border-none cursor-pointer text-[12px] font-semibold transition-all"
+                style={{
+                  background: total === Math.floor(gs.rub) ? 'var(--c-blue)' : 'rgba(var(--c-gold-rgb),0.15)',
+                  color: total === Math.floor(gs.rub) ? 'var(--tg-theme-button-text-color)' : 'var(--c-gold)',
+                }}
+              >
+                Всё
+              </button>
+            )}
+          </div>
+        )}
         <input
           type="number"
           value={parts}
           onChange={e => setParts(e.target.value)}
           placeholder="Количество получателей"
-          className="text-input mb-[10px] text-sm"
+          className="text-input mb-2 text-sm"
         />
+        <div className="flex gap-[6px] mb-[10px] flex-wrap">
+          {partsPresets.map(v => (
+            <button
+              key={v}
+              onClick={() => setParts(String(v))}
+              className="px-3 py-[5px] rounded-[8px] border-none cursor-pointer text-[12px] font-semibold transition-all"
+              style={{
+                background: max === v ? 'var(--c-blue)' : 'var(--surface-subtle)',
+                color: max === v ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-text-color)',
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
         {perPart > 0 && (
           <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
             Каждый получит: <strong className="text-tg-text">₽ {fmt(perPart)}</strong>
