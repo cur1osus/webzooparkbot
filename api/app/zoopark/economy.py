@@ -6,7 +6,7 @@ import time
 from fastapi import HTTPException
 
 from api.app.db.connection import get_session
-from api.app.db.models import User
+from api.app.db.models import BankVault, User
 from api.app.schemas.economy import BankExchangeBody, BuyAnimalBody, BuyAviaryBody
 from api.app.zoopark.catalog import RUB_PER_USD
 from api.app.zoopark.income import sync_passive_balance
@@ -26,6 +26,23 @@ def _current_rate() -> tuple[int, int]:
     return rate, seconds_left
 
 
+def _calc_commission(gain: int) -> int:
+    """1% commission; min 1$ if gain > 1; 0$ if gain <= 1."""
+    if gain <= 1:
+        return 0
+    commission = int(gain * 0.01)
+    return commission if commission > 0 else 1
+
+
+def _get_vault(session) -> BankVault:
+    vault = session.get(BankVault, 1)
+    if vault is None:
+        vault = BankVault(id=1, usd_balance=0)
+        session.add(vault)
+        session.flush()
+    return vault
+
+
 def buy_animal(tg_id: int, body: BuyAnimalBody) -> dict:
     raise HTTPException(410, "Покупка legacy-животных отключена: животные теперь приходят из паков, разведения и экспедиций")
 
@@ -36,6 +53,9 @@ def buy_aviary(tg_id: int, body: BuyAviaryBody) -> dict:
 
 def bank() -> dict:
     rate, seconds_left = _current_rate()
+    with get_session() as session:
+        vault = _get_vault(session)
+        vault_usd = vault.usd_balance
     return {
         "rub_rate": rate,
         "usd_rate": 1 / rate,
@@ -44,6 +64,7 @@ def bank() -> dict:
         "min_exchange_rub": rate,
         "min_exchange_usd": 1,
         "next_update_in": seconds_left,
+        "vault_usd": vault_usd,
     }
 
 
@@ -59,6 +80,7 @@ def bank_exchange(tg_id: int, body: BankExchangeBody) -> dict:
         user, _income, _expenses = sync_passive_balance(session, user)
 
         rate, _ = _current_rate()
+        vault = _get_vault(session)
         if body.from_ == "rub":
             cost = int(amount)
             if user.rub < cost:
@@ -66,8 +88,10 @@ def bank_exchange(tg_id: int, body: BankExchangeBody) -> dict:
             gain = int(amount / rate)
             if gain < 1:
                 raise HTTPException(400, f"Минимум {rate} ₽")
+            commission = _calc_commission(gain)
             user.rub -= cost
-            user.usd += gain
+            user.usd += gain - commission
+            vault.usd_balance += commission
         else:
             cost = int(amount)
             if user.usd < cost:

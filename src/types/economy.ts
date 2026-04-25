@@ -8,6 +8,7 @@ export interface BankInfo {
   min_exchange_rub: number;
   min_exchange_usd: number;
   next_update_in: number; // seconds until next rate update
+  vault_usd: number;
 }
 
 export interface ExchangeResult {

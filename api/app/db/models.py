@@ -417,3 +417,11 @@ class BootstrapMeta(Base):
 
     target_table = Column(String(64), primary_key=True)
     copied_at = Column(DateTime, nullable=False)
+
+
+class BankVault(Base):
+    __tablename__ = "zoopark_bank_vault"
+    __table_args__ = {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"}
+
+    id = Column(Integer, primary_key=True, default=1)
+    usd_balance = Column(BigInteger, nullable=False, default=0)

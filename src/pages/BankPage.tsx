@@ -58,7 +58,16 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
   const rate = bankInfo?.rub_rate ?? 0;
   const minExchange = bankInfo?.min_exchange_rub ?? 0;
-  const previewAmount = rate && amount ? parseFloat(amount) / rate : null;
+
+  const calcCommission = (gain: number) => {
+    if (gain <= 1) return 0;
+    const c = Math.floor(gain * 0.01);
+    return c > 0 ? c : 1;
+  };
+
+  const grossUsd = rate && amount ? Math.floor(parseFloat(amount) / rate) : null;
+  const commission = grossUsd != null ? calcCommission(grossUsd) : null;
+  const previewAmount = grossUsd != null && commission != null ? grossUsd - commission : null;
 
   const quickAmounts = [
     minExchange,
@@ -97,11 +106,11 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           <div className="flex gap-2">
             <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(var(--c-blue-rgb),0.1)]">
               <p className="m-0 text-[10px] text-tg-hint">Хранилище банка</p>
-              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-blue)]">$ {fmt(1000000000)}</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-blue)]">$ {fmt(bankInfo.vault_usd)}</p>
             </div>
             <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(var(--c-orange-rgb),0.1)]">
               <p className="m-0 text-[10px] text-tg-hint">Комиссия банка</p>
-              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-orange)]">1%</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-orange)]">1% (мин. $1)</p>
             </div>
           </div>
         </div>
@@ -149,9 +158,10 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             className="text-input text-sm"
           />
 
-          {previewAmount != null && (
+          {previewAmount != null && grossUsd != null && commission != null && (
             <p className="m-0 text-[13px] text-tg-hint">
               Получите: $ {fmt(previewAmount)}
+              {commission > 0 && <span className="text-[var(--c-orange)]"> · комиссия $ {fmt(commission)}</span>}
             </p>
           )}
 
