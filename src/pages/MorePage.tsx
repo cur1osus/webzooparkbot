@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { GameState, TransferOut } from '@/types';
 import { BankPage } from './BankPage';
@@ -251,133 +251,216 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   const total = parseFloat(amount) || 0;
   const max = parseInt(parts) || 0;
   const perPart = total && max ? Math.floor(total / max) : 0;
+  const allIn = Math.floor(gs.rub);
 
   const amountPresets = [100, 500, 1000, 5000].filter(v => v <= gs.rub);
   const partsPresets = [1, 2, 5, 10, 25, 50];
 
+  const pillActive: React.CSSProperties = {
+    background: 'var(--c-blue)',
+    color: 'var(--tg-theme-button-text-color)',
+    border: '1.5px solid var(--c-blue)',
+  };
+  const pillIdle: React.CSSProperties = {
+    background: 'transparent',
+    color: 'var(--tg-theme-hint-color)',
+    border: '1.5px solid var(--surface-overlay-border)',
+  };
+
   return (
-    <div className="p-[14px] flex flex-col gap-3">
+    <div className="p-[14px] flex flex-col gap-4">
+
+      {/* ── Форма ── */}
       <div className="card flex flex-col gap-0">
-        <p className="m-0 mb-[10px] font-bold">Создать раздачу</p>
-        <input
-          type="number"
-          value={amount}
-          onChange={e => setAmount(e.target.value)}
-          placeholder="Сумма ₽"
-          className="text-input mb-2 text-sm"
-        />
-        {(amountPresets.length > 0 || gs.rub > 0) && (
-          <div className="flex gap-[6px] mb-[10px] flex-wrap">
-            {amountPresets.map(v => (
+        <p className="m-0 mb-[14px] text-[11px] font-semibold text-tg-hint tracking-[0.8px] uppercase">Новая раздача</p>
+
+        {/* Сумма */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-[6px]">
+            <span className="text-[13px] font-medium text-tg-text">Сумма</span>
+            <span className="text-[12px] text-tg-hint">
+              баланс{' '}
+              <span className="font-semibold" style={{ color: 'var(--tg-theme-text-color)' }}>
+                ₽ {fmt(allIn)}
+              </span>
+            </span>
+          </div>
+          <div className="relative">
+            <span
+              className="absolute left-[14px] top-1/2 -translate-y-1/2 text-[14px] font-semibold pointer-events-none"
+              style={{ color: 'var(--tg-theme-hint-color)' }}
+            >
+              ₽
+            </span>
+            <input
+              type="number"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="0"
+              className="text-input text-[15px] font-semibold"
+              style={{
+                paddingLeft: '32px',
+                border: total > gs.rub ? '1.5px solid var(--c-red-soft)' : undefined,
+              }}
+            />
+          </div>
+          {(amountPresets.length > 0 || gs.rub > 0) && (
+            <div className="flex gap-[6px] mt-[8px] flex-wrap">
+              {amountPresets.map(v => (
+                <button
+                  key={v}
+                  onClick={() => setAmount(String(v))}
+                  className="px-[12px] py-[5px] rounded-full cursor-pointer text-[12px] font-semibold transition-all"
+                  style={total === v ? pillActive : pillIdle}
+                >
+                  {v >= 1000 ? `${v / 1000}к` : v}
+                </button>
+              ))}
+              {gs.rub > 0 && (
+                <button
+                  onClick={() => setAmount(String(allIn))}
+                  className="px-[12px] py-[5px] rounded-full cursor-pointer text-[12px] font-semibold transition-all"
+                  style={
+                    total === allIn
+                      ? { background: 'rgba(var(--c-gold-rgb),0.25)', color: 'var(--c-gold)', border: '1.5px solid rgba(var(--c-gold-rgb),0.5)' }
+                      : { background: 'transparent', color: 'var(--c-gold)', border: '1.5px solid rgba(var(--c-gold-rgb),0.35)' }
+                  }
+                >
+                  Всё
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: 1, background: 'var(--surface-overlay-border)', margin: '2px 0 14px' }} />
+
+        {/* Получателей */}
+        <div className="mb-3">
+          <span className="block text-[13px] font-medium text-tg-text mb-[6px]">Получателей</span>
+          <input
+            type="number"
+            value={parts}
+            onChange={e => setParts(e.target.value)}
+            placeholder="5"
+            className="text-input text-[15px] font-semibold"
+          />
+          <div className="flex gap-[6px] mt-[8px] flex-wrap">
+            {partsPresets.map(v => (
               <button
                 key={v}
-                onClick={() => setAmount(String(v))}
-                className="px-3 py-[5px] rounded-[8px] border-none cursor-pointer text-[12px] font-semibold transition-all"
-                style={{
-                  background: total === v ? 'var(--c-blue)' : 'var(--surface-subtle)',
-                  color: total === v ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-text-color)',
-                }}
+                onClick={() => setParts(String(v))}
+                className="px-[12px] py-[5px] rounded-full cursor-pointer text-[12px] font-semibold transition-all"
+                style={max === v ? pillActive : pillIdle}
               >
-                {v >= 1000 ? `${v / 1000}к` : v}
+                {v}
               </button>
             ))}
-            {gs.rub > 0 && (
-              <button
-                onClick={() => setAmount(String(Math.floor(gs.rub)))}
-                className="px-3 py-[5px] rounded-[8px] border-none cursor-pointer text-[12px] font-semibold transition-all"
-                style={{
-                  background: total === Math.floor(gs.rub) ? 'var(--c-blue)' : 'rgba(var(--c-gold-rgb),0.15)',
-                  color: total === Math.floor(gs.rub) ? 'var(--tg-theme-button-text-color)' : 'var(--c-gold)',
-                }}
-              >
-                Всё
-              </button>
-            )}
+          </div>
+        </div>
+
+        {/* Превью / ошибка */}
+        {(perPart > 0 || error) && (
+          <div style={{ height: 1, background: 'var(--surface-overlay-border)', margin: '2px 0 12px' }} />
+        )}
+        {perPart > 0 && (
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[13px] text-tg-hint">Каждый получит</span>
+            <span className="text-[15px] font-bold" style={{ color: 'var(--tg-theme-text-color)' }}>
+              ₽ {fmt(perPart)}
+            </span>
           </div>
         )}
-        <input
-          type="number"
-          value={parts}
-          onChange={e => setParts(e.target.value)}
-          placeholder="Количество получателей"
-          className="text-input mb-2 text-sm"
-        />
-        <div className="flex gap-[6px] mb-[10px] flex-wrap">
-          {partsPresets.map(v => (
-            <button
-              key={v}
-              onClick={() => setParts(String(v))}
-              className="px-3 py-[5px] rounded-[8px] border-none cursor-pointer text-[12px] font-semibold transition-all"
-              style={{
-                background: max === v ? 'var(--c-blue)' : 'var(--surface-subtle)',
-                color: max === v ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-text-color)',
-              }}
-            >
-              {v}
-            </button>
-          ))}
-        </div>
-        {perPart > 0 && (
-          <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
-            Каждый получит: <strong className="text-tg-text">₽ {fmt(perPart)}</strong>
-          </p>
+        {error && (
+          <div
+            className="mb-3 px-3 py-[9px] rounded-[10px] text-[13px]"
+            style={{ background: 'rgba(var(--c-red-rgb),0.1)', color: 'var(--c-red-soft)' }}
+          >
+            ⚠️ {error}
+          </div>
         )}
-        {error && <p className="m-0 mb-2 text-[var(--c-red-soft)] text-[13px]">⚠️ {error}</p>}
+
         <button
           onClick={() => void handleCreate()}
           disabled={creating || !total || !max || total > gs.rub}
-          className="w-full py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm disabled:opacity-50"
-          style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
+          className="w-full py-[13px] rounded-[12px] border-none cursor-pointer font-bold text-[15px] disabled:opacity-40 transition-opacity"
+          style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
         >
           {creating ? 'Создаём...' : 'Создать ссылку'}
         </button>
       </div>
 
+      {/* ── Список раздач ── */}
       {loadingList ? (
-        <p className="text-center text-tg-hint text-[13px]">Загрузка раздач...</p>
+        <div className="flex justify-center py-3">
+          <span className="text-[13px] text-tg-hint">Загрузка...</span>
+        </div>
       ) : transfers.length > 0 ? (
-        <div>
-          <p className="m-0 mb-2 text-[11px] font-bold text-tg-hint tracking-[0.6px] uppercase">Мои раздачи</p>
-          <div className="flex flex-col gap-2">
-            {transfers.map(t => (
-              <div
-                key={t.key}
-                className="card"
-                style={{ opacity: t.active ? 1 : 0.55 }}
-              >
-                <div className="flex justify-between items-start mb-[6px]">
-                  <div>
-                    <p className="m-0 font-bold text-[14px]">₽ {fmt(t.total_rub)}</p>
-                    <p className="mt-[2px] mb-0 text-xs text-tg-hint">
-                      {t.claims}/{t.max_claims} получили · по ₽{fmt(t.rub_per_claim)}
-                    </p>
-                  </div>
+        <div className="flex flex-col gap-[10px]">
+          <p className="m-0 text-[11px] font-semibold text-tg-hint tracking-[0.8px] uppercase">Мои раздачи</p>
+          {transfers.map(t => {
+            const pct = t.max_claims > 0 ? (t.claims / t.max_claims) * 100 : 0;
+            const isCopied = copiedKey === t.key;
+            return (
+              <div key={t.key} className="card" style={{ opacity: t.active ? 1 : 0.6 }}>
+                {/* Заголовок */}
+                <div className="flex items-center justify-between mb-[10px]">
+                  <span className="text-[17px] font-bold">₽ {fmt(t.total_rub)}</span>
                   <span
-                    className="text-[11px] font-bold px-2 py-[3px] rounded-full"
+                    className="text-[11px] font-semibold px-[8px] py-[3px] rounded-full"
                     style={{
-                      background: t.active ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
+                      background: t.active ? 'rgba(var(--c-green-rgb),0.12)' : 'var(--surface-subtle)',
                       color: t.active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
                     }}
                   >
-                    {t.active ? 'Активна' : 'Завершена'}
+                    {t.active ? '● Активна' : '○ Завершена'}
                   </span>
                 </div>
-                <p className="m-0 mb-[8px] text-[11px] text-tg-hint">{formatDateShort(t.created_at)}</p>
+
+                {/* Прогресс-бар */}
+                <div
+                  className="mb-[8px]"
+                  style={{ height: 3, borderRadius: 2, background: 'var(--surface-subtle-strong)', overflow: 'hidden' }}
+                >
+                  <div
+                    style={{
+                      width: `${pct}%`,
+                      height: '100%',
+                      borderRadius: 2,
+                      background: t.active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
+                      transition: 'width 0.4s ease',
+                    }}
+                  />
+                </div>
+
+                {/* Статистика */}
+                <div className="flex items-center justify-between mb-[10px]">
+                  <span className="text-[12px] text-tg-hint">
+                    {t.claims} из {t.max_claims} получили
+                  </span>
+                  <span className="text-[12px] text-tg-hint">по ₽ {fmt(t.rub_per_claim)}</span>
+                </div>
+
+                <p className="m-0 text-[11px] text-tg-hint mb-[10px]">{formatDateShort(t.created_at)}</p>
+
                 {t.active && (
                   <button
                     onClick={() => copyLink(t.key)}
-                    className="w-full py-2 rounded-[8px] border-none cursor-pointer font-semibold text-[13px]"
+                    className="w-full py-[9px] rounded-[10px] cursor-pointer font-semibold text-[13px] transition-all"
                     style={{
-                      background: copiedKey === t.key ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
-                      color: copiedKey === t.key ? 'var(--c-green)' : 'var(--tg-theme-text-color)',
+                      background: 'transparent',
+                      color: isCopied ? 'var(--c-green)' : 'var(--c-blue)',
+                      border: isCopied
+                        ? '1.5px solid rgba(var(--c-green-rgb),0.4)'
+                        : '1.5px solid rgba(var(--c-blue-rgb),0.4)',
                     }}
                   >
-                    {copiedKey === t.key ? '✅ Скопировано' : '📋 Скопировать ссылку'}
+                    {isCopied ? '✓ Скопировано' : 'Скопировать ссылку'}
                   </button>
                 )}
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
