@@ -27,7 +27,13 @@ _engine: Engine | None = None
 def _get_engine() -> Engine:
     global _engine
     if _engine is None:
-        _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        _engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            pool_size=20,
+            max_overflow=20,
+            pool_timeout=10,
+        )
     return _engine
 
 
