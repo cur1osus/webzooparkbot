@@ -75,6 +75,14 @@ def _add_index_if_missing(table: str, index: str, statement: str) -> None:
         _execute(statement)
 
 
+def _add_index_if_columns_exist(table: str, index: str, columns: tuple[str, ...], statement: str) -> None:
+    if not _table_exists(table) or _index_exists(table, index):
+        return
+    if not all(_column_exists(table, column) for column in columns):
+        return
+    _execute(statement)
+
+
 def _create_tables() -> None:
     _execute(
         """
@@ -445,18 +453,73 @@ def _add_missing_columns() -> None:
             ("created_at", "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
         ],
         "zoopark_forge_set_items": [("position", "`position` INT NOT NULL DEFAULT 0")],
+        "zoopark_merchant_offers": [
+            ("user_id", "`user_id` INT NOT NULL DEFAULT 0"),
+            ("season_id", "`season_id` INT NOT NULL DEFAULT 1"),
+            ("animal_info_id", "`animal_info_id` INT NOT NULL DEFAULT 1"),
+            ("survival", "`survival` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("reproduction", "`reproduction` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("appearance", "`appearance` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("size_trait", "`size_trait` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("habitat", "`habitat` VARCHAR(15) NOT NULL DEFAULT 'fields'"),
+            ("discount", "`discount` INT NOT NULL DEFAULT 0"),
+            ("price", "`price` BIGINT NOT NULL DEFAULT 0"),
+            ("price_with_discount", "`price_with_discount` BIGINT NOT NULL DEFAULT 0"),
+            ("bought", "`bought` SMALLINT NOT NULL DEFAULT 0"),
+            ("created_at", "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+            ("expires_at", "`expires_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+        ],
         "zoopark_pack_animals": [
+            ("user_id", "`user_id` INT NOT NULL DEFAULT 0"),
+            ("season_id", "`season_id` INT NOT NULL DEFAULT 1"),
+            ("animal_info_id", "`animal_info_id` INT NOT NULL DEFAULT 1"),
+            ("survival", "`survival` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("reproduction", "`reproduction` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("appearance", "`appearance` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("size_trait", "`size_trait` VARCHAR(10) NOT NULL DEFAULT 'low'"),
+            ("habitat", "`habitat` VARCHAR(15) NOT NULL DEFAULT 'fields'"),
             ("source", "`source` VARCHAR(20) NOT NULL DEFAULT 'pack'"),
             ("parent_1_id", "`parent_1_id` INT NULL"),
             ("parent_2_id", "`parent_2_id` INT NULL"),
             ("is_alive", "`is_alive` SMALLINT NOT NULL DEFAULT 1"),
+            ("acquired_at", "`acquired_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
             ("dies_at", "`dies_at` DATETIME NULL"),
             ("locality_id", "`locality_id` INT NULL"),
             ("last_bred_date", "`last_bred_date` DATE NULL"),
         ],
+        "zoopark_pack_openings": [
+            ("user_id", "`user_id` INT NOT NULL DEFAULT 0"),
+            ("season_id", "`season_id` INT NOT NULL DEFAULT 1"),
+            ("animal_id", "`animal_id` INT NOT NULL DEFAULT 0"),
+            ("opened_at", "`opened_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+            ("price_paid", "`price_paid` BIGINT NOT NULL DEFAULT 0"),
+            ("is_free", "`is_free` BOOLEAN NOT NULL DEFAULT FALSE"),
+        ],
+        "zoopark_player_localities": [
+            ("user_id", "`user_id` INT NOT NULL DEFAULT 0"),
+            ("season_id", "`season_id` INT NOT NULL DEFAULT 1"),
+            ("habitat", "`habitat` VARCHAR(15) NOT NULL DEFAULT 'fields'"),
+            ("created_at", "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+        ],
         "zoopark_expeditions": [
+            ("user_id", "`user_id` INT NOT NULL DEFAULT 0"),
+            ("season_id", "`season_id` INT NOT NULL DEFAULT 1"),
+            ("locality_id", "`locality_id` INT NOT NULL DEFAULT 0"),
+            ("started_at", "`started_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+            ("ends_at", "`ends_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+            ("status", "`status` VARCHAR(10) NOT NULL DEFAULT 'active'"),
             ("result_json", "`result_json` TEXT NULL"),
             ("result_seen", "`result_seen` SMALLINT NOT NULL DEFAULT 0"),
+        ],
+        "zoopark_breeding_events": [
+            ("user_id", "`user_id` INT NOT NULL DEFAULT 0"),
+            ("season_id", "`season_id` INT NOT NULL DEFAULT 1"),
+            ("parent_1_id", "`parent_1_id` INT NOT NULL DEFAULT 0"),
+            ("parent_2_id", "`parent_2_id` INT NOT NULL DEFAULT 0"),
+            ("child_id", "`child_id` INT NULL"),
+            ("success_rate", "`success_rate` INT NOT NULL DEFAULT 0"),
+            ("success", "`success` SMALLINT NOT NULL DEFAULT 0"),
+            ("created_at", "`created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"),
         ],
         "zoopark_transfer_links": [
             ("claims", "`claims` INT NOT NULL DEFAULT 0"),
@@ -470,52 +533,63 @@ def _add_missing_columns() -> None:
 
 def _add_missing_indexes() -> None:
     indexes = [
-        ("zoopark_users", "idx_unity_id", "CREATE INDEX `idx_unity_id` ON `zoopark_users` (`unity_id`)"),
-        ("zoopark_seasons", "idx_status", "CREATE INDEX `idx_status` ON `zoopark_seasons` (`status`)"),
-        ("zoopark_player_seasons", "idx_season_id", "CREATE INDEX `idx_season_id` ON `zoopark_player_seasons` (`season_id`)"),
-        ("zoopark_items", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_items` (`user_id`)"),
-        ("zoopark_forge_sets", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_forge_sets` (`user_id`)"),
-        ("zoopark_sick_events", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_sick_events` (`user_id`)"),
-        ("zoopark_mp_games", "idx_status", "CREATE INDEX `idx_status` ON `zoopark_mp_games` (`status`)"),
-        ("zoopark_mp_games", "idx_creator_id", "CREATE INDEX `idx_creator_id` ON `zoopark_mp_games` (`creator_id`)"),
-        ("zoopark_transfer_links", "idx_creator_id", "CREATE INDEX `idx_creator_id` ON `zoopark_transfer_links` (`creator_id`)"),
-        ("zoopark_merchant_offers", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_merchant_offers` (`user_id`)"),
-        ("zoopark_merchant_offers", "idx_season_id", "CREATE INDEX `idx_season_id` ON `zoopark_merchant_offers` (`season_id`)"),
-        ("zoopark_pack_animals", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_pack_animals` (`user_id`)"),
-        ("zoopark_pack_animals", "idx_season_id", "CREATE INDEX `idx_season_id` ON `zoopark_pack_animals` (`season_id`)"),
-        ("zoopark_pack_animals", "idx_locality_id", "CREATE INDEX `idx_locality_id` ON `zoopark_pack_animals` (`locality_id`)"),
+        ("zoopark_users", "idx_unity_id", ("unity_id",), "CREATE INDEX `idx_unity_id` ON `zoopark_users` (`unity_id`)"),
+        ("zoopark_seasons", "idx_status", ("status",), "CREATE INDEX `idx_status` ON `zoopark_seasons` (`status`)"),
+        ("zoopark_player_seasons", "idx_season_id", ("season_id",), "CREATE INDEX `idx_season_id` ON `zoopark_player_seasons` (`season_id`)"),
+        ("zoopark_items", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_items` (`user_id`)"),
+        ("zoopark_forge_sets", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_forge_sets` (`user_id`)"),
+        ("zoopark_sick_events", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_sick_events` (`user_id`)"),
+        ("zoopark_mp_games", "idx_status", ("status",), "CREATE INDEX `idx_status` ON `zoopark_mp_games` (`status`)"),
+        ("zoopark_mp_games", "idx_creator_id", ("creator_id",), "CREATE INDEX `idx_creator_id` ON `zoopark_mp_games` (`creator_id`)"),
+        ("zoopark_transfer_links", "idx_creator_id", ("creator_id",), "CREATE INDEX `idx_creator_id` ON `zoopark_transfer_links` (`creator_id`)"),
+        ("zoopark_merchant_offers", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_merchant_offers` (`user_id`)"),
+        ("zoopark_merchant_offers", "idx_season_id", ("season_id",), "CREATE INDEX `idx_season_id` ON `zoopark_merchant_offers` (`season_id`)"),
+        ("zoopark_pack_animals", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_pack_animals` (`user_id`)"),
+        ("zoopark_pack_animals", "idx_season_id", ("season_id",), "CREATE INDEX `idx_season_id` ON `zoopark_pack_animals` (`season_id`)"),
+        ("zoopark_pack_animals", "idx_locality_id", ("locality_id",), "CREATE INDEX `idx_locality_id` ON `zoopark_pack_animals` (`locality_id`)"),
         (
             "zoopark_pack_openings",
             "idx_user_season_opened",
+            ("user_id", "season_id", "opened_at"),
             "CREATE INDEX `idx_user_season_opened` ON `zoopark_pack_openings` (`user_id`, `season_id`, `opened_at`)",
         ),
-        ("zoopark_player_localities", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_player_localities` (`user_id`)"),
-        ("zoopark_player_localities", "idx_season_id", "CREATE INDEX `idx_season_id` ON `zoopark_player_localities` (`season_id`)"),
-        ("zoopark_expeditions", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_expeditions` (`user_id`)"),
-        ("zoopark_expeditions", "idx_season_id", "CREATE INDEX `idx_season_id` ON `zoopark_expeditions` (`season_id`)"),
-        ("zoopark_expeditions", "idx_status", "CREATE INDEX `idx_status` ON `zoopark_expeditions` (`status`)"),
+        ("zoopark_player_localities", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_player_localities` (`user_id`)"),
+        ("zoopark_player_localities", "idx_season_id", ("season_id",), "CREATE INDEX `idx_season_id` ON `zoopark_player_localities` (`season_id`)"),
+        ("zoopark_expeditions", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_expeditions` (`user_id`)"),
+        ("zoopark_expeditions", "idx_season_id", ("season_id",), "CREATE INDEX `idx_season_id` ON `zoopark_expeditions` (`season_id`)"),
+        ("zoopark_expeditions", "idx_status", ("status",), "CREATE INDEX `idx_status` ON `zoopark_expeditions` (`status`)"),
         (
             "zoopark_breeding_events",
             "idx_user_season_created",
+            ("user_id", "season_id", "created_at"),
             "CREATE INDEX `idx_user_season_created` ON `zoopark_breeding_events` (`user_id`, `season_id`, `created_at`)",
         ),
-        ("zoopark_referrals", "idx_user_id", "CREATE INDEX `idx_user_id` ON `zoopark_referrals` (`user_id`)"),
+        ("zoopark_referrals", "idx_user_id", ("user_id",), "CREATE INDEX `idx_user_id` ON `zoopark_referrals` (`user_id`)"),
     ]
-    for table, index, statement in indexes:
-        _add_index_if_missing(table, index, statement)
+    for table, index, columns, statement in indexes:
+        _add_index_if_columns_exist(table, index, columns, statement)
 
-    if _table_exists("zoopark_transfer_links") and not _index_exists("zoopark_transfer_links", "link_key"):
+    if (
+        _table_exists("zoopark_transfer_links")
+        and _column_exists("zoopark_transfer_links", "link_key")
+        and not _index_exists("zoopark_transfer_links", "link_key")
+    ):
         _execute("CREATE UNIQUE INDEX `link_key` ON `zoopark_transfer_links` (`link_key`)")
     if (
         _table_exists("zoopark_forge_sets")
         and not _constraint_exists("zoopark_forge_sets", "uq_user_forge_set_key")
         and not _index_exists("zoopark_forge_sets", "uq_user_forge_set_key")
+        and _column_exists("zoopark_forge_sets", "user_id")
+        and _column_exists("zoopark_forge_sets", "set_key")
     ):
         _execute("CREATE UNIQUE INDEX `uq_user_forge_set_key` ON `zoopark_forge_sets` (`user_id`, `set_key`)")
     if (
         _table_exists("zoopark_player_localities")
         and not _constraint_exists("zoopark_player_localities", "uq_user_season_habitat")
         and not _index_exists("zoopark_player_localities", "uq_user_season_habitat")
+        and _column_exists("zoopark_player_localities", "user_id")
+        and _column_exists("zoopark_player_localities", "season_id")
+        and _column_exists("zoopark_player_localities", "habitat")
     ):
         _execute("CREATE UNIQUE INDEX `uq_user_season_habitat` ON `zoopark_player_localities` (`user_id`, `season_id`, `habitat`)")
 
