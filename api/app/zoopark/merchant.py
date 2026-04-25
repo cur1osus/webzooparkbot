@@ -4,137 +4,152 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
-from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID
-from api.app.db.tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_MERCHANTS_TABLE, ZOOPARK_USERS_TABLE
+from api.app.db.connection import get_session
+from api.app.db.models import Merchant, PackAnimal
+from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_STRING_TO_DB
 from api.app.zoopark.income import sync_passive_balance
-from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
-from api.app.db.connection import get_db
+from api.app.zoopark.profile import bump_data_version, get_user
+from api.app.zoopark.progression import HABITATS, PACK_PROPERTIES, PACK_SURVIVAL_DAYS, format_pack_animal
+from api.app.zoopark.season import ensure_player_season
 
 
-def ensure_merchant(cur, user_id: int, animals: list[dict]) -> list[dict]:
-    cur.execute(f"SELECT * FROM {ZOOPARK_MERCHANTS_TABLE} WHERE user_id=%s", (user_id,))
-    existing = cur.fetchall()
+def _roll_offer_traits() -> dict[str, str]:
+    return {
+        "survival": random.choice(PACK_PROPERTIES),
+        "reproduction": random.choice(PACK_PROPERTIES),
+        "appearance": random.choice(PACK_PROPERTIES),
+        "size_trait": random.choice(PACK_PROPERTIES),
+        "habitat": random.choice(HABITATS),
+    }
+
+
+def ensure_merchant(session: Session, user_id: int, season_id: int) -> list[Merchant]:
+    now = datetime.now(timezone.utc)
+    existing = (
+        session.query(Merchant)
+        .filter(Merchant.user_id == user_id, Merchant.season_id == season_id, Merchant.expires_at > now)
+        .order_by(Merchant.id.asc())
+        .all()
+    )
     if existing:
         return existing
 
-    owned = [ANIMAL_BY_ID[animal["animal_id"]] for animal in animals if animal["animal_id"] in ANIMAL_BY_ID]
-    pool = owned if owned else ANIMALS[:10]
-    picks = random.sample(pool, min(3, len(pool)))
-
-    cur.execute(f"DELETE FROM {ZOOPARK_MERCHANTS_TABLE} WHERE user_id=%s", (user_id,))
+    session.query(Merchant).filter(Merchant.user_id == user_id, Merchant.season_id == season_id).delete()
+    picks = random.sample(ANIMALS, min(3, len(ANIMALS)))
+    expires_at = now + timedelta(hours=24)
     for pick in picks:
         discount = random.choice([5, 10, 15, 20, 25, 30])
         discounted = int(pick["price"] * (1 - discount / 100))
-        quantity = random.randint(1, 3)
-        cur.execute(
-            f"INSERT INTO {ZOOPARK_MERCHANTS_TABLE} (user_id, animal_info_id, name, discount, price_with_discount, quantity_animals, price, first_offer_bought) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,0)",
-            (user_id, ANIMAL_STRING_TO_DB[pick["id"]], pick["name"], discount, discounted, quantity, pick["price"]),
-        )
-
-    cur.execute(f"SELECT * FROM {ZOOPARK_MERCHANTS_TABLE} WHERE user_id=%s", (user_id,))
-    return cur.fetchall()
+        session.add(Merchant(
+            user_id=user_id,
+            season_id=season_id,
+            animal_info_id=ANIMAL_STRING_TO_DB[pick["id"]],
+            **_roll_offer_traits(),
+            discount=discount,
+            price=pick["price"],
+            price_with_discount=discounted,
+            bought=0,
+            created_at=now,
+            expires_at=expires_at,
+        ))
+    session.flush()
+    return (
+        session.query(Merchant)
+        .filter(Merchant.user_id == user_id, Merchant.season_id == season_id, Merchant.expires_at > now)
+        .order_by(Merchant.id.asc())
+        .all()
+    )
 
 
 def do_merchant_buy(tg_id: int, slot: int) -> dict:
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user, _income, _expenses = sync_passive_balance(cur, user)
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user, _income, _expenses = sync_passive_balance(session, user)
+        season = ensure_player_season(session, user)
 
-            user_id = user["id"]
-            animals = get_animals(cur, user_id)
-            offers = ensure_merchant(cur, user_id, animals)
-            if slot < 1 or slot > len(offers):
-                raise HTTPException(400, "Неверный слот")
+        offers = ensure_merchant(session, user.id, season.id)
+        if slot < 1 or slot > len(offers):
+            raise HTTPException(400, "Неверный слот")
 
-            offer = offers[slot - 1]
-            if offer.get("first_offer_bought"):
-                raise HTTPException(400, "Уже куплено")
+        offer = offers[slot - 1]
+        if offer.bought:
+            raise HTTPException(400, "Уже куплено")
 
-            animal_def = ANIMAL_BY_DB_ID.get(int(offer["animal_info_id"]))
-            if not animal_def:
-                raise HTTPException(400, "Животное не найдено")
+        animal_def = ANIMAL_BY_DB_ID.get(offer.animal_info_id)
+        if not animal_def:
+            raise HTTPException(400, "Животное не найдено")
 
-            quantity = int(offer["quantity_animals"] or 1)
-            cost = int(offer["price_with_discount"] or animal_def["price"]) * quantity
-            if int(user["rub"]) < cost:
-                raise HTTPException(400, "Недостаточно рублей")
+        cost = offer.price_with_discount or animal_def["price"]
+        if user.rub < cost:
+            raise HTTPException(400, "Недостаточно рублей")
 
-            aviaries = get_aviaries(cur, user_id)
-            total_seats = sum(AVIARY_BY_ID[aviary["aviary_id"]]["seats"] * aviary["count"] for aviary in aviaries)
-            occupied = sum(animal["quantity"] for animal in animals)
-            if total_seats - occupied < quantity:
-                raise HTTPException(400, "Нет мест")
+        now = datetime.now(timezone.utc)
+        new_animal = PackAnimal(
+            user_id=user.id,
+            season_id=season.id,
+            animal_info_id=offer.animal_info_id,
+            survival=offer.survival,
+            reproduction=offer.reproduction,
+            appearance=offer.appearance,
+            size_trait=offer.size_trait,
+            habitat=offer.habitat,
+            source="merchant",
+            dies_at=now + timedelta(days=PACK_SURVIVAL_DAYS[offer.survival]),
+            acquired_at=now,
+        )
+        session.add(new_animal)
+        session.flush()
 
-            new_rub = int(user["rub"]) - cost
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, user_id))
-            cur.execute(
-                f"UPDATE {ZOOPARK_MERCHANTS_TABLE} SET first_offer_bought=1 WHERE user_id=%s AND animal_info_id=%s",
-                (user_id, offer["animal_info_id"]),
-            )
-
-            db_id = ANIMAL_STRING_TO_DB[animal_def["id"]]
-            cur.execute(f"SELECT id, quantity FROM {ZOOPARK_ANIMALS_TABLE} WHERE user_id=%s AND animal_info_id=%s", (user_id, db_id))
-            existing = cur.fetchone()
-            if existing:
-                new_quantity = int(existing["quantity"]) + quantity
-                cur.execute(
-                    f"UPDATE {ZOOPARK_ANIMALS_TABLE} SET quantity=%s WHERE user_id=%s AND animal_info_id=%s",
-                    (new_quantity, user_id, db_id),
-                )
-            else:
-                new_quantity = quantity
-                cur.execute(
-                    f"INSERT INTO {ZOOPARK_ANIMALS_TABLE} (user_id, animal_info_id, quantity, income, price) VALUES (%s,%s,%s,%s,%s)",
-                    (user_id, db_id, quantity, animal_def["income"], animal_def["price"]),
-                )
-
-            bump_data_version(cur, user_id)
-        db.commit()
-        return {"ok": True, "new_rub": new_rub, "new_quantity": new_quantity}
-    finally:
-        db.close()
+        user.rub -= cost
+        offer.bought = 1
+        bump_data_version(session, user.id)
+        animal_payload = format_pack_animal(new_animal)
+        session.commit()
+        return {"ok": True, "new_rub": user.rub, "animal": animal_payload}
 
 
 def get_merchant_animals(tg_id: int):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-
-            offers = ensure_merchant(cur, user["id"], get_animals(cur, user["id"]))
-        db.commit()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, user)
+        offers = ensure_merchant(session, user.id, season.id)
+        session.commit()
 
         animals: list[dict] = []
+        refreshes_at = None
         for index, offer in enumerate(offers[:3]):
-            animal_def = ANIMAL_BY_DB_ID.get(int(offer["animal_info_id"]))
+            animal_def = ANIMAL_BY_DB_ID.get(offer.animal_info_id)
             if not animal_def:
                 continue
+            refreshes_at = offer.expires_at
+            animals.append({
+                "slot": index + 1,
+                "animal_id": animal_def["id"],
+                "animal_info_id": offer.animal_info_id,
+                "quantity": 1,
+                "original_price": offer.price or animal_def["price"],
+                "discount_pct": offer.discount or 0,
+                "final_price": offer.price_with_discount or animal_def["price"],
+                "survival": offer.survival,
+                "reproduction": offer.reproduction,
+                "appearance": offer.appearance,
+                "size_trait": offer.size_trait,
+                "habitat": offer.habitat,
+                "bought": bool(offer.bought),
+            })
 
-            animals.append(
-                {
-                    "slot": index + 1,
-                    "animal_id": animal_def["id"],
-                    "quantity": int(offer["quantity_animals"] or 1),
-                    "original_price": int(offer["price"] or animal_def["price"]),
-                    "discount_pct": int(offer["discount"] or 0),
-                    "final_price": int(offer["price_with_discount"] or animal_def["price"]),
-                }
-            )
-
+        if refreshes_at is None:
+            refreshes_at = datetime.now(timezone.utc) + timedelta(hours=24)
         return {
             "animals": animals,
-            "refreshes_at": (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(),
+            "refreshes_at": refreshes_at.isoformat() if hasattr(refreshes_at, "isoformat") else str(refreshes_at),
         }
-    finally:
-        db.close()
 
 
 def buy_merchant_offer(tg_id: int, slot: int):

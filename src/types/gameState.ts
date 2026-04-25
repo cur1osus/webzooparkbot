@@ -65,6 +65,11 @@ export interface GameState {
   species_count: number;
   diversity_bonus_per_species: number;
   sick_animals: SickAnimal[];
+  pack_animals: PackAnimal[];
+  live_animals_count: number;
+  localities_count: number;
+  season_id: number;
+  season_started_at: string;
   forge_items: ForgeItem[];
   forge_sets: ForgeSet[];
   clan: ClanInfo | null;
@@ -73,3 +78,4 @@ export interface GameState {
   balance_seq: number;
   data_version: number;
 }
+import type { PackAnimal } from './progression';

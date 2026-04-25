@@ -5,18 +5,16 @@ import random
 import uuid
 
 from fastapi import HTTPException
-from api.app.db.connection import get_db
-from api.app.db.tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_ITEMS_TABLE, ZOOPARK_USERS_TABLE
+from sqlalchemy.orm import Session
+
+from api.app.db.connection import get_session
+from api.app.db.models import ForgeSet, ForgeSetItem, Item, User
 from api.app.schemas.forge import ForgeActivateBody, ForgeCreateBody, ForgeItemIdBody, ForgeMergeBody, ForgeSetBody, ForgeSetIdBody
 from api.app.zoopark.catalog import ANIMALS
 from api.app.zoopark.profile import bump_data_version, get_forge_items, get_forge_sets, get_user
 
-# ─── Catalog helpers ──────────────────────────────────────────────────────────
-
 ANIMAL_IDS = [a["id"] for a in ANIMALS]
 ANIMAL_NAMES: dict[str, str] = {a["id"]: a["name"] for a in ANIMALS}
-
-# ─── Rarity config ────────────────────────────────────────────────────────────
 
 RARITIES = ["common", "rare", "epic", "mythical"]
 RARITY_PROBS = [0.50, 0.30, 0.13, 0.07]
@@ -30,8 +28,6 @@ RARITY_NAMES = {
     "common": "Обычный", "rare": "Редкий", "epic": "Эпический",
     "mythical": "Мифический", "legendary": "Легендарный",
 }
-
-# ─── Property config ──────────────────────────────────────────────────────────
 
 PROPERTY_TYPES = [
     "animal_income", "income_boost", "bank_rate",
@@ -62,8 +58,6 @@ PROPERTY_BASE_LABELS = {
     "bonus_rerolls":   "Перебросы бонуса",
 }
 
-# ─── Forge economy ────────────────────────────────────────────────────────────
-
 FORGE_CREATE_BASE_USD = 1
 FORGE_CREATE_PAW = 350
 FORGE_CREATE_MULT = 1.15
@@ -73,8 +67,6 @@ FORGE_MERGE_BASE_USD = 100_000
 MAX_ITEM_LEVEL = 12
 MAX_ACTIVE_ITEMS = 3
 
-
-# ─── Property helpers ─────────────────────────────────────────────────────────
 
 def _prop_label(prop_type: str, value: int, animal_id: str | None = None) -> str:
     if prop_type == "animal_income":
@@ -143,10 +135,38 @@ def _set_payload(raw: dict) -> dict:
     }
 
 
-def _save_forge_sets(cur, user_id: int, sets: list[dict]) -> None:
-    payload = json.dumps([_set_payload(item_set) for item_set in sets], ensure_ascii=False)
-    bump_data_version(cur, user_id)
-    cur.execute(f"UPDATE {ZOOPARK_EXTRA_TABLE} SET forge_sets_json=%s WHERE user_id=%s", (payload, user_id))
+def _save_forge_sets(session: Session, user_id: int, sets: list[dict]) -> None:
+    bump_data_version(session, user_id)
+    payload = [_set_payload(s) for s in sets]
+    payload_keys = {str(item_set["id"]) for item_set in payload}
+    existing = session.query(ForgeSet).filter(ForgeSet.user_id == user_id).all()
+    by_key = {item_set.set_key: item_set for item_set in existing}
+
+    for item_set in existing:
+        if item_set.set_key not in payload_keys:
+            session.delete(item_set)
+
+    from datetime import datetime, timezone
+    for item_set in payload:
+        set_key = str(item_set["id"])
+        db_set = by_key.get(set_key)
+        if db_set is None:
+            db_set = ForgeSet(
+                user_id=user_id,
+                set_key=set_key,
+                name=item_set["name"],
+                icon=item_set["icon"],
+                created_at=datetime.now(timezone.utc),
+            )
+            session.add(db_set)
+            session.flush()
+        else:
+            db_set.name = item_set["name"]
+            db_set.icon = item_set["icon"]
+
+        session.query(ForgeSetItem).filter(ForgeSetItem.set_id == db_set.id).delete()
+        for position, item_id in enumerate(item_set["item_ids"]):
+            session.add(ForgeSetItem(set_id=db_set.id, item_id=int(item_id), position=position))
 
 
 def _validate_set_item_ids(item_ids: list[str], owned_ids: set[str]) -> list[str]:
@@ -169,388 +189,318 @@ def _find_set(sets: list[dict], set_id: str) -> dict:
     return item_set
 
 
-# ─── API handlers ─────────────────────────────────────────────────────────────
-
 def api_forge_items(tg_id: int):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            return {"items": get_forge_items(cur, user["id"])}
-    finally:
-        db.close()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        return {"items": get_forge_items(session, user.id)}
 
 
 def api_forge_sets(tg_id: int):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            items = get_forge_items(cur, user["id"])
-            return {"sets": get_forge_sets(cur, user["id"], items)}
-    finally:
-        db.close()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        items = get_forge_items(session, user.id)
+        return {"sets": get_forge_sets(session, user.id, items)}
 
 
 def api_forge_set_create(tg_id: int, body: ForgeSetBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user_id = user["id"]
-            items = get_forge_items(cur, user_id)
-            owned_ids = {str(item["id"]) for item in items}
-            sets = get_forge_sets(cur, user_id, items)
-            item_ids = _validate_set_item_ids(getattr(body, "item_ids", []) or [], owned_ids)
-            item_set = {
-                "id": uuid.uuid4().hex[:10],
-                "name": (getattr(body, "name", None) or f"Сет {len(sets) + 1}")[:32],
-                "icon": (getattr(body, "icon", None) or "⚒️")[:8],
-                "item_ids": item_ids,
-            }
-            sets.append(item_set)
-            _save_forge_sets(cur, user_id, sets)
-        db.commit()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        items = get_forge_items(session, user_id)
+        owned_ids = {str(item["id"]) for item in items}
+        sets = get_forge_sets(session, user_id, items)
+        item_ids = _validate_set_item_ids(getattr(body, "item_ids", []) or [], owned_ids)
+        item_set = {
+            "id": uuid.uuid4().hex[:10],
+            "name": (getattr(body, "name", None) or f"Сет {len(sets) + 1}")[:32],
+            "icon": (getattr(body, "icon", None) or "⚒️")[:8],
+            "item_ids": item_ids,
+        }
+        sets.append(item_set)
+        _save_forge_sets(session, user_id, sets)
+        session.commit()
         return {"ok": True, "set": {**item_set, "is_active": False}}
-    finally:
-        db.close()
 
 
 def api_forge_set_update(tg_id: int, body: ForgeSetBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            if not getattr(body, "set_id", None):
-                raise HTTPException(400, "Неверный ID")
-            user_id = user["id"]
-            items = get_forge_items(cur, user_id)
-            owned_ids = {str(item["id"]) for item in items}
-            sets = get_forge_sets(cur, user_id, items)
-            item_set = _find_set(sets, str(body.set_id))
-            item_set["item_ids"] = _validate_set_item_ids(getattr(body, "item_ids", []) or [], owned_ids)
-            if getattr(body, "name", None):
-                item_set["name"] = body.name[:32]
-            if getattr(body, "icon", None):
-                item_set["icon"] = body.icon[:8]
-            _save_forge_sets(cur, user_id, sets)
-        db.commit()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        if not getattr(body, "set_id", None):
+            raise HTTPException(400, "Неверный ID")
+        user_id = user.id
+        items = get_forge_items(session, user_id)
+        owned_ids = {str(item["id"]) for item in items}
+        sets = get_forge_sets(session, user_id, items)
+        item_set = _find_set(sets, str(body.set_id))
+        item_set["item_ids"] = _validate_set_item_ids(getattr(body, "item_ids", []) or [], owned_ids)
+        if getattr(body, "name", None):
+            item_set["name"] = body.name[:32]
+        if getattr(body, "icon", None):
+            item_set["icon"] = body.icon[:8]
+        _save_forge_sets(session, user_id, sets)
+        session.commit()
         return {"ok": True, "set": item_set}
-    finally:
-        db.close()
 
 
 def api_forge_set_delete(tg_id: int, body: ForgeSetIdBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user_id = user["id"]
-            items = get_forge_items(cur, user_id)
-            sets = get_forge_sets(cur, user_id, items)
-            _find_set(sets, body.set_id)
-            sets = [item_set for item_set in sets if str(item_set["id"]) != str(body.set_id)]
-            _save_forge_sets(cur, user_id, sets)
-        db.commit()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        items = get_forge_items(session, user_id)
+        sets = get_forge_sets(session, user_id, items)
+        _find_set(sets, body.set_id)
+        sets = [s for s in sets if str(s["id"]) != str(body.set_id)]
+        _save_forge_sets(session, user_id, sets)
+        session.commit()
         return {"ok": True}
-    finally:
-        db.close()
 
 
 def api_forge_set_apply(tg_id: int, body: ForgeSetIdBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user_id = user["id"]
-            items = get_forge_items(cur, user_id)
-            owned_ids = {str(item["id"]) for item in items}
-            item_set = _find_set(get_forge_sets(cur, user_id, items), body.set_id)
-            item_ids = _validate_set_item_ids(item_set["item_ids"], owned_ids)
-            if item_ids:
-                placeholders = ",".join(["%s"] * len(item_ids))
-                cur.execute(
-                    f"UPDATE {ZOOPARK_ITEMS_TABLE} SET is_active=CASE WHEN id IN ({placeholders}) THEN 1 ELSE 0 END WHERE user_id=%s",
-                    tuple(int(item_id) for item_id in item_ids) + (user_id,),
-                )
-            else:
-                cur.execute(f"UPDATE {ZOOPARK_ITEMS_TABLE} SET is_active=0 WHERE user_id=%s", (user_id,))
-            bump_data_version(cur, user_id)
-        db.commit()
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        items = get_forge_items(session, user_id)
+        owned_ids = {str(item["id"]) for item in items}
+        item_set = _find_set(get_forge_sets(session, user_id, items), body.set_id)
+        item_ids = _validate_set_item_ids(item_set["item_ids"], owned_ids)
+        active_int_ids = {int(iid) for iid in item_ids}
+        for item in session.query(Item).filter(Item.user_id == user_id).all():
+            item.is_active = 1 if item.id in active_int_ids else 0
+        bump_data_version(session, user_id)
+        session.commit()
         return {"ok": True}
-    finally:
-        db.close()
 
 
 def api_forge_create(tg_id: int, body: ForgeCreateBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        item_count = session.query(Item).filter(Item.user_id == user_id).count()
 
-            user_id = user["id"]
-            cur.execute(f"SELECT COUNT(*) as cnt FROM {ZOOPARK_ITEMS_TABLE} WHERE user_id=%s", (user_id,))
-            item_count = int(cur.fetchone()["cnt"])
+        usd_cost = int(FORGE_CREATE_BASE_USD * (FORGE_CREATE_MULT ** item_count))
+        paw_cost = FORGE_CREATE_PAW
+        currency = body.currency if body.currency in ("usd", "paw") else "usd"
 
-            usd_cost = int(FORGE_CREATE_BASE_USD * (FORGE_CREATE_MULT ** item_count))
-            paw_cost = FORGE_CREATE_PAW
-            currency = body.currency if body.currency in ("usd", "paw") else "usd"
+        if currency == "paw":
+            if user.paw_coins < paw_cost:
+                raise HTTPException(400, f"Нужно {paw_cost} PawCoins")
+            user.paw_coins -= paw_cost
+            cost_usd_out = None
+            cost_paw_out: int | None = paw_cost
+        else:
+            if user.usd < usd_cost:
+                raise HTTPException(400, f"Нужно ${usd_cost:,}")
+            user.usd -= usd_cost
+            cost_usd_out: int | None = usd_cost
+            cost_paw_out = None
 
-            if currency == "paw":
-                if int(user["paw_coins"]) < paw_cost:
-                    raise HTTPException(400, f"Нужно {paw_cost} PawCoins")
-                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=paw_coins-%s WHERE id=%s", (paw_cost, user_id))
-                new_paw = int(user["paw_coins"]) - paw_cost
-                new_usd = int(user["usd"])
-                cost_usd_out = None
-                cost_paw_out: int | None = paw_cost
-            else:
-                if int(user["usd"]) < usd_cost:
-                    raise HTTPException(400, f"Нужно ${usd_cost:,}")
-                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=usd-%s WHERE id=%s", (usd_cost, user_id))
-                new_usd = int(user["usd"]) - usd_cost
-                new_paw = int(user["paw_coins"])
-                cost_usd_out: int | None = usd_cost
-                cost_paw_out = None
+        rarity = random.choices(RARITIES, RARITY_PROBS)[0]
+        props = _make_properties(rarity)
+        emoji = RARITY_ICONS[rarity]
+        name = f"{RARITY_NAMES[rarity]} артефакт"
 
-            rarity = random.choices(RARITIES, RARITY_PROBS)[0]
-            props = _make_properties(rarity)
-            emoji = RARITY_ICONS[rarity]
-            name = f"{RARITY_NAMES[rarity]} артефакт"
-
-            cur.execute(
-                f"INSERT INTO {ZOOPARK_ITEMS_TABLE} (user_id, emoji, name, lvl, properties, rarity, is_active) VALUES (%s,%s,%s,0,%s,%s,0)",
-                (user_id, emoji, name, json.dumps(props, ensure_ascii=False), rarity),
-            )
-            item_id = cur.lastrowid
-        db.commit()
+        new_item = Item(user_id=user_id, emoji=emoji, name=name, lvl=0, properties=json.dumps(props, ensure_ascii=False), rarity=rarity, is_active=0)
+        session.add(new_item)
+        session.flush()
+        item_id = new_item.id
+        session.commit()
         return {
             "ok": True,
             "item": _item_dict(item_id, emoji, name, rarity, 0, props, False),
             "cost_usd": cost_usd_out,
-            "new_usd": new_usd,
+            "new_usd": user.usd,
             "cost_paw_coins": cost_paw_out,
-            "new_paw_coins": new_paw,
+            "new_paw_coins": user.paw_coins,
         }
-    finally:
-        db.close()
 
 
 def api_forge_upgrade(tg_id: int, body: ForgeItemIdBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        try:
+            item_id = int(body.item_id)
+        except ValueError as exc:
+            raise HTTPException(400, "Неверный ID") from exc
 
-            user_id = user["id"]
-            try:
-                item_id = int(body.item_id)
-            except ValueError as exc:
-                raise HTTPException(400, "Неверный ID") from exc
+        item = session.query(Item).filter(Item.id == item_id, Item.user_id == user_id).first()
+        if not item:
+            raise HTTPException(404, "Предмет не найден")
 
-            cur.execute(f"SELECT * FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s AND user_id=%s", (item_id, user_id))
-            item = cur.fetchone()
-            if not item:
-                raise HTTPException(404, "Предмет не найден")
+        level = item.lvl
+        if level >= MAX_ITEM_LEVEL:
+            raise HTTPException(400, f"Максимальный уровень {MAX_ITEM_LEVEL}")
 
-            level = int(item["lvl"])
-            if level >= MAX_ITEM_LEVEL:
-                raise HTTPException(400, f"Максимальный уровень {MAX_ITEM_LEVEL}")
+        cost_usd = FORGE_UPGRADE_BASE_USD * (level + 1)
+        if user.usd < cost_usd:
+            raise HTTPException(400, f"Нужно ${cost_usd:,}")
 
-            cost_usd = FORGE_UPGRADE_BASE_USD * (level + 1)
-            if int(user["usd"]) < cost_usd:
-                raise HTTPException(400, f"Нужно ${cost_usd:,}")
+        success_pct = max(0, 100 - 8 * level)
+        success = random.randint(1, 100) <= success_pct
+        user.usd -= cost_usd
 
-            success_pct = max(0, 100 - 8 * level)
-            success = random.randint(1, 100) <= success_pct
-            new_usd = int(user["usd"]) - cost_usd
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s WHERE id=%s", (new_usd, user_id))
+        props: list[dict] = json.loads(item.properties) if item.properties else []
+        new_level = level
 
-            props: list[dict] = json.loads(item["properties"]) if item["properties"] else []
-            new_level = level
+        if success and props:
+            new_level = level + 1
+            idx = random.randint(0, len(props) - 1)
+            props[idx] = dict(props[idx])
+            props[idx]["value"] = props[idx].get("value", 0) + 1
+            _rebuild_label(props[idx])
+            item.lvl = new_level
+            item.properties = json.dumps(props, ensure_ascii=False)
 
-            if success and props:
-                new_level = level + 1
-                idx = random.randint(0, len(props) - 1)
-                props[idx] = dict(props[idx])
-                props[idx]["value"] = props[idx].get("value", 0) + 1
-                _rebuild_label(props[idx])
-                cur.execute(
-                    f"UPDATE {ZOOPARK_ITEMS_TABLE} SET lvl=%s, properties=%s WHERE id=%s",
-                    (new_level, json.dumps(props, ensure_ascii=False), item_id),
-                )
-        db.commit()
+        session.commit()
         return {
             "ok": True,
             "success": success,
             "success_pct": success_pct,
-            "item": _item_dict(item_id, item["emoji"], item["name"], item["rarity"], new_level, props, bool(item["is_active"])),
+            "item": _item_dict(item_id, item.emoji, item.name, item.rarity, new_level, props, bool(item.is_active)),
             "cost_usd": cost_usd,
-            "new_usd": new_usd,
+            "new_usd": user.usd,
         }
-    finally:
-        db.close()
 
 
 def api_forge_merge(tg_id: int, body: ForgeMergeBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        try:
+            item_id1 = int(body.item_id1)
+            item_id2 = int(body.item_id2)
+        except ValueError as exc:
+            raise HTTPException(400, "Неверный ID") from exc
 
-            user_id = user["id"]
-            try:
-                item_id1 = int(body.item_id1)
-                item_id2 = int(body.item_id2)
-            except ValueError as exc:
-                raise HTTPException(400, "Неверный ID") from exc
+        if item_id1 == item_id2:
+            raise HTTPException(400, "Нельзя объединить предмет сам с собой")
 
-            if item_id1 == item_id2:
-                raise HTTPException(400, "Нельзя объединить предмет сам с собой")
+        items = session.query(Item).filter(Item.id.in_([item_id1, item_id2]), Item.user_id == user_id).all()
+        if len(items) < 2:
+            raise HTTPException(404, "Предметы не найдены")
 
-            cur.execute(f"SELECT * FROM {ZOOPARK_ITEMS_TABLE} WHERE id IN (%s,%s) AND user_id=%s", (item_id1, item_id2, user_id))
-            rows = cur.fetchall()
-            if len(rows) < 2:
-                raise HTTPException(404, "Предметы не найдены")
+        by_id = {item.id: item for item in items}
+        item1, item2 = by_id[item_id1], by_id[item_id2]
 
-            by_id = {int(r["id"]): r for r in rows}
-            item1, item2 = by_id[item_id1], by_id[item_id2]
+        for it in (item1, item2):
+            if it.rarity == "legendary":
+                raise HTTPException(400, "Легендарные предметы нельзя объединять")
 
-            for it in (item1, item2):
-                if it["rarity"] == "legendary":
-                    raise HTTPException(400, "Легендарные предметы нельзя объединять")
+        props1: list[dict] = json.loads(item1.properties) if item1.properties else []
+        props2: list[dict] = json.loads(item2.properties) if item2.properties else []
+        n1, n2 = len(props1), len(props2)
+        level1, level2 = item1.lvl, item2.lvl
 
-            props1: list[dict] = json.loads(item1["properties"]) if item1["properties"] else []
-            props2: list[dict] = json.loads(item2["properties"]) if item2["properties"] else []
-            n1, n2 = len(props1), len(props2)
-            level1, level2 = int(item1["lvl"]), int(item2["lvl"])
+        cost_usd = FORGE_MERGE_BASE_USD * (n1 + n2 + max(level1 + level2, 1))
+        if user.usd < cost_usd:
+            raise HTTPException(400, f"Нужно ${cost_usd:,}")
 
-            cost_usd = FORGE_MERGE_BASE_USD * (n1 + n2 + max(level1 + level2, 1))
-            if int(user["usd"]) < cost_usd:
-                raise HTTPException(400, f"Нужно ${cost_usd:,}")
+        result_props: list[dict] = []
+        rounds = max(n1, n2)
+        success_prob = max(0, 100 - 10 * (n1 + n2))
 
-            # Merge algorithm per game rules
-            result_props: list[dict] = []
-            rounds = max(n1, n2)
-            success_prob = max(0, 100 - 10 * (n1 + n2))
+        def _add_to_result(prop: dict) -> None:
+            existing = next((p for p in result_props if p["type"] == prop["type"]), None)
+            if existing:
+                existing["value"] += prop.get("value", 0)
+                _rebuild_label(existing)
+            else:
+                result_props.append(dict(prop))
 
-            def _add_to_result(prop: dict) -> None:
-                existing = next((p for p in result_props if p["type"] == prop["type"]), None)
-                if existing:
-                    existing["value"] += prop.get("value", 0)
-                    _rebuild_label(existing)
-                else:
-                    result_props.append(dict(prop))
+        for _ in range(rounds):
+            if random.randint(1, 100) <= success_prob:
+                if props1:
+                    _add_to_result(random.choice(props1))
+                if props2:
+                    _add_to_result(random.choice(props2))
+            else:
+                source = random.choice([s for s in (props1, props2) if s] or [props1])
+                if source:
+                    _add_to_result(random.choice(source))
 
-            for _ in range(rounds):
-                if random.randint(1, 100) <= success_prob:
-                    if props1:
-                        _add_to_result(random.choice(props1))
-                    if props2:
-                        _add_to_result(random.choice(props2))
-                else:
-                    source = random.choice([s for s in (props1, props2) if s] or [props1])
-                    if source:
-                        _add_to_result(random.choice(source))
+        result_props = result_props[:5]
+        new_count = max(1, len(result_props))
+        new_rarity = RARITY_FROM_COUNT.get(new_count, "common")
 
-            # Cap at 5 properties (legendary limit)
-            result_props = result_props[:5]
-            new_count = max(1, len(result_props))
-            new_rarity = RARITY_FROM_COUNT.get(new_count, "common")
+        user.usd -= cost_usd
+        session.delete(item1)
+        session.delete(item2)
+        session.flush()
 
-            new_usd = int(user["usd"]) - cost_usd
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s WHERE id=%s", (new_usd, user_id))
-            cur.execute(f"DELETE FROM {ZOOPARK_ITEMS_TABLE} WHERE id IN (%s,%s)", (item_id1, item_id2))
-
-            emoji = RARITY_ICONS[new_rarity]
-            name = f"{RARITY_NAMES[new_rarity]} артефакт"
-            cur.execute(
-                f"INSERT INTO {ZOOPARK_ITEMS_TABLE} (user_id, emoji, name, lvl, properties, rarity, is_active) VALUES (%s,%s,%s,0,%s,%s,0)",
-                (user_id, emoji, name, json.dumps(result_props, ensure_ascii=False), new_rarity),
-            )
-            new_item_id = cur.lastrowid
-        db.commit()
+        emoji = RARITY_ICONS[new_rarity]
+        name = f"{RARITY_NAMES[new_rarity]} артефакт"
+        new_item = Item(user_id=user_id, emoji=emoji, name=name, lvl=0, properties=json.dumps(result_props, ensure_ascii=False), rarity=new_rarity, is_active=0)
+        session.add(new_item)
+        session.flush()
+        new_item_id = new_item.id
+        session.commit()
         return {
             "ok": True,
             "new_item": _item_dict(new_item_id, emoji, name, new_rarity, 0, result_props, False),
             "cost_usd": cost_usd,
-            "new_usd": new_usd,
+            "new_usd": user.usd,
         }
-    finally:
-        db.close()
 
 
 def api_forge_sell(tg_id: int, body: ForgeItemIdBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user_id = user.id
+        try:
+            item_id = int(body.item_id)
+        except ValueError as exc:
+            raise HTTPException(400, "Неверный ID") from exc
 
-            user_id = user["id"]
-            try:
-                item_id = int(body.item_id)
-            except ValueError as exc:
-                raise HTTPException(400, "Неверный ID") from exc
+        item = session.query(Item).filter(Item.id == item_id, Item.user_id == user_id).first()
+        if not item:
+            raise HTTPException(404, "Предмет не найден")
 
-            cur.execute(f"SELECT id FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s AND user_id=%s", (item_id, user_id))
-            if not cur.fetchone():
-                raise HTTPException(404, "Предмет не найден")
-
-            cur.execute(f"DELETE FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s", (item_id,))
-            new_usd = int(user["usd"]) + FORGE_SELL_USD
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s WHERE id=%s", (new_usd, user_id))
-        db.commit()
-        return {"ok": True, "earned_usd": FORGE_SELL_USD, "new_usd": new_usd}
-    finally:
-        db.close()
+        session.delete(item)
+        user.usd += FORGE_SELL_USD
+        session.commit()
+        return {"ok": True, "earned_usd": FORGE_SELL_USD, "new_usd": user.usd}
 
 
 def api_forge_activate(tg_id: int, body: ForgeActivateBody):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        try:
+            item_id = int(body.set_id)
+        except ValueError as exc:
+            raise HTTPException(400, "Неверный ID") from exc
 
-            try:
-                item_id = int(body.set_id)
-            except ValueError as exc:
-                raise HTTPException(400, "Неверный ID") from exc
+        item = session.query(Item).filter(Item.id == item_id, Item.user_id == user.id).first()
+        if not item:
+            raise HTTPException(404, "Предмет не найден")
 
-            cur.execute(f"SELECT id, is_active FROM {ZOOPARK_ITEMS_TABLE} WHERE id=%s AND user_id=%s", (item_id, user["id"]))
-            item = cur.fetchone()
-            if not item:
-                raise HTTPException(404, "Предмет не найден")
+        currently_active = bool(item.is_active)
+        if not currently_active:
+            active_count = session.query(Item).filter(Item.user_id == user.id, Item.is_active == 1).count()
+            if active_count >= MAX_ACTIVE_ITEMS:
+                raise HTTPException(400, f"Максимум {MAX_ACTIVE_ITEMS} активных предмета. Деактивируй один.")
 
-            currently_active = bool(item["is_active"])
-            if not currently_active:
-                cur.execute(f"SELECT COUNT(*) as cnt FROM {ZOOPARK_ITEMS_TABLE} WHERE user_id=%s AND is_active=1", (user["id"],))
-                if int(cur.fetchone()["cnt"]) >= MAX_ACTIVE_ITEMS:
-                    raise HTTPException(400, f"Максимум {MAX_ACTIVE_ITEMS} активных предмета. Деактивируй один.")
-
-            cur.execute(f"UPDATE {ZOOPARK_ITEMS_TABLE} SET is_active=%s WHERE id=%s", (0 if currently_active else 1, item_id))
-        db.commit()
+        item.is_active = 0 if currently_active else 1
+        session.commit()
         return {"ok": True, "is_active": not currently_active}
-    finally:
-        db.close()

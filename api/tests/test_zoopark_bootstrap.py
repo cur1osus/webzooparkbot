@@ -4,153 +4,77 @@ import importlib
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from api.app.db.tables import ZOOPARK_BOOTSTRAP_META_TABLE, ZOOPARK_EXTRA_TABLE, ZOOPARK_PACK_ANIMALS_TABLE
-
-
-class _BootstrapCursor:
-    def __init__(self) -> None:
-        self.tables: dict[str, set[str]] = {
-            "webapp_extra": {"user_id", "balance_seq", "data_version", "profile_emoji", "forge_sets_json", "packs_today", "packs_today_date", "last_income_at"},
-            "pack_animals": {
-                "id",
-                "user_id",
-                "survival",
-                "reproduction",
-                "appearance",
-                "size_trait",
-                "habitat",
-                "is_alive",
-                "acquired_at",
-                "dies_at",
-                "locality_id",
-                "last_bred_date",
-                "in_expedition",
-            },
-        }
-        self.copy_columns: dict[str, tuple[str, ...]] = {}
-        self.table_counts: dict[str, int] = {}
-        self.completed_targets: set[str] = set()
-        self._fetchone: dict | None = None
-        self._fetchall: list[dict] = []
-
-    def execute(self, sql: str, params: tuple | None = None) -> None:
-        params = params or ()
-
-        if sql.startswith("CREATE TABLE IF NOT EXISTS "):
-            table, columns = self._parse_create_table(sql)
-            self.tables[table] = columns
-            self._fetchone = None
-            self._fetchall = []
-            return
-
-        if sql.startswith("ALTER TABLE ") and " ADD COLUMN " in sql:
-            table, column = self._parse_alter_add_column(sql)
-            self.tables.setdefault(table, set()).add(column)
-            self._fetchone = None
-            self._fetchall = []
-            return
-
-        if sql.startswith("SELECT 1 FROM information_schema.TABLES"):
-            table = str(params[0])
-            self._fetchone = {"1": 1} if table in self.tables else None
-            self._fetchall = []
-            return
-
-        if sql.startswith("SELECT COLUMN_NAME FROM information_schema.COLUMNS"):
-            table = str(params[0])
-            self._fetchone = None
-            self._fetchall = [{"COLUMN_NAME": column} for column in sorted(self.tables.get(table, set()))]
-            return
-
-        if sql.startswith("SELECT DATA_TYPE FROM information_schema.COLUMNS"):
-            table = str(params[0])
-            column = str(params[1])
-            self._fetchone = {"DATA_TYPE": "bigint"} if column in self.tables.get(table, set()) else None
-            self._fetchall = []
-            return
-
-        if sql.startswith(f"SELECT 1 AS exists_flag FROM {ZOOPARK_BOOTSTRAP_META_TABLE} WHERE target_table=%s LIMIT 1"):
-            target_table = str(params[0])
-            self._fetchone = {"exists_flag": 1} if target_table in self.completed_targets else None
-            self._fetchall = []
-            return
-
-        if sql.startswith("SELECT COUNT(*) AS cnt FROM "):
-            table = sql.split("SELECT COUNT(*) AS cnt FROM ", 1)[1]
-            self._fetchone = {"cnt": self.table_counts.get(table, 0)}
-            self._fetchall = []
-            return
-
-        if sql.startswith(f"INSERT INTO {ZOOPARK_BOOTSTRAP_META_TABLE} (target_table) VALUES (%s) ON DUPLICATE KEY UPDATE copied_at=CURRENT_TIMESTAMP"):
-            target_table = str(params[0])
-            self.completed_targets.add(target_table)
-            self.table_counts[ZOOPARK_BOOTSTRAP_META_TABLE] = len(self.completed_targets)
-            self._fetchone = None
-            self._fetchall = []
-            return
-
-        if sql.startswith("INSERT INTO ") and ") SELECT " in sql:
-            table, columns = self._parse_copy_insert(sql)
-            self.copy_columns[table] = columns
-            self.table_counts[table] = max(1, self.table_counts.get(table, 0))
-            self._fetchone = None
-            self._fetchall = []
-            return
-
-        self._fetchone = None
-        self._fetchall = []
-
-    def fetchone(self):
-        return self._fetchone
-
-    def fetchall(self):
-        return list(self._fetchall)
-
-    @staticmethod
-    def _parse_create_table(sql: str) -> tuple[str, set[str]]:
-        table = sql.split("CREATE TABLE IF NOT EXISTS ", 1)[1].split(" ", 1)[0]
-        body = sql.split("(", 1)[1].rsplit(")", 1)[0]
-        columns: set[str] = set()
-        for raw_line in body.splitlines():
-            line = raw_line.strip().rstrip(",")
-            if not line or line.startswith(("PRIMARY KEY", "INDEX", "UNIQUE KEY")):
-                continue
-            columns.add(line.split(" ", 1)[0].strip("`"))
-        return table, columns
-
-    @staticmethod
-    def _parse_alter_add_column(sql: str) -> tuple[str, str]:
-        parts = sql.split()
-        return parts[2], parts[5]
-
-    @staticmethod
-    def _parse_copy_insert(sql: str) -> tuple[str, tuple[str, ...]]:
-        rest = sql.split("INSERT INTO ", 1)[1]
-        table, _, remainder = rest.partition(" (")
-        columns_sql = remainder.split(") SELECT ", 1)[0]
-        return table, tuple(column.strip() for column in columns_sql.split(", "))
+from api.app.db.tables import ZOOPARK_BOOTSTRAP_META_TABLE, ZOOPARK_USERS_TABLE
 
 
-class _BootstrapDb:
-    def __init__(self, cursor: _BootstrapCursor) -> None:
-        self._cursor = cursor
+def _make_conn_mock(
+    existing_tables: set[str] | None = None,
+    column_sets: dict[str, set[str]] | None = None,
+    completed_targets: set[str] | None = None,
+    table_counts: dict[str, int] | None = None,
+):
+    """Return a mock SQLAlchemy connection that simulates bootstrap SQL queries."""
+    existing_tables = existing_tables or set()
+    column_sets = column_sets or {}
+    completed_targets = set(completed_targets or [])
+    table_counts = dict(table_counts or {})
+    copy_columns: dict[str, tuple[str, ...]] = {}
 
-    def cursor(self):
-        return self
+    def _execute(stmt, params=None):
+        params = params or {}
+        sql = str(stmt) if not isinstance(stmt, str) else stmt
 
-    def __enter__(self):
-        return self._cursor
+        result = MagicMock()
+        result.fetchone.return_value = None
+        result.fetchall.return_value = []
+        result.scalar.return_value = 0
 
-    def __exit__(self, exc_type, exc, tb):
-        return False
+        if "information_schema.TABLES" in sql:
+            t = params.get("t", "")
+            result.fetchone.return_value = (1,) if t in existing_tables else None
+        elif "COLUMN_NAME" in sql and "information_schema" in sql:
+            t = params.get("t", "")
+            cols = column_sets.get(t, set())
+            result.fetchall.return_value = [(c,) for c in sorted(cols)]
+        elif "DATA_TYPE" in sql and "information_schema" in sql:
+            t = params.get("t", "")
+            c = params.get("c", "")
+            has_col = c in column_sets.get(t, set())
+            result.fetchone.return_value = ("bigint",) if has_col else None
+        elif str(ZOOPARK_BOOTSTRAP_META_TABLE) in sql and "target_table=:t" in sql:
+            t = params.get("t", "")
+            result.fetchone.return_value = (1,) if t in completed_targets else None
+        elif "COUNT(*)" in sql:
+            table = ""
+            for keyword in [ZOOPARK_USERS_TABLE, ZOOPARK_BOOTSTRAP_META_TABLE]:
+                if keyword in sql:
+                    table = keyword
+                    break
+            result.scalar.return_value = table_counts.get(table, 0)
+            result.fetchone.return_value = (table_counts.get(table, 0),)
+        elif "INSERT INTO" in sql and ") SELECT " in sql:
+            # Extract table and columns from copy INSERT
+            rest = sql.split("INSERT INTO ", 1)[1]
+            tbl, _, remainder = rest.partition(" (")
+            cols_sql, _, _ = remainder.partition(") SELECT ")
+            cols = tuple(c.strip() for c in cols_sql.split(", "))
+            copy_columns[tbl.strip()] = cols
+            table_counts[tbl.strip()] = max(1, table_counts.get(tbl.strip(), 0))
+        elif "ON DUPLICATE KEY UPDATE copied_at=CURRENT_TIMESTAMP" in sql:
+            t = params.get("t", "")
+            completed_targets.add(t)
 
-    def commit(self) -> None:
-        return None
+        return result
 
-    def close(self) -> None:
-        return None
+    conn = MagicMock()
+    conn.execute.side_effect = _execute
+    conn.__enter__.return_value = conn
+    conn.__exit__.return_value = False
+    conn._copy_columns = copy_columns
+    conn._completed_targets = completed_targets
+    return conn
 
 
 class ZooParkBootstrapTests(unittest.TestCase):
@@ -161,15 +85,6 @@ class ZooParkBootstrapTests(unittest.TestCase):
         fastapi.HTTPException = type("HTTPException", (Exception,), {})
         sys.modules["fastapi"] = fastapi
 
-        pymysql = types.ModuleType("pymysql")
-        pymysql.connect = lambda **_kwargs: None
-        sys.modules["pymysql"] = pymysql
-
-        pymysql_cursors = types.ModuleType("pymysql.cursors")
-        pymysql_cursors.DictCursor = object
-        sys.modules["pymysql.cursors"] = pymysql_cursors
-        pymysql.cursors = pymysql_cursors
-
         for name in ["api.app.db.bootstrap", "api.app.db.connection"]:
             sys.modules.pop(name, None)
 
@@ -177,56 +92,70 @@ class ZooParkBootstrapTests(unittest.TestCase):
         sys.modules.clear()
         sys.modules.update(self._saved_modules)
 
-    def test_init_schema_copies_optional_fields_on_first_namespaced_bootstrap(self) -> None:
+    def test_init_schema_copies_user_profile_fields_on_first_namespaced_bootstrap(self) -> None:
         module = importlib.import_module("api.app.db.bootstrap")
-        cursor = _BootstrapCursor()
-        db = _BootstrapDb(cursor)
 
-        with patch.object(module, "get_db", return_value=db), \
+        user_cols = {
+            "id", "id_user", "nickname", "date_reg", "paw_coins", "rub", "usd",
+            "sub_on_chat", "sub_on_channel", "bonus", "unity_id", "is_banned",
+            "balance_seq", "data_version", "bonus_notify_msg_id", "profile_emoji", "last_income_at",
+        }
+
+        conn = _make_conn_mock(
+            existing_tables={
+                "users", ZOOPARK_USERS_TABLE,
+                ZOOPARK_BOOTSTRAP_META_TABLE,
+            },
+            column_sets={
+                "users": user_cols,
+                ZOOPARK_USERS_TABLE: user_cols,
+            },
+        )
+
+        with patch.object(module, "engine") as mock_engine, \
+             patch.object(module, "Base") as mock_base, \
+             patch.object(module, "SessionLocal") as mock_sl, \
              patch.object(module, "seed_catalogue", return_value=None):
+            mock_engine.connect.return_value = conn
+            mock_base.metadata.create_all.return_value = None
+            mock_session = MagicMock()
+            mock_sl.return_value.__enter__.return_value = mock_session
+            mock_sl.return_value.__exit__.return_value = False
             module.init_schema()
 
+        copied = conn._copy_columns
+        self.assertIn(ZOOPARK_USERS_TABLE, copied)
         self.assertEqual(
-            cursor.copy_columns[ZOOPARK_EXTRA_TABLE],
-            ("user_id", "balance_seq", "data_version", "profile_emoji", "forge_sets_json", "packs_today", "packs_today_date", "last_income_at"),
-        )
-        self.assertEqual(
-            cursor.copy_columns[ZOOPARK_PACK_ANIMALS_TABLE],
+            copied[ZOOPARK_USERS_TABLE],
             (
-                "id",
-                "user_id",
-                "survival",
-                "reproduction",
-                "appearance",
-                "size_trait",
-                "habitat",
-                "is_alive",
-                "acquired_at",
-                "dies_at",
-                "locality_id",
-                "last_bred_date",
-                "in_expedition",
+                "id", "id_user", "nickname", "date_reg", "paw_coins", "rub", "usd",
+                "sub_on_chat", "sub_on_channel", "bonus", "unity_id", "is_banned",
+                "balance_seq", "data_version", "bonus_notify_msg_id", "profile_emoji", "last_income_at",
             ),
         )
 
     def test_init_schema_does_not_recopy_completed_compat_table_when_target_becomes_empty(self) -> None:
         module = importlib.import_module("api.app.db.bootstrap")
-        cursor = _BootstrapCursor()
-        db = _BootstrapDb(cursor)
 
-        with patch.object(module, "get_db", return_value=db), \
+        user_cols = {"id", "id_user", "nickname", "date_reg", "paw_coins", "rub", "usd", "sub_on_chat", "sub_on_channel", "bonus"}
+        conn = _make_conn_mock(
+            existing_tables={"users", ZOOPARK_USERS_TABLE, ZOOPARK_BOOTSTRAP_META_TABLE},
+            column_sets={"users": user_cols, ZOOPARK_USERS_TABLE: user_cols},
+            completed_targets={ZOOPARK_USERS_TABLE},
+        )
+
+        with patch.object(module, "engine") as mock_engine, \
+             patch.object(module, "Base") as mock_base, \
+             patch.object(module, "SessionLocal") as mock_sl, \
              patch.object(module, "seed_catalogue", return_value=None):
+            mock_engine.connect.return_value = conn
+            mock_base.metadata.create_all.return_value = None
+            mock_session = MagicMock()
+            mock_sl.return_value.__enter__.return_value = mock_session
+            mock_sl.return_value.__exit__.return_value = False
             module.init_schema()
 
-        cursor.copy_columns = {}
-        cursor.table_counts[ZOOPARK_EXTRA_TABLE] = 0
-        cursor.table_counts[ZOOPARK_PACK_ANIMALS_TABLE] = 0
-
-        with patch.object(module, "get_db", return_value=db), \
-             patch.object(module, "seed_catalogue", return_value=None):
-            module.init_schema()
-
-        self.assertEqual(cursor.copy_columns, {})
+        self.assertNotIn(ZOOPARK_USERS_TABLE, conn._copy_columns)
 
 
 if __name__ == "__main__":

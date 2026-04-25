@@ -6,14 +6,11 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
+from sqlalchemy import text
+
 from api.app.core.config import BOT_TOKEN
-from api.app.db.connection import get_db
-from api.app.db.tables import (
-    ZOOPARK_COCKTAIL_SESSIONS_TABLE,
-    ZOOPARK_MP_GAMES_TABLE,
-    ZOOPARK_SOLO_STATS_TABLE,
-    ZOOPARK_USERS_TABLE,
-)
+from api.app.db.connection import get_session
+from api.app.db.models import CocktailSession, MpGame, SoloStats, User
 from api.app.schemas.games import DonateInvoiceBody, MpCreateBody, SoloStartBody
 from api.app.zoopark.catalog import STARS_TO_PAW
 from api.app.zoopark.income import sync_passive_balance
@@ -67,17 +64,16 @@ def _simulate_throw_match(game_type: str, *, require_winner: bool) -> tuple[list
 
 
 def api_mpgame_open():
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            cur.execute(
-                f"""
+    with get_session() as session:
+        rows = session.execute(
+            text(
+                """
                 SELECT g.*, u.nickname AS creator_nickname
-                FROM {ZOOPARK_MP_GAMES_TABLE} g JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
+                FROM zoopark_mp_games g JOIN zoopark_users u ON u.id=g.creator_id
                 WHERE g.status='open' ORDER BY g.created_at DESC LIMIT 20
                 """
             )
-            rows = cur.fetchall()
+        ).mappings().all()
         return {
             "games": [
                 {
@@ -92,265 +88,216 @@ def api_mpgame_open():
                 for row in rows
             ]
         }
-    finally:
-        db.close()
 
 
-def api_mpgame_create(
-    tg_id: int,
-    body: MpCreateBody,
-):
+def api_mpgame_create(tg_id: int, body: MpCreateBody):
     bet_rub = _normalize_bet(body.bet_rub)
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user, _income, _expenses = sync_passive_balance(cur, user)
-            if int(user["rub"]) < bet_rub:
-                raise HTTPException(400, "Недостаточно рублей")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user, _income, _expenses = sync_passive_balance(session, user)
+        if user.rub < bet_rub:
+            raise HTTPException(400, "Недостаточно рублей")
 
-            cur.execute(
-                f"INSERT INTO {ZOOPARK_MP_GAMES_TABLE} (game_type, bet_rub, creator_id) VALUES (%s,%s,%s)",
-                (body.game_type, bet_rub, user["id"]),
-            )
-            game_id = cur.lastrowid
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
-        db.commit()
+        game = MpGame(
+            game_type=body.game_type, bet_rub=bet_rub,
+            creator_id=user.id, status="open",
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(game)
+        user.rub -= bet_rub
+        session.flush()
+        game_id = game.id
+        session.commit()
         return {
             "ok": True,
             "game": {
                 "id": game_id,
                 "game_type": body.game_type,
                 "bet_rub": bet_rub,
-                "creator_nickname": user["nickname"] or "—",
+                "creator_nickname": user.nickname or "—",
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "status": "open",
                 "winner_nickname": None,
             },
         }
-    finally:
-        db.close()
 
 
-def api_mpgame_join(
-    tg_id: int,
-    game_id: int,
-):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user, _income, _expenses = sync_passive_balance(cur, user)
+def api_mpgame_join(tg_id: int, game_id: int):
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user, _income, _expenses = sync_passive_balance(session, user)
 
-            cur.execute(f"SELECT * FROM {ZOOPARK_MP_GAMES_TABLE} WHERE id=%s", (game_id,))
-            game = cur.fetchone()
-            if not game:
-                raise HTTPException(404, "Игра не найдена")
-            if game["status"] != "open":
-                raise HTTPException(400, "Игра недоступна")
-            if game["creator_id"] == user["id"]:
-                raise HTTPException(400, "Нельзя вступить в свою игру")
+        game = session.get(MpGame, game_id)
+        if not game:
+            raise HTTPException(404, "Игра не найдена")
+        if game.status != "open":
+            raise HTTPException(400, "Игра недоступна")
+        if game.creator_id == user.id:
+            raise HTTPException(400, "Нельзя вступить в свою игру")
 
-            bet_rub = int(game["bet_rub"])
-            if int(user["rub"]) < bet_rub:
-                raise HTTPException(400, "Недостаточно рублей")
+        bet_rub = game.bet_rub
+        if user.rub < bet_rub:
+            raise HTTPException(400, "Недостаточно рублей")
 
+        creator_score = random.randint(1, 6)
+        opponent_score = random.randint(1, 6)
+        while creator_score == opponent_score:
             creator_score = random.randint(1, 6)
             opponent_score = random.randint(1, 6)
-            while creator_score == opponent_score:
-                creator_score = random.randint(1, 6)
-                opponent_score = random.randint(1, 6)
 
-            winner_id = game["creator_id"] if creator_score > opponent_score else user["id"]
-            cur.execute(
-                f"UPDATE {ZOOPARK_MP_GAMES_TABLE} SET opponent_id=%s, status='finished', creator_score=%s, opponent_score=%s, winner_id=%s WHERE id=%s",
-                (user["id"], creator_score, opponent_score, winner_id, game_id),
-            )
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub-%s WHERE id=%s", (bet_rub, user["id"]))
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=rub+%s WHERE id=%s", (bet_rub * 2, winner_id))
-            cur.execute(f"SELECT nickname FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (winner_id,))
-            winner = cur.fetchone()
-            cur.execute(f"SELECT nickname FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (game["creator_id"],))
-            creator = cur.fetchone()
-        db.commit()
+        winner_id = game.creator_id if creator_score > opponent_score else user.id
+        game.opponent_id = user.id
+        game.status = "finished"
+        game.creator_score = creator_score
+        game.opponent_score = opponent_score
+        game.winner_id = winner_id
+
+        user.rub -= bet_rub
+        winner = session.get(User, winner_id)
+        if winner:
+            winner.rub += bet_rub * 2
+        creator = session.get(User, game.creator_id)
+
+        session.commit()
         return {
             "ok": True,
             "game": {
                 "id": game_id,
-                "game_type": game["game_type"],
-                "bet_rub": bet_rub,
-                "creator_nickname": creator["nickname"] if creator else "—",
-                "created_at": game["created_at"].isoformat() if hasattr(game["created_at"], "isoformat") else str(game["created_at"]),
+                "game_type": game.game_type,
+                "bet_rub": int(bet_rub),
+                "creator_nickname": creator.nickname if creator else "—",
+                "created_at": game.created_at.isoformat() if hasattr(game.created_at, "isoformat") else str(game.created_at),
                 "status": "finished",
-                "winner_nickname": winner["nickname"] if winner else "—",
+                "winner_nickname": winner.nickname if winner else "—",
             },
         }
-    finally:
-        db.close()
 
 
-def api_mpgame_throw(
-    game_id: int,
-):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            cur.execute(
-                f"""
+def api_mpgame_throw(game_id: int):
+    with get_session() as session:
+        row = session.execute(
+            text(
+                """
                 SELECT g.*, u.nickname AS creator_nickname, u2.nickname AS winner_nickname
-                FROM {ZOOPARK_MP_GAMES_TABLE} g
-                JOIN {ZOOPARK_USERS_TABLE} u ON u.id=g.creator_id
-                LEFT JOIN {ZOOPARK_USERS_TABLE} u2 ON u2.id=g.winner_id
-                WHERE g.id=%s
-                """,
-                (game_id,),
-            )
-            game = cur.fetchone()
-            if not game:
-                raise HTTPException(404, "Игра не найдена")
+                FROM zoopark_mp_games g
+                JOIN zoopark_users u ON u.id=g.creator_id
+                LEFT JOIN zoopark_users u2 ON u2.id=g.winner_id
+                WHERE g.id=:gid
+                """
+            ),
+            {"gid": game_id},
+        ).mappings().first()
+        if not row:
+            raise HTTPException(404, "Игра не найдена")
         return {
             "ok": True,
             "game": {
-                "id": game["id"],
-                "game_type": game["game_type"],
-                "bet_rub": int(game["bet_rub"]),
-                "creator_nickname": game["creator_nickname"] or "—",
-                "created_at": game["created_at"].isoformat() if hasattr(game["created_at"], "isoformat") else str(game["created_at"]),
-                "status": game["status"],
-                "winner_nickname": game.get("winner_nickname"),
+                "id": row["id"],
+                "game_type": row["game_type"],
+                "bet_rub": int(row["bet_rub"]),
+                "creator_nickname": row["creator_nickname"] or "—",
+                "created_at": row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+                "status": row["status"],
+                "winner_nickname": row.get("winner_nickname"),
             },
         }
-    finally:
-        db.close()
 
 
-def api_start_solo_game(
-    tg_id: int,
-    body: SoloStartBody,
-):
+def api_start_solo_game(tg_id: int, body: SoloStartBody):
     bet_rub = _normalize_bet(body.bet_rub)
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
-            user, _income, _expenses = sync_passive_balance(cur, user)
-            if int(user["rub"]) < bet_rub:
-                raise HTTPException(400, "Недостаточно рублей")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        user, _income, _expenses = sync_passive_balance(session, user)
+        if user.rub < bet_rub:
+            raise HTTPException(400, "Недостаточно рублей")
 
-            history: list[dict[str, int]] | None = None
-            player_score: int | None = None
-            ai_score: int | None = None
-            desired_win = random.randint(1, 100) >= 50
+        desired_win = random.randint(1, 100) >= 50
+        while True:
+            history, player_score, ai_score = _simulate_throw_match(body.game_type, require_winner=True)
+            if (player_score > ai_score) == desired_win:
+                break
 
-            while True:
-                history, player_score, ai_score = _simulate_throw_match(body.game_type, require_winner=True)
-                simulated_win = player_score > ai_score
-                if simulated_win == desired_win:
-                    break
+        won = desired_win
+        is_draw = False
+        rub_delta = bet_rub if won else -bet_rub
+        new_rub = user.rub + rub_delta
+        user.rub = new_rub
 
-            is_draw = False
-            score = player_score
-            won = desired_win
-            rub_delta = bet_rub if won else -bet_rub
-            result_text = f"Счёт: {player_score} — {ai_score}"
+        wins_delta = 1 if won else 0
+        losses_delta = 1 if not won else 0
+        total_won_delta = bet_rub if won else 0
+        total_lost_delta = bet_rub if not won else 0
 
-            new_rub = int(user["rub"]) + rub_delta
-            wins_delta = 1 if won else 0
-            losses_delta = 1 if not won and not is_draw else 0
-            total_won_delta = bet_rub if won else 0
-            total_lost_delta = bet_rub if not won and not is_draw else 0
+        stats = session.get(SoloStats, user.id)
+        if stats:
+            stats.games_played += 1
+            stats.wins += wins_delta
+            stats.losses += losses_delta
+            stats.total_won += total_won_delta
+            stats.total_lost += total_lost_delta
+        else:
+            session.add(SoloStats(
+                user_id=user.id, games_played=1,
+                wins=wins_delta, losses=losses_delta,
+                total_won=total_won_delta, total_lost=total_lost_delta,
+            ))
 
-            cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET rub=%s WHERE id=%s", (new_rub, user["id"]))
-            cur.execute(
-                f"INSERT INTO {ZOOPARK_SOLO_STATS_TABLE} (user_id, games_played, wins, losses, total_won, total_lost) "
-                "VALUES (%s,1,%s,%s,%s,%s) ON DUPLICATE KEY UPDATE "
-                "games_played=games_played+1, wins=wins+%s, losses=losses+%s, "
-                "total_won=total_won+%s, total_lost=total_lost+%s",
-                (
-                    user["id"],
-                    wins_delta,
-                    losses_delta,
-                    total_won_delta,
-                    total_lost_delta,
-                    wins_delta,
-                    losses_delta,
-                    total_won_delta,
-                    total_lost_delta,
-                ),
-            )
-        db.commit()
-        response = {
+        session.commit()
+        return {
             "ok": True,
-            "result": result_text,
-            "score": score,
+            "result": f"Счёт: {player_score} — {ai_score}",
+            "score": player_score,
             "won": won,
             "rub_delta": rub_delta,
             "new_rub": new_rub,
+            "history": history,
+            "player_score": player_score,
+            "ai_score": ai_score,
+            "is_draw": is_draw,
         }
-
-        response["history"] = history
-        response["player_score"] = player_score
-        response["ai_score"] = ai_score
-        response["is_draw"] = is_draw
-
-        return response
-    finally:
-        db.close()
 
 
 def api_get_solo_stats(tg_id: int):
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                return {"games_played": 0, "wins": 0, "losses": 0, "total_won_rub": 0, "total_lost_rub": 0}
-            cur.execute(f"SELECT * FROM {ZOOPARK_SOLO_STATS_TABLE} WHERE user_id=%s", (user["id"],))
-            row = cur.fetchone()
-
-        if not row:
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
             return {"games_played": 0, "wins": 0, "losses": 0, "total_won_rub": 0, "total_lost_rub": 0}
-
+        stats = session.get(SoloStats, user.id)
+        if not stats:
+            return {"games_played": 0, "wins": 0, "losses": 0, "total_won_rub": 0, "total_lost_rub": 0}
         return {
-            "games_played": int(row["games_played"]),
-            "wins": int(row["wins"]),
-            "losses": int(row["losses"]),
-            "total_won_rub": int(row["total_won"]),
-            "total_lost_rub": int(row["total_lost"]),
+            "games_played": stats.games_played,
+            "wins": stats.wins,
+            "losses": stats.losses,
+            "total_won_rub": stats.total_won,
+            "total_lost_rub": stats.total_lost,
         }
-    finally:
-        db.close()
 
 
 def api_donate_info():
     return {"stars_to_paw": STARS_TO_PAW}
 
 
-def api_donate_invoice(
-    tg_id: int,
-    body: DonateInvoiceBody,
-):
+def api_donate_invoice(tg_id: int, body: DonateInvoiceBody):
     if body.stars < 1:
         raise HTTPException(400, "Минимум 1 звезда")
     if not BOT_TOKEN:
         raise HTTPException(503, "Бот не настроен")
 
-    payload = json.dumps(
-        {
-            "chat_id": tg_id,
-            "title": f"Донат {body.stars} ⭐️",
-            "description": f"Получи {body.stars * STARS_TO_PAW} 🐾 PawCoins",
-            "payload": f"donate_{tg_id}_{body.stars}",
-            "currency": "XTR",
-            "prices": [{"label": "Stars", "amount": body.stars}],
-        }
-    ).encode()
+    payload = json.dumps({
+        "chat_id": tg_id,
+        "title": f"Донат {body.stars} ⭐️",
+        "description": f"Получи {body.stars * STARS_TO_PAW} 🐾 PawCoins",
+        "payload": f"donate_{tg_id}_{body.stars}",
+        "currency": "XTR",
+        "prices": [{"label": "Stars", "amount": body.stars}],
+    }).encode()
     request = urllib.request.Request(
         f"https://api.telegram.org/bot{BOT_TOKEN}/createInvoiceLink",
         data=payload,
@@ -371,59 +318,57 @@ def api_cocktail_guess(tg_id: int, fruits: list[str]):
     if len(fruits) != 4:
         raise HTTPException(400, "Нужно 4 фрукта")
 
-    db = get_db()
-    try:
-        with db.cursor() as cur:
-            user = get_user(cur, tg_id)
-            if not user:
-                raise HTTPException(404, "Нет игрока")
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
 
-            cur.execute(f"SELECT * FROM {ZOOPARK_COCKTAIL_SESSIONS_TABLE} WHERE user_id=%s", (user["id"],))
-            session = cur.fetchone()
-            now = datetime.now(timezone.utc)
-            needs_new = (
-                not session
-                or session["won"]
-                or (now - (session["started_at"].replace(tzinfo=timezone.utc) if hasattr(session["started_at"], "replace") else now)) > timedelta(hours=24)
-            )
-            if needs_new:
-                secret = random.sample(COCKTAIL_FRUITS, 4)
-                cur.execute(
-                    f"INSERT INTO {ZOOPARK_COCKTAIL_SESSIONS_TABLE} (user_id, secret, attempts, won, started_at) VALUES (%s,%s,0,0,NOW()) "
-                    "ON DUPLICATE KEY UPDATE secret=%s, attempts=0, won=0, started_at=NOW()",
-                    (user["id"], json.dumps(secret), json.dumps(secret)),
+        cs = session.get(CocktailSession, user.id)
+        now = datetime.now(timezone.utc)
+        needs_new = (
+            not cs
+            or cs.won
+            or (now - (cs.started_at.replace(tzinfo=timezone.utc) if hasattr(cs.started_at, "replace") else now)) > timedelta(hours=24)
+        )
+        if needs_new:
+            secret = random.sample(COCKTAIL_FRUITS, 4)
+            if cs:
+                cs.secret = json.dumps(secret)
+                cs.attempts = 0
+                cs.won = 0
+                cs.started_at = now
+            else:
+                cs = CocktailSession(
+                    user_id=user.id, secret=json.dumps(secret),
+                    attempts=0, won=0, started_at=now,
                 )
-                db.commit()
-                cur.execute(f"SELECT * FROM {ZOOPARK_COCKTAIL_SESSIONS_TABLE} WHERE user_id=%s", (user["id"],))
-                session = cur.fetchone()
+                session.add(cs)
+            session.flush()
 
-            secret = json.loads(session["secret"])
-            attempts = int(session["attempts"]) + 1
-            clues = []
-            for index, fruit in enumerate(fruits):
-                if fruit == secret[index]:
-                    clues.append({"pos": index, "status": "correct"})
-                elif fruit in secret:
-                    clues.append({"pos": index, "status": "present"})
-                else:
-                    clues.append({"pos": index, "status": "absent"})
+        secret = json.loads(cs.secret)
+        cs.attempts += 1
+        clues = []
+        for index, fruit in enumerate(fruits):
+            if fruit == secret[index]:
+                clues.append({"pos": index, "status": "correct"})
+            elif fruit in secret:
+                clues.append({"pos": index, "status": "present"})
+            else:
+                clues.append({"pos": index, "status": "absent"})
 
-            won = all(clue["status"] == "correct" for clue in clues)
-            cur.execute(f"UPDATE {ZOOPARK_COCKTAIL_SESSIONS_TABLE} SET attempts=%s, won=%s WHERE user_id=%s", (attempts, 1 if won else 0, user["id"]))
-            result: dict[str, object] = {
-                "ok": True,
-                "won": won,
-                "attempts_left": MAX_COCKTAIL_ATTEMPTS - attempts,
-                "clues": clues,
-            }
-            if won:
-                reward = 5
-                cur.execute(f"UPDATE {ZOOPARK_USERS_TABLE} SET paw_coins=paw_coins+%s WHERE id=%s", (reward, user["id"]))
-                cur.execute(f"SELECT paw_coins FROM {ZOOPARK_USERS_TABLE} WHERE id=%s", (user["id"],))
-                paw_row = cur.fetchone()
-                result["reward_paw"] = reward
-                result["new_paw_coins"] = int(paw_row["paw_coins"])
-        db.commit()
+        won = all(clue["status"] == "correct" for clue in clues)
+        cs.won = 1 if won else 0
+        result: dict[str, object] = {
+            "ok": True,
+            "won": won,
+            "attempts_left": MAX_COCKTAIL_ATTEMPTS - cs.attempts,
+            "clues": clues,
+        }
+        if won:
+            reward = 5
+            user.paw_coins += reward
+            result["reward_paw"] = reward
+            result["new_paw_coins"] = user.paw_coins
+
+        session.commit()
         return result
-    finally:
-        db.close()
