@@ -1,23 +1,18 @@
-import { useEffect, useState } from 'react';
-import { fmt } from '../utils/format';
-import type { BankInfo, GameState } from '../types';
-import { apiGetBank, apiExchange } from '../api';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fmt } from '@/utils/format';
+import type { GameState } from '@/types';
+import { apiGetBank, apiExchange } from '@/api';
 
 export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [bankInfo, setBankInfo] = useState<BankInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [amount, setAmount] = useState('');
   const [exchLoading, setExchLoading] = useState(false);
   const [exchResult, setExchResult] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiGetBank()
-      .then(setBankInfo)
-      .catch(e => setError((e as Error).message ?? 'Ошибка загрузки'))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: bankInfo = null, error, isLoading } = useQuery({
+    queryKey: ['bank'],
+    queryFn: apiGetBank,
+    staleTime: 30_000,
+  });
 
   const handleExchange = async (all: boolean) => {
     const n = all ? gs.rub : parseFloat(amount);
@@ -89,8 +84,8 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       )}
 
       {/* Exchange section */}
-      {loading && <p className="text-center text-tg-hint">Загрузка курса...</p>}
-      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error}</p>}
+      {isLoading && <p className="text-center text-tg-hint">Загрузка курса...</p>}
+      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка загрузки'}</p>}
 
       {bankInfo && (
         <div className="flex flex-col gap-3">

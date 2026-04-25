@@ -13,7 +13,7 @@
 - legacy route inventory
 - app assembly
 - canonical `/api/*` route inventory
-- thin `api/main.py` entrypoint
+- canonical `api/main.py` app entrypoint
 
 ## Rules
 

@@ -6,8 +6,11 @@
 
 ## Layering
 
-- `api/app/main.py`: app assembly and gateway composition only.
-- `api/app/api/routes`: HTTP transport layer.
+- `api/main.py`: app assembly and gateway composition only.
+- `api/app/core`: runtime config and Telegram auth helpers.
+- `api/app/db`: database connection, table names, and persistence bootstrap helpers.
+- `api/app/schemas`: Pydantic request/response models.
+- `api/app/routes`: HTTP transport layer.
 - `api/app/zoopark`: ZooPark business logic serving `/api/*` contracts.
 
 ## Rules
@@ -19,11 +22,12 @@
 
 ## Topology Constraint
 
-- ZooPark `/api/*` routes should be organized in `api/app/api/routes/zoopark_*.py` modules.
-- ZooPark route modules should call `api/app/zoopark/*` modules directly; do not reintroduce delegate shims back into `api.main`.
+- ZooPark `/api/*` routes should be organized in `api/app/routes/zoopark_*.py` modules.
+- ZooPark route modules should authenticate, parse schemas, and call `api/app/zoopark/*` service modules; do not reintroduce delegate shims back into `api.main`.
 
 ## Safe Change Pattern
 
-1. Add or refactor logic in `api/app/zoopark`.
-2. Wire the corresponding ZooPark route module.
-3. Keep gateway tests passing.
+1. Add or refactor schemas in `api/app/schemas` when request/response shapes change.
+2. Add or refactor business logic in `api/app/zoopark`.
+3. Wire the corresponding ZooPark route module.
+4. Keep gateway and route tests passing.

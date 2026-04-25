@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from api.app.zoopark import income as income_module
-from api.app.zoopark.db_tables import ZOOPARK_USERS_TABLE
+from api.app.db.tables import ZOOPARK_USERS_TABLE
 
 
 UTC = timezone.utc

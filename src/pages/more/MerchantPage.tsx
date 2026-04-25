@@ -1,22 +1,18 @@
-import { useEffect, useState } from 'react';
-import type { GameState, MerchantAnimal, MerchantResponse } from '../../types';
-import { apiGetMerchant, apiBuyFromMerchant } from '../../api';
-import { fmt } from '../../utils/format';
-import { ANIMALS } from '../../data/animals';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { GameState, MerchantAnimal } from '@/types';
+import { apiGetMerchant, apiBuyFromMerchant } from '@/api';
+import { fmt } from '@/utils/format';
+import { ANIMALS } from '@/data/animals';
 
 export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }) {
-  const [data, setData] = useState<MerchantResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [buying, setBuying] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiGetMerchant()
-      .then(setData)
-      .catch(e => setError((e as Error).message ?? 'Ошибка загрузки'))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey: ['merchant'],
+    queryFn: apiGetMerchant,
+    staleTime: 30_000,
+  });
 
   const handleBuy = async (slot: 1 | 2 | 3) => {
     setBuying(slot);
@@ -26,7 +22,7 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
       if (res.ok) {
         setMsg('Куплено!');
         onBuy();
-        apiGetMerchant().then(setData).catch(() => {});
+        void refetch();
       } else {
         setMsg(res.message ?? 'Ошибка');
       }
@@ -39,11 +35,11 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
+      {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {error && (
         <div className="card bg-[rgba(var(--c-red-rgb),0.1)] border border-[rgba(var(--c-red-rgb),0.3)]">
-          <p className="m-0 text-[var(--c-red-soft)]">⚠️ {error}</p>
+          <p className="m-0 text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка загрузки'}</p>
           <p className="mt-1 mb-0 text-xs text-tg-hint">
             Торговец появляется только если у тебя есть животные в зоопарке
           </p>

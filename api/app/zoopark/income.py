@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from math import trunc
 
 from api.app.zoopark.catalog import DIVERSITY_BONUS_PER_SPECIES
-from api.app.zoopark.db_tables import (
+from api.app.db.tables import (
     ZOOPARK_ANIMALS_TABLE,
     ZOOPARK_EXTRA_TABLE,
     ZOOPARK_LOCALITIES_TABLE,

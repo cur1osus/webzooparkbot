@@ -6,38 +6,24 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from pydantic import BaseModel
-
-from api.app.zoopark.catalog import STARS_TO_PAW
-from api.app.zoopark.db_tables import (
+from api.app.core.config import BOT_TOKEN
+from api.app.db.connection import get_db
+from api.app.db.tables import (
     ZOOPARK_COCKTAIL_SESSIONS_TABLE,
     ZOOPARK_MP_GAMES_TABLE,
     ZOOPARK_SOLO_STATS_TABLE,
     ZOOPARK_USERS_TABLE,
 )
+from api.app.schemas.games import DonateInvoiceBody, MpCreateBody, SoloStartBody
+from api.app.zoopark.catalog import STARS_TO_PAW
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
-from api.app.zoopark.runtime import BOT_TOKEN, get_db
 
 
 COCKTAIL_FRUITS = ["🍓", "🍊", "🍋", "🍇", "🍒", "🍑", "🥝", "🍍"]
 MAX_COCKTAIL_ATTEMPTS = 10
 SOLO_MATCH_MIN_ROUNDS = 2
 SOLO_MATCH_MAX_ROUNDS = 7
-
-
-class DonateInvoiceBody(BaseModel):
-    stars: int
-
-
-class MpCreateBody(BaseModel):
-    game_type: str
-    bet_rub: float
-
-
-class SoloStartBody(BaseModel):
-    game_type: str
-    bet_rub: float
 
 
 def _normalize_bet(value: float) -> int:

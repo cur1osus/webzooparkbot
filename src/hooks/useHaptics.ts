@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { hapticImpact, hapticNotification } from '../tma';
+import { hapticImpact, hapticNotification } from '@/lib/tma';
 
 type HapticStyle = 'light' | 'medium' | 'heavy';
 

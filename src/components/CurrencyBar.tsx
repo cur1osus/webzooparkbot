@@ -1,5 +1,5 @@
-import { fmtRub, fmtUsd } from '../utils/format';
-import type { GameState } from '../types';
+import { fmtRub, fmtUsd } from '@/utils/format';
+import type { GameState } from '@/types';
 
 export function CurrencyBar({ gs, showSeats = false }: { gs: GameState; showSeats?: boolean }) {
   return (

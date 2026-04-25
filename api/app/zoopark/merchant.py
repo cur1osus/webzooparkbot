@@ -6,10 +6,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 
 from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_BY_ID, ANIMAL_STRING_TO_DB, AVIARY_BY_ID
-from api.app.zoopark.db_tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_MERCHANTS_TABLE, ZOOPARK_USERS_TABLE
+from api.app.db.tables import ZOOPARK_ANIMALS_TABLE, ZOOPARK_MERCHANTS_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import bump_data_version, get_animals, get_aviaries, get_user
-from api.app.zoopark.runtime import get_db
+from api.app.db.connection import get_db
 
 
 def ensure_merchant(cur, user_id: int, animals: list[dict]) -> list[dict]:

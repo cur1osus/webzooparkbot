@@ -1,12 +1,17 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { useZooStore } from './store';
-import { TabBar, type RootTab } from './components/TabBar';
-import { PageSkeleton, Skeleton } from './components/Skeleton';
-import { apiRegister, isDevMode, setDevUserId, clearDevUserId, apiBuyAviary } from './api';
-import { useLiveGameState } from './hooks/useLiveGameState';
-import { inTma, hapticImpact, hapticNotification, readyTma } from './tma';
-import { getTelegramStartParam } from './tmaEnv';
-import type { GameState } from './types';
+import { useZooStore } from '@/store';
+import { TabBar } from '@/components/TabBar';
+import { PageSkeleton, Skeleton } from '@/components/Skeleton';
+import { setDevUserId } from '@/api';
+import { useLiveGameState } from '@/hooks/useLiveGameState';
+import { useShopActions } from '@/hooks/useShopActions';
+import { useHashTab } from '@/lib/hashRoute';
+import { inTma, hapticImpact, readyTma } from '@/lib/tma';
+import { getTelegramStartParam } from '@/lib/tmaEnv';
+import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
+import { DevBar } from '@/components/DevBar';
+import { RegisterScreen } from '@/pages/RegisterScreen';
+import type { GameState } from '@/types';
 
 const AUTOSAVE_MS = 15_000;
 const HIDDEN_RELOAD_MS = 30_000;
@@ -24,110 +29,6 @@ const ShopPage  = lazy(() => import('./pages/ShopPage').then(m => ({ default: m.
 const LabPage   = lazy(() => import('./pages/LabPage').then(m => ({ default: m.LabPage })));
 const GamesPage = lazy(() => import('./pages/GamesPage').then(m => ({ default: m.GamesPage })));
 const MorePage  = lazy(() => import('./pages/MorePage').then(m => ({ default: m.MorePage })));
-
-// ─── Register screen ──────────────────────────────────────────────────────────
-
-function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) {
-  const [nickname, setNickname] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleRegister = async () => {
-    const n = nickname.trim();
-    if (n.length < 3) { setError('Никнейм слишком короткий (мин. 3 символа)'); return; }
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await apiRegister(n);
-      if (res.ok) onDone(res.game_state);
-      else setError('Ошибка регистрации');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-dvh flex items-center px-6 max-w-[480px] mx-auto">
-      <div className="w-full bg-tg-secondary rounded-[20px] p-6 border" style={{ borderColor: 'var(--surface-overlay-border)' }}>
-        <div className="text-center mb-6">
-          <div className="text-[56px] mb-2">🦁</div>
-          <p className="m-0 text-[22px] font-extrabold">ZooPark</p>
-          <p className="mt-[6px] mb-0 text-sm text-tg-hint">
-            Строй свой зоопарк и зарабатывай!
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <input
-            value={nickname}
-            onChange={e => setNickname(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && void handleRegister()}
-            placeholder="Твой никнейм"
-            maxLength={64}
-            className="text-input text-base"
-            style={{ fontSize: 16, padding: '12px 14px' }}
-          />
-          {error && (
-            <p className="m-0 text-[var(--c-red-soft)] text-[13px]">⚠️ {error}</p>
-          )}
-          <button
-            onClick={() => void handleRegister()}
-            disabled={loading || nickname.trim().length < 3}
-            className="py-[14px] rounded-xl border-none bg-tg-button text-[var(--tg-theme-button-text-color)] font-extrabold text-base disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            {loading ? 'Создаём профиль...' : 'Начать игру 🚀'}
-          </button>
-        </div>
-
-        <div className="surface-subtle mt-5 p-[14px] rounded-xl">
-          <p className="m-0 mb-[6px] text-[13px] font-semibold">Как играть:</p>
-          {[
-            '🏗️ Купи вольер → размести животных',
-            '🐾 Зарабатывай рубли каждую минуту',
-            '💱 Обменивай рубли на доллары в банке',
-            '🎮 Участвуй в играх и турнирах',
-          ].map(t => (
-            <p key={t} className="m-0 mb-1 text-xs text-tg-hint">{t}</p>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Dev bar ──────────────────────────────────────────────────────────────────
-
-function DevBar({ onLogin }: { onLogin: (id: string) => void }) {
-  const [val, setVal] = useState('');
-  return (
-    <div className="surface-overlay fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[200] px-3 py-2 flex gap-2 items-center backdrop-blur-xl">
-      <input
-        value={val}
-        onChange={e => setVal(e.target.value)}
-        placeholder="Dev user ID"
-        onKeyDown={e => e.key === 'Enter' && val.trim() && onLogin(val.trim())}
-        className="text-input flex-1 min-h-0 py-[7px] text-[13px]"
-      />
-      <button
-        onClick={() => val.trim() && onLogin(val.trim())}
-        className="px-[14px] py-[7px] rounded-lg bg-[var(--c-blue)] text-[var(--tg-theme-button-text-color)] text-[13px] border-none cursor-pointer"
-      >
-        Войти
-      </button>
-      {isDevMode() && (
-        <button
-          onClick={() => { clearDevUserId(); window.location.reload(); }}
-          className="px-[10px] py-[7px] rounded-lg border bg-transparent text-tg-hint text-[13px] cursor-pointer"
-          style={{ borderColor: 'var(--surface-overlay-border)' }}
-        >
-          ✕
-        </button>
-      )}
-    </div>
-  );
-}
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -150,22 +51,6 @@ function Toast({ msg }: { msg: { kind: 'ok' | 'err'; text: string } | null }) {
   );
 }
 
-// ─── Coming Soon ──────────────────────────────────────────────────────────────
-
-function ComingSoonScreen() {
-  return (
-    <div className="min-h-dvh flex items-center justify-center px-6 max-w-[480px] mx-auto">
-      <div className="w-full text-center bg-tg-secondary rounded-[20px] py-8 px-6 border" style={{ borderColor: 'var(--surface-overlay-border)' }}>
-        <div className="text-[64px] mb-4">🚧</div>
-        <p className="m-0 mb-2 text-[22px] font-extrabold">Игра в разработке</p>
-        <p className="m-0 text-sm text-tg-hint leading-relaxed">
-          Скоро откроемся для всех!<br />Следи за обновлениями.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ─── Page suspense fallback ───────────────────────────────────────────────────
 
 function PageFallback() {
@@ -181,7 +66,7 @@ function PageFallback() {
 export default function App() {
   const { state, loading, error, errorStatus, loadFromServer, persistStateSilently, setGameState, patchState } = useZooStore();
   const displayState = useLiveGameState(state);
-  const [tab, setTab] = useState<RootTab>('zoo');
+  const [tab, setTab] = useHashTab();
   const [inviteGameId] = useState<number | null>(() => getInviteGameId());
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const displayStateRef = useRef<GameState | null>(null);
@@ -194,6 +79,7 @@ export default function App() {
     if (toastRef.current) clearTimeout(toastRef.current);
     toastRef.current = setTimeout(() => setToast(null), 3500);
   }, []);
+  const { buyAviary } = useShopActions({ showToast });
 
   useEffect(() => {
     displayStateRef.current = displayState;
@@ -212,7 +98,7 @@ export default function App() {
 
   useEffect(() => {
     if (inviteGameId) setTab('games');
-  }, [inviteGameId]);
+  }, [inviteGameId, setTab]);
 
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {
@@ -260,32 +146,6 @@ export default function App() {
     hapticImpact('medium');
     setDevUserId(id);
     void loadFromServer();
-  };
-
-  // ── Action handlers ──────────────────────────────────────────────────────
-
-  const handleBuyAviary = async (aviaryId: string) => {
-    if (!state) return;
-    hapticImpact('medium');
-    try {
-      const res = await apiBuyAviary(aviaryId);
-      if (!res.ok) { hapticNotification('error'); showToast('err', 'Не удалось купить вольер'); return; }
-      hapticNotification('success');
-      const existingIdx = state.aviaries.findIndex(a => a.aviary_id === aviaryId);
-      const newAviaries = existingIdx >= 0
-        ? state.aviaries.map((a, i) => i === existingIdx ? { ...a, count: res.new_count } : a)
-        : [...state.aviaries, { aviary_id: aviaryId, count: res.new_count }];
-      patchState({
-        rub: res.new_rub,
-        aviaries: newAviaries,
-        total_seats: res.new_total_seats,
-        free_seats: res.new_free_seats,
-      });
-      showToast('ok', '🏗️ Вольер куплен!');
-    } catch (e) {
-      hapticNotification('error');
-      showToast('err', e instanceof Error ? e.message : 'Ошибка покупки');
-    }
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -357,7 +217,7 @@ export default function App() {
               {tab === 'shop' && (
                 <ShopPage
                   gs={displayState}
-                  onBuyAviary={id => void handleBuyAviary(id)}
+                  onBuyAviary={id => void buyAviary(id)}
                   onRefresh={reloadFromServer}
                 />
               )}

@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react';
-import type { GameState } from '../../types';
-import { apiGetDonateInfo, apiCreateDonateInvoice } from '../../api';
-import { openTmaLink } from '../../tma';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { GameState } from '@/types';
+import { apiGetDonateInfo, apiCreateDonateInvoice } from '@/api';
+import { openTmaLink } from '@/lib/tma';
 
 const STAR_OPTIONS = [1, 5, 10, 25, 50, 100, 250, 500];
 
-export function DonatePage({ gs: _gs }: { gs: GameState }) {
-  const [starsToPaw, setStarsToPaw] = useState<number>(10);
+export function DonatePage({ gs }: { gs: GameState }) {
   const [stars, setStars] = useState<number | null>(null);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiGetDonateInfo()
-      .then(r => setStarsToPaw(r.stars_to_paw))
-      .catch(() => {});
-  }, []);
+  const { data: donateInfo } = useQuery({
+    queryKey: ['donate-info'],
+    queryFn: apiGetDonateInfo,
+    staleTime: 60_000,
+  });
+  const starsToPaw = donateInfo?.stars_to_paw ?? 10;
 
   const handleDonate = async () => {
     if (!stars) return;
@@ -41,6 +41,7 @@ export function DonatePage({ gs: _gs }: { gs: GameState }) {
         <p className="m-0 text-[13px] text-tg-hint">
           1 ⭐️ = {starsToPaw} 🐾 PawCoins · Поддержи игру!
         </p>
+        <p className="mt-2 mb-0 text-xs text-tg-hint">На балансе: {gs.paw_coins} 🐾</p>
       </div>
 
       <div className="card">

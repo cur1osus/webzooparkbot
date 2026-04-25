@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { GameState, Habitat, Locality, LocalitiesInfo, PackAnimal } from '../types';
-import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '../api';
-import { fmt } from '../utils/format';
+import type { GameState, Habitat, Locality, LocalitiesInfo, PackAnimal } from '@/types';
+import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '@/api';
+import { fmt } from '@/utils/format';
 
 const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
   desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },

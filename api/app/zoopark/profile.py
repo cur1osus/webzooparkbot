@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from api.app.zoopark.catalog import ANIMAL_BY_DB_ID, AVIARY_BY_DB_ID, DIVERSITY_BONUS_PER_SPECIES
-from api.app.zoopark.db_tables import (
+from api.app.db.tables import (
     ZOOPARK_ANIMALS_TABLE,
     ZOOPARK_AVIARIES_TABLE,
     ZOOPARK_EXTRA_TABLE,

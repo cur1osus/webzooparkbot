@@ -1,27 +1,28 @@
-import { useEffect, useState } from 'react';
-import type { GameState, ReferralResponse } from '../../types';
-import { apiGetReferrals, apiConfig } from '../../api';
-import { copyTmaText, shareTmaUrl } from '../../tma';
-import { fmt } from '../../utils/format';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { GameState } from '@/types';
+import { apiGetReferrals, apiConfig } from '@/api';
+import { copyTmaText, shareTmaUrl } from '@/lib/tma';
+import { fmt } from '@/utils/format';
 
-export function ReferralPage({ gs: _gs }: { gs: GameState }) {
-  const [data, setData] = useState<ReferralResponse | null>(null);
-  const [botUsername, setBotUsername] = useState('ZooParkBot');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function ReferralPage({ gs }: { gs: GameState }) {
   const [copied, setCopied] = useState(false);
+  const { data: queryData, error, isLoading } = useQuery({
+    queryKey: ['referrals'],
+    queryFn: async () => {
+      const [referrals, config] = await Promise.all([
+        apiGetReferrals(),
+        apiConfig().catch(() => null),
+      ]);
+      return { referrals, config };
+    },
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    Promise.all([
-      apiGetReferrals(),
-      apiConfig().catch(() => null),
-    ]).then(([ref, cfg]) => {
-      setData(ref);
-      if (cfg?.bot_username) setBotUsername(cfg.bot_username);
-    }).catch(e => setError((e as Error).message ?? 'Ошибка')).finally(() => setLoading(false));
-  }, []);
-
+  const data = queryData?.referrals ?? null;
+  const botUsername = queryData?.config?.bot_username ?? 'ZooParkBot';
   const refLink = data ? `https://t.me/${botUsername}?start=${data.code}` : '';
+  const inviterName = gs.nickname;
 
   const copyLink = async () => {
     if (!refLink) return;
@@ -38,13 +39,13 @@ export function ReferralPage({ gs: _gs }: { gs: GameState }) {
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
-      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error}</p>}
+      {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
+      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка'}</p>}
 
       {data && (
         <>
           <div className="card">
-            <p className="m-0 mb-[6px] font-bold">🤝 Твоя реферальная ссылка</p>
+            <p className="m-0 mb-[6px] font-bold">🤝 Реферальная ссылка {inviterName}</p>
             <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
               За каждого приглашённого — <strong className="text-[var(--c-gold)]">$ {fmt(data.reward_usd_per_ref)}</strong>
             </p>

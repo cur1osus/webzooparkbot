@@ -5,9 +5,8 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
-from pydantic import BaseModel
-
-from api.app.zoopark.db_tables import (
+from api.app.db.connection import get_db
+from api.app.db.tables import (
     ZOOPARK_EXPEDITION_ANIMALS_TABLE,
     ZOOPARK_EXPEDITIONS_TABLE,
     ZOOPARK_EXTRA_TABLE,
@@ -15,9 +14,9 @@ from api.app.zoopark.db_tables import (
     ZOOPARK_PACK_ANIMALS_TABLE,
     ZOOPARK_USERS_TABLE,
 )
+from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, StartExpeditionBody
 from api.app.zoopark.income import pack_animal_income, sync_passive_balance
 from api.app.zoopark.profile import get_user
-from api.app.zoopark.runtime import get_db
 
 
 PACK_PROPERTIES = ["low", "low", "low", "low", "medium", "medium", "medium", "medium", "high", "high"]
@@ -44,25 +43,6 @@ EXPEDITION_PARAMS: dict[str, dict] = {
     "mountains": {"minutes": 180, "chances": [0.15, 0.45, 0.40]},
     "antarctica": {"minutes": 240, "chances": [0.10, 0.45, 0.45]},
 }
-
-
-class AssignLocalityBody(BaseModel):
-    animal_id: int
-    locality_id: int | None
-
-
-class BreedBody(BaseModel):
-    animal_id_1: int
-    animal_id_2: int
-
-
-class BuyLocalityBody(BaseModel):
-    habitat: str
-
-
-class StartExpeditionBody(BaseModel):
-    locality_id: int
-    animal_ids: list[int]
 
 
 def locality_next_price(count_owned: int) -> int:

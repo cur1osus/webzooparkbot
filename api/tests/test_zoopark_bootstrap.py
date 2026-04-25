@@ -6,7 +6,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from api.app.zoopark.db_tables import ZOOPARK_BOOTSTRAP_META_TABLE, ZOOPARK_EXTRA_TABLE, ZOOPARK_PACK_ANIMALS_TABLE
+from api.app.db.tables import ZOOPARK_BOOTSTRAP_META_TABLE, ZOOPARK_EXTRA_TABLE, ZOOPARK_PACK_ANIMALS_TABLE
 
 
 class _BootstrapCursor:
@@ -170,7 +170,7 @@ class ZooParkBootstrapTests(unittest.TestCase):
         sys.modules["pymysql.cursors"] = pymysql_cursors
         pymysql.cursors = pymysql_cursors
 
-        for name in ["api.app.zoopark.bootstrap", "api.app.zoopark.runtime"]:
+        for name in ["api.app.db.bootstrap", "api.app.db.connection"]:
             sys.modules.pop(name, None)
 
     def tearDown(self) -> None:
@@ -178,7 +178,7 @@ class ZooParkBootstrapTests(unittest.TestCase):
         sys.modules.update(self._saved_modules)
 
     def test_init_schema_copies_optional_fields_on_first_namespaced_bootstrap(self) -> None:
-        module = importlib.import_module("api.app.zoopark.bootstrap")
+        module = importlib.import_module("api.app.db.bootstrap")
         cursor = _BootstrapCursor()
         db = _BootstrapDb(cursor)
 
@@ -210,7 +210,7 @@ class ZooParkBootstrapTests(unittest.TestCase):
         )
 
     def test_init_schema_does_not_recopy_completed_compat_table_when_target_becomes_empty(self) -> None:
-        module = importlib.import_module("api.app.zoopark.bootstrap")
+        module = importlib.import_module("api.app.db.bootstrap")
         cursor = _BootstrapCursor()
         db = _BootstrapDb(cursor)
 

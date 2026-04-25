@@ -4,32 +4,17 @@ import random
 import string
 
 from fastapi import HTTPException
-from pydantic import BaseModel
-
-from api.app.zoopark.db_tables import (
+from api.app.db.connection import get_db
+from api.app.db.tables import (
     ZOOPARK_ANIMALS_TABLE,
     ZOOPARK_REFERRALS_TABLE,
     ZOOPARK_TRANSFER_LINKS_TABLE,
     ZOOPARK_UNITY_TABLE,
     ZOOPARK_USERS_TABLE,
 )
+from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
 from api.app.zoopark.income import sync_passive_balance
 from api.app.zoopark.profile import get_user
-from api.app.zoopark.runtime import get_db
-
-
-class ClanCreateBody(BaseModel):
-    name: str
-    spec: str | None = None
-
-
-class ClanRequestBody(BaseModel):
-    clan_id: int
-
-
-class TransferCreateBody(BaseModel):
-    total_rub: float
-    max_claims: int
 
 
 def api_top(tg_id: int):

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { fmt } from '../utils/format';
-import type { GameState, PackAnimal, PackInfo } from '../types';
-import { apiGetPacksInfo, apiOpenPack } from '../api';
+import { fmt } from '@/utils/format';
+import type { GameState, PackAnimal, PackInfo } from '@/types';
+import { apiGetPacksInfo, apiOpenPack } from '@/api';
 
 // ─── Display helpers ──────────────────────────────────────────────────────────
 

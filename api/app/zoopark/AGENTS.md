@@ -8,7 +8,7 @@ This directory is the extraction target for code that previously lived in `/home
 
 ## Rules
 
-- Keep business logic here, not in `api/app/api/routes/zoopark_*.py`.
+- Keep business logic here, not in `api/app/routes/zoopark_*.py`.
 - Preserve current `/api/*` request and response contracts unless a coordinated frontend migration is explicitly requested.
 - Prefer extracting shared helpers here instead of copying logic between domain modules.
 - Do not reintroduce `api.main` imports from these modules.
@@ -16,8 +16,9 @@ This directory is the extraction target for code that previously lived in `/home
 
 ## Current Domain Split
 
-- `runtime.py`: DB access, auth, runtime config.
-- `bootstrap.py`: legacy schema/bootstrap helpers.
+- `core.py`: profile lifecycle endpoints, save/register/config services.
+- `economy.py`: animal/aviary purchases and bank exchange services.
+- `status.py`: daily bonus and animal cure services.
 - `catalog.py`: ZooPark catalogue and economy constants.
 - `profile.py`: shared profile/state assembly helpers.
 - `income.py`: pack-animal income helpers.
@@ -30,6 +31,7 @@ This directory is the extraction target for code that previously lived in `/home
 ## Safe Change Pattern
 
 1. Extract or update domain logic in this directory.
-2. Wire the corresponding `zoopark_*.py` route module to these functions.
-3. Update tests under `/home/maxggor/Desktop/webzooparkbot/api/tests`.
-4. Only then remove obsolete compatibility glue.
+2. Keep request/response bodies in `/home/maxggor/Desktop/webzooparkbot/api/app/schemas`.
+3. Wire the corresponding `zoopark_*.py` route module to these functions.
+4. Update tests under `/home/maxggor/Desktop/webzooparkbot/api/tests`.
+5. Only then remove obsolete compatibility glue.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { GameState, GeneTier, Habitat, PackAnimal, BreedResult } from '../types';
-import { apiGetPacksInfo, apiBreed } from '../api';
-import { fmt } from '../utils/format';
+import type { GameState, GeneTier, Habitat, PackAnimal, BreedResult } from '@/types';
+import { apiGetPacksInfo, apiBreed } from '@/api';
+import { fmt } from '@/utils/format';
 
 const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
   desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },
@@ -345,7 +345,11 @@ export function LabPage({ gs }: { gs: GameState }) {
         <AnimalPicker
           animals={animals}
           exclude={picking === 1 ? parent2?.id ?? null : parent1?.id ?? null}
-          onPick={a => { picking === 1 ? setParent1(a) : setParent2(a); setPicking(null); }}
+          onPick={a => {
+            if (picking === 1) setParent1(a);
+            else setParent2(a);
+            setPicking(null);
+          }}
           onClose={() => setPicking(null)}
         />
       )}

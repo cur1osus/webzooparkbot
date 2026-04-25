@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-from api.app.zoopark.db_tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_USERS_TABLE
+from api.app.db.tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_USERS_TABLE
 
 
 class _FakeRouter:
@@ -79,18 +79,23 @@ class ZooParkRouteTests(unittest.TestCase):
         pymysql.cursors = pymysql_cursors
 
         for name in [
-            "api.app.api.routes.zoopark_core",
-            "api.app.api.routes.zoopark_economy",
-            "api.app.api.routes.zoopark_status",
-            "api.app.api.routes.zoopark_merchant",
-            "api.app.api.routes.zoopark_forge",
-            "api.app.api.routes.zoopark_social",
-            "api.app.api.routes.zoopark_games",
-            "api.app.api.routes.zoopark_progression",
-            "api.app.zoopark.runtime",
+            "api.app.routes.zoopark_core",
+            "api.app.routes.zoopark_economy",
+            "api.app.routes.zoopark_status",
+            "api.app.routes.zoopark_merchant",
+            "api.app.routes.zoopark_forge",
+            "api.app.routes.zoopark_social",
+            "api.app.routes.zoopark_games",
+            "api.app.routes.zoopark_progression",
+            "api.app.core.auth",
+            "api.app.core.config",
+            "api.app.db.connection",
             "api.app.zoopark.profile",
             "api.app.zoopark.catalog",
             "api.app.zoopark.income",
+            "api.app.zoopark.core",
+            "api.app.zoopark.economy",
+            "api.app.zoopark.status",
             "api.app.zoopark.merchant",
             "api.app.zoopark.forge",
             "api.app.zoopark.social",
@@ -110,39 +115,37 @@ class ZooParkRouteTests(unittest.TestCase):
         return db, cur
 
     def test_config_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_core")
+        module = importlib.import_module("api.app.zoopark.core")
         with patch.object(module, "BOT_USERNAME", "ZooParkBot"):
             self.assertEqual(module.config(), {"bot_username": "ZooParkBot"})
 
     def test_me_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_core")
+        module = importlib.import_module("api.app.zoopark.core")
         db, _cur = self._fake_db()
         user = {"id": 7}
         state = {"tg_id": 1, "nickname": "tester"}
 
-        with patch.object(module, "auth", return_value=1), \
-             patch.object(module, "get_db", return_value=db), \
+        with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
              patch.object(module, "sync_passive_balance", return_value=(user, 123, 17)), \
              patch.object(module, "build_state", return_value=state):
-            self.assertEqual(module.me(), state)
+            self.assertEqual(module.me(1), state)
 
     def test_register_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_core")
+        module = importlib.import_module("api.app.zoopark.core")
         db, cur = self._fake_db()
         db2, _cur2 = self._fake_db()
         user = {"id": 8, "id_user": 99, "nickname": "neo", "date_reg": "2026-01-01", "rub": 0, "usd": 1, "paw_coins": 0, "bonus": 1}
         cur.fetchone.side_effect = [None, user]
 
-        with patch.object(module, "auth", return_value=99), \
-             patch.object(module, "get_db", side_effect=[db, db2]), \
+        with patch.object(module, "get_db", side_effect=[db, db2]), \
              patch.object(module, "get_user", return_value=None), \
              patch.object(module, "build_state", return_value={"tg_id": 99}):
-            result = module.register(module.RegisterBody(nickname="neo"))
+            result = module.register(99, module.RegisterBody(nickname="neo"))
         self.assertEqual(result, {"ok": True, "game_state": {"tg_id": 99}})
 
     def test_save_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_core")
+        module = importlib.import_module("api.app.zoopark.core")
         db, cur = self._fake_db()
         cur.fetchone.side_effect = [None, None]
         user = {"id": 1, "rub": 10, "usd": 0, "paw_coins": 0, "balance_seq": 17}
@@ -155,13 +158,12 @@ class ZooParkRouteTests(unittest.TestCase):
             balance_seq=0,
             data_version=0,
         )
-        with patch.object(module, "auth", return_value=1), \
-             patch.object(module, "get_db", return_value=db), \
+        with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
              patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)), \
              patch.object(module, "get_extra", return_value={"balance_seq": 0, "data_version": 0}):
             self.assertEqual(
-                module.save(body),
+                module.save(1, body),
                 {"ok": True, "rub": 10, "usd": 2, "paw_coins": 3, "balance_seq": 17, "data_version": 0},
             )
 
@@ -169,7 +171,7 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), update_calls)
 
     def test_save_uses_pre_sync_balance_seq_for_non_rub_fields(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_core")
+        module = importlib.import_module("api.app.zoopark.core")
         income_module = importlib.import_module("api.app.zoopark.income")
 
         class _StatefulCursor:
@@ -233,12 +235,11 @@ class ZooParkRouteTests(unittest.TestCase):
             data_version=0,
         )
 
-        with patch.object(module, "auth", return_value=1), \
-             patch.object(module, "get_db", return_value=db), \
+        with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
              patch.object(income_module, "calc_pack_income", return_value=0), \
              patch.object(income_module, "calc_sick_expenses", return_value=0):
-            result = module.save(body)
+            result = module.save(1, body)
 
         self.assertGreater(cur.extra["balance_seq"], 5)
         self.assertEqual(result["rub"], 10)
@@ -248,54 +249,50 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertIn((f"UPDATE {ZOOPARK_USERS_TABLE} SET usd=%s, paw_coins=%s WHERE id=%s", (2, 3, 1)), cur.calls)
 
     def test_bank_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_economy")
-        with patch.object(module, "auth", return_value=1):
-            result = module.bank()
+        module = importlib.import_module("api.app.zoopark.economy")
+        result = module.bank()
         self.assertEqual(result["rub_rate"], 90)
         self.assertIn("usd_rate", result)
 
     def test_bank_exchange_keeps_legacy_from_field_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_economy")
+        module = importlib.import_module("api.app.zoopark.economy")
         source = inspect.getsource(module.BankExchangeBody)
         self.assertIn('alias="from"', source)
 
         db, _cur = self._fake_db()
         user = {"id": 1, "rub": 500, "usd": 1}
         body = types.SimpleNamespace(from_="rub", amount=180)
-        with patch.object(module, "auth", return_value=1), \
-             patch.object(module, "get_db", return_value=db), \
+        with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
              patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)):
-            result = module.bank_exchange(body)
+            result = module.bank_exchange(1, body)
         self.assertEqual(result, {"ok": True, "new_rub": 320, "new_usd": 3})
 
     def test_claim_bonus_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_status")
+        module = importlib.import_module("api.app.zoopark.status")
         db, _cur = self._fake_db()
         user = {"id": 1, "bonus": 1, "rub": 100, "usd": 2, "paw_coins": 3}
-        with patch.object(module, "auth", return_value=1), \
-             patch.object(module, "get_db", return_value=db), \
+        with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user), \
              patch.object(module, "sync_passive_balance", return_value=(user, 0, 0)), \
              patch.object(module.random, "choice", return_value="rub"), \
              patch.object(module.random, "randint", return_value=500):
-            result = module.claim_bonus()
+            result = module.claim_bonus(1)
         self.assertEqual(result, {"ok": True, "type": "rub", "amount": 500, "new_rub": 600, "message": "Получено 500 ₽"})
 
     def test_cure_animal_contract(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_status")
+        module = importlib.import_module("api.app.zoopark.status")
         db, cur = self._fake_db()
         cur.fetchone.side_effect = [{"id": 1}]
         user = {"id": 1, "paw_coins": 30}
         body = module.CureBody(animal_id="rabbit")
-        with patch.object(module, "auth", return_value=1), \
-             patch.object(module, "get_db", return_value=db), \
+        with patch.object(module, "get_db", return_value=db), \
              patch.object(module, "get_user", return_value=user):
-            result = module.cure_animal(body)
+            result = module.cure_animal(1, body)
         self.assertEqual(result, {"ok": True, "cost_paw_coins": 10, "new_paw_coins": 20})
 
     def test_merchant_route_inventory(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_merchant")
+        module = importlib.import_module("api.app.routes.zoopark_merchant")
         route_paths = {path for path, _methods, _endpoint in module.router.routes}
         self.assertEqual(route_paths, {
             "/api/merchant/animals",
@@ -306,7 +303,7 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertNotIn("delegates", inspect.getsource(module))
 
     def test_forge_route_inventory(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_forge")
+        module = importlib.import_module("api.app.routes.zoopark_forge")
         route_paths = {path for path, _methods, _endpoint in module.router.routes}
         self.assertEqual(route_paths, {
             "/api/forge/items",
@@ -324,7 +321,7 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertNotIn("delegates", inspect.getsource(module))
 
     def test_social_route_inventory(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_social")
+        module = importlib.import_module("api.app.routes.zoopark_social")
         route_paths = {path for path, _methods, _endpoint in module.router.routes}
         self.assertIn("/api/top", route_paths)
         self.assertIn("/api/clan/list", route_paths)
@@ -334,7 +331,7 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertNotIn("delegates", inspect.getsource(module))
 
     def test_games_route_inventory(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_games")
+        module = importlib.import_module("api.app.routes.zoopark_games")
         route_paths = {path for path, _methods, _endpoint in module.router.routes}
         self.assertIn("/api/mpgame/open", route_paths)
         self.assertIn("/api/start_solo_game", route_paths)
@@ -344,7 +341,7 @@ class ZooParkRouteTests(unittest.TestCase):
         self.assertNotIn("delegates", inspect.getsource(module))
 
     def test_progression_route_inventory(self) -> None:
-        module = importlib.import_module("api.app.api.routes.zoopark_progression")
+        module = importlib.import_module("api.app.routes.zoopark_progression")
         route_paths = {path for path, _methods, _endpoint in module.router.routes}
         self.assertIn("/api/packs/info", route_paths)
         self.assertIn("/api/localities", route_paths)

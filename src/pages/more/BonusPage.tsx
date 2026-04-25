@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { GameState } from '../../types';
-import { apiClaimBonus } from '../../api';
+import type { GameState } from '@/types';
+import { apiClaimBonus } from '@/api';
 
 export function BonusPage({ gs, onClaim }: { gs: GameState; onClaim: () => void }) {
   const [claiming, setClaiming] = useState(false);

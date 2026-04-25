@@ -1,26 +1,22 @@
-import { useEffect, useState } from 'react';
-import type { GameState, TopEntry, TopResponse } from '../../types';
-import { apiGetTop } from '../../api';
-import { fmt } from '../../utils/format';
+import { useQuery } from '@tanstack/react-query';
+import type { GameState, TopEntry } from '@/types';
+import { apiGetTop } from '@/api';
+import { fmt } from '@/utils/format';
 
-export function TopPage({ gs: _gs }: { gs: GameState }) {
-  const [data, setData] = useState<TopResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiGetTop()
-      .then(setData)
-      .catch(e => setError((e as Error).message ?? 'Ошибка'))
-      .finally(() => setLoading(false));
-  }, []);
+export function TopPage({ gs }: { gs: GameState }) {
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['top'],
+    queryFn: apiGetTop,
+    staleTime: 30_000,
+  });
 
   const rankEmoji = (r: number) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : `${r}.`;
 
   return (
     <div className="p-[14px] flex flex-col gap-2">
-      {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
-      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error}</p>}
+      {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
+      {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка'}</p>}
+      {!isLoading && !error && <p className="m-0 text-center text-xs text-tg-hint">Игрок: {gs.nickname}</p>}
 
       {data?.my_rank && !data.entries.some(e => e.is_me) && (
         <div className="card border border-[rgba(var(--c-blue-rgb),0.3)] bg-[rgba(var(--c-blue-rgb),0.07)]">
@@ -56,7 +52,7 @@ export function TopPage({ gs: _gs }: { gs: GameState }) {
         </div>
       ))}
 
-      {!loading && !error && data?.entries.length === 0 && (
+      {!isLoading && !error && data?.entries.length === 0 && (
         <div className="card text-center">
           <p className="m-0 text-tg-hint">Топ пуст. Будь первым!</p>
         </div>

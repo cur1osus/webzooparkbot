@@ -5,12 +5,11 @@ import random
 import uuid
 
 from fastapi import HTTPException
-from pydantic import BaseModel
-
+from api.app.db.connection import get_db
+from api.app.db.tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_ITEMS_TABLE, ZOOPARK_USERS_TABLE
+from api.app.schemas.forge import ForgeActivateBody, ForgeCreateBody, ForgeItemIdBody, ForgeMergeBody, ForgeSetBody, ForgeSetIdBody
 from api.app.zoopark.catalog import ANIMALS
-from api.app.zoopark.db_tables import ZOOPARK_EXTRA_TABLE, ZOOPARK_ITEMS_TABLE, ZOOPARK_USERS_TABLE
 from api.app.zoopark.profile import bump_data_version, get_forge_items, get_forge_sets, get_user
-from api.app.zoopark.runtime import get_db
 
 # ─── Catalog helpers ──────────────────────────────────────────────────────────
 
@@ -73,36 +72,6 @@ FORGE_SELL_USD = 80_000
 FORGE_MERGE_BASE_USD = 100_000
 MAX_ITEM_LEVEL = 12
 MAX_ACTIVE_ITEMS = 3
-
-
-# ─── Request models ───────────────────────────────────────────────────────────
-
-class ForgeCreateBody(BaseModel):
-    currency: str = "usd"  # "usd" | "paw"
-
-
-class ForgeItemIdBody(BaseModel):
-    item_id: str
-
-
-class ForgeActivateBody(BaseModel):
-    set_id: str
-
-
-class ForgeSetBody(BaseModel):
-    set_id: str | None = None
-    name: str | None = None
-    icon: str | None = None
-    item_ids: list[str] = []
-
-
-class ForgeSetIdBody(BaseModel):
-    set_id: str
-
-
-class ForgeMergeBody(BaseModel):
-    item_id1: str
-    item_id2: str
 
 
 # ─── Property helpers ─────────────────────────────────────────────────────────

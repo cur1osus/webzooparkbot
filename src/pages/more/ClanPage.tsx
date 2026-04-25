@@ -1,27 +1,22 @@
-import { useEffect, useState } from 'react';
-import type { ClanListResponse, ClanOut, GameState } from '../../types';
-import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan } from '../../api';
-import { CLAN_SPECIALTIES, getClanSpecialtyLabel } from '../../utils/clan';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { ClanListResponse, ClanOut, GameState } from '@/types';
+import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan } from '@/api';
+import { CLAN_SPECIALTIES, getClanSpecialtyLabel } from '@/utils/clan';
 
 export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [data, setData] = useState<ClanListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSpec, setNewSpec] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-
-  const load = () => {
-    setLoading(true);
-    apiGetClanList()
-      .then(setData)
-      .catch(e => setErrorMsg((e as Error).message ?? 'Ошибка загрузки'))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, []);
+  const { data, error, isLoading, refetch } = useQuery<ClanListResponse>({
+    queryKey: ['clans'],
+    queryFn: apiGetClanList,
+    staleTime: 30_000,
+  });
+  const queryError = error instanceof Error ? error.message : null;
 
   const clearMsgs = () => { setSuccessMsg(null); setErrorMsg(null); };
 
@@ -37,7 +32,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
         setNewName('');
         setNewSpec(null);
         onRefresh();
-        load();
+        void refetch();
       } else {
         setErrorMsg(res.message ?? 'Ошибка');
       }
@@ -66,7 +61,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       if (res.ok) {
         setSuccessMsg(res.message);
         onRefresh();
-        load();
+        void refetch();
       } else {
         setErrorMsg(res.message ?? 'Ошибка');
       }
@@ -77,7 +72,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      {loading && <p className="text-center text-tg-hint">Загрузка...</p>}
+      {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {successMsg && (
         <div className="card bg-[rgba(var(--c-green-rgb),0.1)] border border-[rgba(var(--c-green-rgb),0.3)]">
@@ -87,6 +82,11 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       {errorMsg && (
         <div className="card bg-[rgba(var(--c-red-rgb),0.1)] border border-[rgba(var(--c-red-rgb),0.3)]">
           <p className="m-0 text-[var(--c-red-soft)]">⚠️ {errorMsg}</p>
+        </div>
+      )}
+      {queryError && !errorMsg && (
+        <div className="card bg-[rgba(var(--c-red-rgb),0.1)] border border-[rgba(var(--c-red-rgb),0.3)]">
+          <p className="m-0 text-[var(--c-red-soft)]">⚠️ {queryError}</p>
         </div>
       )}
 
@@ -190,7 +190,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
         </div>
       )}
 
-      {!loading && !errorMsg && data?.clans.length === 0 && !gs.clan && (
+      {!isLoading && !errorMsg && !queryError && data?.clans.length === 0 && !gs.clan && (
         <div className="card text-center">
           <p className="m-0 text-tg-hint">Открытых кланов нет. Создай первый!</p>
         </div>

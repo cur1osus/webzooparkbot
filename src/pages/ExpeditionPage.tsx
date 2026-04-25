@@ -4,7 +4,7 @@ import {
   apiFinishExpedition,
   apiGetExpeditions,
   apiStartExpedition,
-} from '../api';
+} from '@/api';
 import {
   formatDurationMinutes,
   expeditionPower,
@@ -12,18 +12,9 @@ import {
   geneLabel,
   HABITAT_INFO,
   lifeLeft,
-} from '../features/packAnimals';
-import type { ActiveExpedition, ExpeditionInfo, ExpeditionResult, Habitat, PackAnimal } from '../types';
-import { formatCountdown, fmt } from '../utils/format';
-
-function expeditionStatusText(info: ExpeditionInfo | null, nowMs: number): string {
-  const active = info?.active;
-  if (!info) return 'Загружаем сводку...';
-  if (!active) return `${info.localities.length} направл. · отряд 3–5 животных`;
-  if (active.status === 'finished') return 'Результат готов';
-  const leftMs = new Date(active.ends_at).getTime() - nowMs;
-  return leftMs > 0 ? `В пути · ${formatCountdown(leftMs / 1000)}` : 'Можно завершить';
-}
+} from '@/data/packs';
+import type { ActiveExpedition, ExpeditionInfo, ExpeditionResult, Habitat, PackAnimal } from '@/types';
+import { formatCountdown, fmt } from '@/utils/format';
 
 function WildAnimalSummary({ habitat, result }: { habitat: Habitat; result: ExpeditionResult }) {
   const wildHabitat = HABITAT_INFO[result.wild.habitat ?? habitat];
@@ -305,74 +296,6 @@ function CurrentExpeditionCard({
   );
 }
 
-export function ExpeditionOverviewCard({ onOpen }: { onOpen: () => void }) {
-  const [info, setInfo] = useState<ExpeditionInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(Date.now());
-
-  const load = useCallback(async () => {
-    try {
-      setInfo(await apiGetExpeditions());
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message ?? 'Ошибка загрузки');
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const active = info?.active;
-    if (!active || active.status !== 'active') return undefined;
-    const leftMs = new Date(active.ends_at).getTime() - Date.now();
-    if (leftMs <= 0) {
-      void load();
-      return undefined;
-    }
-    const timeout = window.setTimeout(() => void load(), leftMs + 250);
-    return () => window.clearTimeout(timeout);
-  }, [info?.active?.id, info?.active?.status, info?.active?.ends_at, load]);
-
-  const active = info?.active;
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="card flex items-center gap-3 w-full border-none text-left cursor-pointer"
-      style={{ border: '1px solid rgba(var(--c-gold-rgb),0.18)' }}
-    >
-      <div className="icon-box" style={{ background: 'rgba(var(--c-gold-rgb),0.12)' }}>🧭</div>
-      <div className="flex-1 min-w-0">
-        <p className="m-0 font-bold text-sm">Экспедиции</p>
-        <p className="mt-[2px] mb-0 text-xs text-tg-hint">
-          {error ?? expeditionStatusText(info, nowMs)}
-        </p>
-      </div>
-      {active?.status === 'finished' && (
-        <span className="text-[11px] font-bold px-2 py-[4px] rounded-full"
-              style={{ background: 'rgba(var(--c-green-rgb),0.14)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.25)' }}>
-          Готово
-        </span>
-      )}
-      {active?.status === 'active' && (
-        <span className="text-[11px] font-bold px-2 py-[4px] rounded-full"
-              style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(90,200,250,0.25)' }}>
-          В пути
-        </span>
-      )}
-      <span className="text-base text-tg-hint">›</span>
-    </button>
-  );
-}
-
 export function ExpeditionPage({
   onRefresh,
   onBack,
@@ -415,8 +338,10 @@ export function ExpeditionPage({
     return () => window.clearInterval(timer);
   }, []);
 
+  const activeExpedition = info?.active;
+
   useEffect(() => {
-    const active = info?.active;
+    const active = activeExpedition;
     if (!active || active.status !== 'active') return undefined;
     const leftMs = new Date(active.ends_at).getTime() - Date.now();
     if (leftMs <= 0) {
@@ -425,7 +350,7 @@ export function ExpeditionPage({
     }
     const timeout = window.setTimeout(() => void load(), leftMs + 250);
     return () => window.clearTimeout(timeout);
-  }, [info?.active?.id, info?.active?.status, info?.active?.ends_at, load]);
+  }, [activeExpedition, load]);
 
   const selectedLocality = useMemo(
     () => info?.localities.find(locality => locality.id === selectedLocalityId) ?? null,

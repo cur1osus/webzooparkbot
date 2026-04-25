@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { GameState, TransferOut } from '../types';
+import type { GameState, TransferOut } from '@/types';
 import { BankPage } from './BankPage';
 import { BonusPage } from './more/BonusPage';
 import { MerchantPage } from './more/MerchantPage';
@@ -8,9 +8,9 @@ import { ClanPage } from './more/ClanPage';
 import { TopPage } from './more/TopPage';
 import { ReferralPage } from './more/ReferralPage';
 import { DonatePage } from './more/DonatePage';
-import { apiConfig, apiCreateTransfer, apiGetMyTransfers } from '../api';
-import { fmt, formatDateShort } from '../utils/format';
-import { copyTmaText, inTma } from '../tma';
+import { apiConfig, apiCreateTransfer, apiGetMyTransfers } from '@/api';
+import { fmt, formatDateShort } from '@/utils/format';
+import { copyTmaText, inTma } from '@/lib/tma';
 
 type Section =
   | 'bank' | 'bonus' | 'merchant' | 'clan' | 'top'
@@ -200,7 +200,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
 // ─── Inline sub-pages ─────────────────────────────────────────────────────────
 
-function GiveawayPage({ gs, onRefresh: _onRefresh, botUsername }: { gs: GameState; onRefresh: () => void; botUsername: string }) {
+function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh: () => void; botUsername: string }) {
   const [amount, setAmount] = useState('');
   const [parts, setParts] = useState('5');
   const [creating, setCreating] = useState(false);
@@ -230,6 +230,7 @@ function GiveawayPage({ gs, onRefresh: _onRefresh, botUsername }: { gs: GameStat
       await apiCreateTransfer(total, max);
       setAmount('');
       setParts('5');
+      onRefresh();
       loadTransfers();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка создания');
