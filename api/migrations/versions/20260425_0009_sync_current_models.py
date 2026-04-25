@@ -11,7 +11,7 @@ except Exception:  # pragma: no cover - keeps helper unit tests importable witho
 
 
 revision = "20260425_0009"
-down_revision = "20260415_0008"
+down_revision = "0008"
 branch_labels = None
 depends_on = None
 

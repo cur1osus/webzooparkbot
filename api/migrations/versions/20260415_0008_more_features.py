@@ -11,7 +11,7 @@ except Exception:  # pragma: no cover - keeps helper unit tests importable witho
     op = SimpleNamespace(create_table=lambda *args, **kwargs: None, get_bind=lambda: None)
 
 
-revision = "20260415_0008"
+revision = "0008"
 down_revision = "20260407_0001"
 branch_labels = None
 depends_on = None
