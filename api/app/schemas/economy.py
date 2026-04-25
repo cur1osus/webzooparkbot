@@ -14,4 +14,5 @@ class BuyAviaryBody(BaseModel):
 
 class BankExchangeBody(BaseModel):
     from_: str = Field(alias="from")
-    amount: float
+    amount: float = 0
+    exchange_all: bool = False

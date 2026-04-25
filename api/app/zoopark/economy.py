@@ -87,12 +87,15 @@ def bank_exchange(tg_id: int, body: BankExchangeBody) -> dict:
         rate, _ = _current_rate()
         vault = _get_vault(session)
         if body.from_ == "rub":
-            cost = int(amount)
-            if user.rub < cost:
-                raise HTTPException(400, "Недостаточно рублей")
-            gain = int(amount / rate)
+            if body.exchange_all:
+                cost = user.rub
+            else:
+                cost = int(amount)
+                if user.rub < cost:
+                    raise HTTPException(400, "Недостаточно рублей")
+            gain = int(cost / rate)
             if gain < 1:
-                raise HTTPException(400, f"Минимум {rate} ₽")
+                raise HTTPException(400, f"Недостаточно рублей для обмена (нужно ≥ {rate} ₽)")
             commission = _calc_commission(gain)
             user.rub -= cost
             user.usd += gain - commission

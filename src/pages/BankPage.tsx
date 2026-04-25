@@ -3,8 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
 import type { GameState } from '@/types';
 import { apiGetBank, apiExchange } from '@/api';
+import { useZooStore } from '@/store';
 
 export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const patchState = useZooStore(s => s.patchState);
   const [amount, setAmount] = useState('');
   const [exchLoading, setExchLoading] = useState(false);
   const [exchResult, setExchResult] = useState<string | null>(null);
@@ -37,15 +39,20 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   }, [countdown, queryClient]);
 
   const handleExchange = async (all: boolean) => {
-    const n = all ? gs.rub : parseFloat(amount);
-    if (!n || n <= 0) return;
+    if (!all) {
+      const n = parseFloat(amount);
+      if (!n || n <= 0) return;
+    }
     setExchLoading(true);
     setExchResult(null);
     try {
-      const res = await apiExchange('rub', n);
+      const res = all
+        ? await apiExchange('rub', 0, true)
+        : await apiExchange('rub', parseFloat(amount));
       if (res.ok) {
         setExchResult('Обмен выполнен!');
-        onRefresh();
+        patchState({ rub: res.new_rub, usd: res.new_usd });
+        void onRefresh();
       } else {
         setExchResult(res.message ?? 'Ошибка');
       }
