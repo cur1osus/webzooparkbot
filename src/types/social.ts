@@ -27,6 +27,17 @@ export interface ClanListResponse {
   my_role: 'owner' | 'member' | null;
 }
 
+export interface ClanMember {
+  tg_id: number;
+  nickname: string;
+  role: 'owner' | 'member';
+  income_rub_per_min: number;
+}
+
+export interface ClanMembersResponse {
+  members: ClanMember[];
+}
+
 export interface ReferralResponse {
   code: string;
   total: number;

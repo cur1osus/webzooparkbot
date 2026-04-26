@@ -4,7 +4,7 @@ from fastapi import APIRouter, Header
 
 from api.app.core.auth import auth
 from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
-from api.app.zoopark.social import api_clan_create, api_clan_leave, api_clan_list, api_clan_request, api_my_transfers, api_referrals, api_top, api_transfers_create
+from api.app.zoopark.social import api_clan_create, api_clan_leave, api_clan_list, api_clan_members, api_clan_request, api_my_transfers, api_referrals, api_top, api_transfers_create
 
 
 router = APIRouter(tags=["zoopark-social"])
@@ -42,6 +42,14 @@ def clan_request(
     x_dev_user_id: str = Header(default=""),
 ):
     return api_clan_request(auth(x_init_data, x_dev_user_id), body)
+
+
+@router.get("/api/clan/members")
+def clan_members(
+    x_init_data: str = Header(default=""),
+    x_dev_user_id: str = Header(default=""),
+):
+    return api_clan_members(auth(x_init_data, x_dev_user_id))
 
 
 @router.post("/api/clan/leave")

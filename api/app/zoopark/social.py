@@ -127,6 +127,32 @@ def api_clan_request(tg_id: int, body: ClanRequestBody):
         return {"ok": True, "message": f"Вступил в клан «{clan.name}»"}
 
 
+def api_clan_members(tg_id: int):
+    with get_session() as session:
+        user = get_user(session, tg_id)
+        if not user:
+            raise HTTPException(404, "Нет игрока")
+        if not user.unity_id:
+            raise HTTPException(400, "Ты не в клане")
+
+        season = active_season(session)
+        clan = session.get(Unity, user.unity_id)
+        members = session.query(User).filter(User.unity_id == user.unity_id).all()
+
+        result = []
+        for m in members:
+            income = calc_pack_income(session, m.id, season.id)
+            result.append({
+                "tg_id": int(m.id_user),
+                "nickname": m.nickname or "—",
+                "role": "owner" if clan and clan.owner_id == m.id else "member",
+                "income_rub_per_min": int(income),
+            })
+
+        result.sort(key=lambda x: (x["role"] != "owner", -x["income_rub_per_min"]))
+        return {"members": result}
+
+
 def api_clan_leave(tg_id: int):
     with get_session() as session:
         user = get_user(session, tg_id)
