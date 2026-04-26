@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fmt } from '@/utils/format';
 import type { GameState, PackAnimal, PackInfo } from '@/types';
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
@@ -198,6 +198,45 @@ function PackStage({
 }) {
   const isOpening  = openState === 'opening';
   const isRevealed = openState === 'revealed';
+  const videoRef   = useRef<HTMLVideoElement>(null);
+
+  // Imperatively attach 'ended' listener when opening starts.
+  // React synthetic onEnded is unreliable for short autoplay videos
+  // (non-bubbling media events can fire before React attaches its handler).
+  useEffect(() => {
+    if (openState !== 'opening') return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    let fired = false;
+    const trigger = () => {
+      if (fired) return;
+      fired = true;
+      onAnimEnd();
+    };
+
+    // If browser already ended before effect ran
+    if (video.ended) { trigger(); return; }
+
+    video.addEventListener('ended', trigger, { once: true });
+
+    // Fallback: derive remaining time once metadata is known
+    let fallback: ReturnType<typeof setTimeout>;
+    const scheduleFallback = () => {
+      const remaining = (video.duration - video.currentTime) * 1000;
+      fallback = setTimeout(trigger, Math.max(remaining, 0) + 400);
+    };
+    if (isFinite(video.duration) && video.duration > 0) {
+      scheduleFallback();
+    } else {
+      video.addEventListener('loadedmetadata', scheduleFallback, { once: true });
+    }
+
+    return () => {
+      video.removeEventListener('ended', trigger);
+      clearTimeout(fallback);
+    };
+  }, [openState]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex flex-col gap-4">
@@ -216,13 +255,13 @@ function PackStage({
           }}
         >
           <video
+            ref={videoRef}
             key={openState}
             src={isOpening ? tier.openVideo : tier.idleVideo}
             autoPlay
             loop={!isOpening}
             muted
             playsInline
-            onEnded={isOpening ? onAnimEnd : undefined}
             className="w-full h-full object-cover"
             style={{ display: 'block' }}
           />
