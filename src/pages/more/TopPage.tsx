@@ -96,7 +96,6 @@ export function TopPage({ gs }: { gs: GameState }) {
     <div className="p-[14px] flex flex-col gap-2">
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
       {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка'}</p>}
-      {!isLoading && !error && <p className="m-0 text-center text-xs text-tg-hint">Игрок: {gs.nickname}</p>}
 
       {data && data.entries.length > 0 && <IncomeChart entries={data.entries} />}
 
