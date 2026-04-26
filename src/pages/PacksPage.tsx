@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fmt } from '@/utils/format';
 import type { GameState, PackAnimal, PackInfo } from '@/types';
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
@@ -79,11 +79,11 @@ function qualityScore(a: PackAnimal): number {
 }
 
 function qualityLabel(score: number): { text: string; color: string } {
-  if (score >= 7) return { text: 'Идеальный',      color: 'var(--c-gold)' };
-  if (score >= 5) return { text: 'Отличный',        color: 'var(--c-blue)' };
-  if (score >= 3) return { text: 'Хороший',         color: 'var(--c-green)' };
-  if (score >= 1) return { text: 'Посредственный',  color: 'var(--tg-theme-hint-color)' };
-  return             { text: 'Слабый',             color: 'var(--c-orange)' };
+  if (score >= 7) return { text: 'Идеальный',     color: 'var(--c-gold)' };
+  if (score >= 5) return { text: 'Отличный',       color: 'var(--c-blue)' };
+  if (score >= 3) return { text: 'Хороший',        color: 'var(--c-green)' };
+  if (score >= 1) return { text: 'Посредственный', color: 'var(--tg-theme-hint-color)' };
+  return             { text: 'Слабый',            color: 'var(--c-orange)' };
 }
 
 function AnimalCard({ animal, glow }: { animal: PackAnimal; glow: string }) {
@@ -108,7 +108,6 @@ function AnimalCard({ animal, glow }: { animal: PackAnimal; glow: string }) {
         animation:  'scale-in 0.4s var(--spring-bounce) both',
       }}
     >
-      {/* Top section */}
       <div className="px-4 pt-4 pb-3 flex items-center gap-3">
         <div
           className="w-14 h-14 rounded-2xl grid place-items-center text-[28px] shrink-0"
@@ -138,10 +137,8 @@ function AnimalCard({ animal, glow }: { animal: PackAnimal; glow: string }) {
         </div>
       </div>
 
-      {/* Divider */}
       <div style={{ height: 1, background: `${hab.color}20`, margin: '0 16px' }} />
 
-      {/* Genes */}
       <div className="grid grid-cols-2 gap-[6px] px-4 py-3">
         {genes.map(([key, val]) => {
           const meta = GENE_META[key as keyof typeof GENE_META]?.[val as 'low' | 'medium' | 'high'];
@@ -166,7 +163,6 @@ function AnimalCard({ animal, glow }: { animal: PackAnimal; glow: string }) {
         })}
       </div>
 
-      {/* Lifespan */}
       {life && (
         <div className="px-4 pb-4">
           <div
@@ -182,71 +178,31 @@ function AnimalCard({ animal, glow }: { animal: PackAnimal; glow: string }) {
   );
 }
 
-// ─── Pack stage (video + open button) ────────────────────────────────────────
+// ─── Pack stage (pure UI) ─────────────────────────────────────────────────────
 
-type StageState = 'idle' | 'opening' | 'revealed';
+type OpenState = 'idle' | 'opening' | 'revealed';
 
 function PackStage({
-  tier, info, gs, onOpen, error,
+  tier, info, gs, openState, newAnimal, error,
+  onOpenClick, onAnimEnd, onOpenAnother,
 }: {
   tier: (typeof TIERS)[TierKey];
   info: PackInfo;
   gs: GameState;
-  onOpen: () => void;
+  openState: OpenState;
+  newAnimal: PackAnimal | null;
   error: string | null;
+  onOpenClick: () => void;
+  onAnimEnd: () => void;
+  onOpenAnother: () => void;
 }) {
-  const [stage, setStage]           = useState<StageState>('idle');
-  const [apiDone, setApiDone]       = useState(false);
-  const [animDone, setAnimDone]     = useState(false);
-  const [revealAnimal, setRevealAnimal] = useState<PackAnimal | null>(null);
-  const [apiError, setApiError]     = useState<string | null>(null);
-  const videoRef                    = useRef<HTMLVideoElement>(null);
-
-  // Sync external error into local state
-  useEffect(() => { if (error) setApiError(error); }, [error]);
-
-  // Reveal when both done
-  useEffect(() => {
-    if (apiDone && animDone && stage === 'opening') setStage('revealed');
-  }, [apiDone, animDone, stage]);
-
-  const handleOpenClick = async () => {
-    if (stage !== 'idle') return;
-    setStage('opening');
-    setApiDone(false);
-    setAnimDone(false);
-    setApiError(null);
-
-    try {
-      const res = await apiOpenPack();
-      setRevealAnimal(res.animal);
-      onOpen();
-      setApiDone(true);
-    } catch (e) {
-      setApiError((e as Error).message);
-      setStage('idle');
-    }
-  };
-
-  const handleAnimEnd = () => {
-    setAnimDone(true);
-  };
-
-  const handleOpenAnother = () => {
-    setStage('idle');
-    setRevealAnimal(null);
-    setApiDone(false);
-    setAnimDone(false);
-    setApiError(null);
-  };
-
-  const isOpening = stage === 'opening';
-  const isRevealed = stage === 'revealed';
+  const isOpening  = openState === 'opening';
+  const isRevealed = openState === 'revealed';
 
   return (
     <div className="flex flex-col gap-4">
 
-      {/* Video container */}
+      {/* Video */}
       {!isRevealed && (
         <div
           className="relative mx-auto overflow-hidden rounded-3xl"
@@ -260,19 +216,17 @@ function PackStage({
           }}
         >
           <video
-            key={stage}
-            ref={videoRef}
+            key={openState}
             src={isOpening ? tier.openVideo : tier.idleVideo}
             autoPlay
             loop={!isOpening}
             muted
             playsInline
-            onEnded={isOpening ? handleAnimEnd : undefined}
+            onEnded={isOpening ? onAnimEnd : undefined}
             className="w-full h-full object-cover"
             style={{ display: 'block' }}
           />
 
-          {/* Tier badge overlay */}
           {!isOpening && (
             <div className="absolute bottom-4 left-0 right-0 flex justify-center">
               <span
@@ -293,7 +247,7 @@ function PackStage({
       )}
 
       {/* Revealed animal */}
-      {isRevealed && revealAnimal && (
+      {isRevealed && newAnimal && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-center">
             <span
@@ -307,17 +261,17 @@ function PackStage({
               ✨ {tier.name} пак
             </span>
           </div>
-          <AnimalCard animal={revealAnimal} glow={tier.glow} />
+          <AnimalCard animal={newAnimal} glow={tier.glow} />
         </div>
       )}
 
       {/* Error */}
-      {apiError && (
+      {error && (
         <div
           className="rounded-xl px-4 py-3 text-[13px]"
           style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}
         >
-          {apiError}
+          {error}
         </div>
       )}
 
@@ -325,7 +279,7 @@ function PackStage({
       {!isRevealed && (
         <div className="flex flex-col gap-2">
           <button
-            onClick={handleOpenClick}
+            onClick={onOpenClick}
             disabled={isOpening}
             className="w-full py-[14px] rounded-2xl font-extrabold text-[16px] border-none"
             style={{
@@ -343,8 +297,6 @@ function PackStage({
               ? '🎁 Открыть бесплатно'
               : `🔓 Открыть · ₽${fmt(info.next_price)}`}
           </button>
-
-          {/* Balance hint */}
           <div className="flex items-center justify-center gap-3">
             <span className="text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
               Баланс: <strong style={{ color: 'var(--c-green)' }}>₽{fmt(gs.rub)}</strong>
@@ -358,10 +310,10 @@ function PackStage({
         </div>
       )}
 
-      {/* After reveal: open another button */}
+      {/* Open another */}
       {isRevealed && (
         <button
-          onClick={handleOpenAnother}
+          onClick={onOpenAnother}
           className="w-full py-[13px] rounded-2xl font-bold text-[14px] border-none"
           style={{
             background: `${tier.color}18`,
@@ -376,7 +328,7 @@ function PackStage({
   );
 }
 
-// ─── Compact animal row for history ──────────────────────────────────────────
+// ─── Compact animal row ───────────────────────────────────────────────────────
 
 function AnimalRow({ animal }: { animal: PackAnimal }) {
   const hab = HABITAT_INFO[animal.habitat];
@@ -386,10 +338,7 @@ function AnimalRow({ animal }: { animal: PackAnimal }) {
   return (
     <div
       className="flex items-center gap-3 px-3 py-[10px] rounded-xl"
-      style={{
-        background: `${hab.color}0a`,
-        border:     `1px solid ${hab.color}20`,
-      }}
+      style={{ background: `${hab.color}0a`, border: `1px solid ${hab.color}20` }}
     >
       <span className="text-[22px] shrink-0">{def?.emoji ?? hab.emoji}</span>
       <div className="flex-1 min-w-0">
@@ -416,10 +365,15 @@ function AnimalRow({ animal }: { animal: PackAnimal }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [info, setInfo]       = useState<PackInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [stageKey, setStageKey] = useState(0);
+  const [info, setInfo]           = useState<PackInfo | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState<string | null>(null);
+
+  // Opening flow state — lives here so PackStage never remounts mid-flow
+  const [openState, setOpenState] = useState<OpenState>('idle');
+  const [newAnimal, setNewAnimal] = useState<PackAnimal | null>(null);
+  const [apiDone, setApiDone]     = useState(false);
+  const [animDone, setAnimDone]   = useState(false);
 
   useEffect(() => {
     apiGetPacksInfo()
@@ -428,12 +382,48 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       .finally(() => setLoading(false));
   }, []);
 
-  const handleOpen = () => {
-    apiGetPacksInfo().then(fresh => {
-      setInfo(fresh);
-      setStageKey(k => k + 1);
+  // Reveal as soon as both animation and API are done
+  useEffect(() => {
+    if (apiDone && animDone && openState === 'opening') {
+      setOpenState('revealed');
+    }
+  }, [apiDone, animDone, openState]);
+
+  const handleOpenClick = async () => {
+    if (openState !== 'idle' || !info) return;
+    setOpenState('opening');
+    setApiDone(false);
+    setAnimDone(false);
+    setError(null);
+
+    try {
+      const res = await apiOpenPack();
+      setNewAnimal(res.animal);
+      setInfo(prev => prev ? {
+        ...prev,
+        packs_today:    res.packs_today,
+        free_available: false,
+        next_price:     res.next_price,
+        animals:        [res.animal, ...prev.animals],
+      } : prev);
       onRefresh();
-    }).catch(() => {});
+      setApiDone(true);
+    } catch (e) {
+      setError((e as Error).message);
+      setOpenState('idle');
+    }
+  };
+
+  const handleAnimEnd = () => {
+    setAnimDone(true);
+  };
+
+  const handleOpenAnother = () => {
+    setOpenState('idle');
+    setNewAnimal(null);
+    setApiDone(false);
+    setAnimDone(false);
+    setError(null);
   };
 
   if (loading) {
@@ -468,17 +458,20 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
         </p>
       </div>
 
-      {/* Pack stage */}
+      {/* Pack stage — never remounts, receives all state as props */}
       <PackStage
-        key={stageKey}
         tier={tier}
         info={info}
         gs={gs}
-        onOpen={handleOpen}
-        error={null}
+        openState={openState}
+        newAnimal={newAnimal}
+        error={error}
+        onOpenClick={handleOpenClick}
+        onAnimEnd={handleAnimEnd}
+        onOpenAnother={handleOpenAnother}
       />
 
-      {/* Tier progression hint */}
+      {/* Tier progression dots */}
       <div
         className="rounded-2xl px-4 py-3 flex items-center gap-3"
         style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)' }}
