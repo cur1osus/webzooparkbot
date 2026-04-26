@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { GameState, TopEntry } from '@/types';
+import type { TopEntry } from '@/types';
 import { apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
 
@@ -81,7 +81,7 @@ function IncomeChart({ entries }: { entries: TopEntry[] }) {
   );
 }
 
-export function TopPage({ gs }: { gs: GameState }) {
+export function TopPage() {
   const { data, error, isLoading } = useQuery({
     queryKey: ['top'],
     queryFn: apiGetTop,
