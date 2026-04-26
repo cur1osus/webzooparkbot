@@ -409,10 +409,12 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
   const [error, setError]         = useState<string | null>(null);
 
   // Opening flow state — lives here so PackStage never remounts mid-flow
-  const [openState, setOpenState] = useState<OpenState>('idle');
-  const [newAnimal, setNewAnimal] = useState<PackAnimal | null>(null);
-  const [apiDone, setApiDone]     = useState(false);
-  const [animDone, setAnimDone]   = useState(false);
+  const [openState, setOpenState]       = useState<OpenState>('idle');
+  const [newAnimal, setNewAnimal]       = useState<PackAnimal | null>(null);
+  const [apiDone, setApiDone]           = useState(false);
+  const [animDone, setAnimDone]         = useState(false);
+  // Lock tier at the moment of open so src never changes mid-animation
+  const [lockedTierKey, setLockedTierKey] = useState<TierKey>('rare');
 
   useEffect(() => {
     apiGetPacksInfo()
@@ -430,6 +432,8 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
 
   const handleOpenClick = async () => {
     if (openState !== 'idle' || !info) return;
+    // Capture tier BEFORE any state updates so video src never changes mid-animation
+    setLockedTierKey(getTierKey(info.packs_today, info.free_available));
     setOpenState('opening');
     setApiDone(false);
     setAnimDone(false);
@@ -481,7 +485,8 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
     );
   }
 
-  const tierKey = getTierKey(info.packs_today, info.free_available);
+  // During opening/revealed use the locked tier so src never changes mid-animation
+  const tierKey = openState !== 'idle' ? lockedTierKey : getTierKey(info.packs_today, info.free_available);
   const tier    = TIERS[tierKey];
 
   return (
