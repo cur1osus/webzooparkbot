@@ -253,9 +253,8 @@ function AnimalCard({ animal }: { animal: PackAnimal }) {
 // ─── Pack tile (idle video card in grid) ─────────────────────────────────────
 
 function PackTile({
-  tierKey, tier, isCurrent, isFree, onClick,
+  tier, isCurrent, isFree, onClick,
 }: {
-  tierKey: TierKey;
   tier: (typeof TIERS)[TierKey];
   isCurrent: boolean;
   isFree: boolean;
@@ -728,7 +727,6 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
         {TIER_ORDER.map(tk => (
           <PackTile
             key={tk}
-            tierKey={tk}
             tier={TIERS[tk]}
             isCurrent={tk === currentTierKey}
             isFree={tk === 'rare' && info.free_available}
