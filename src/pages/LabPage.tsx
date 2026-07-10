@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { GameState, GeneTier, Habitat, PackAnimal, BreedResult } from '@/types';
-import { apiGetPacksInfo, apiBreed } from '@/api';
+import { createPortal } from 'react-dom';
+import type { Animal, BreedResult, GameState, GeneTier, Habitat } from '@/types';
+import { apiBreed, apiGetAnimals } from '@/api';
 import { fmt } from '@/utils/format';
 
 const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
@@ -29,7 +30,7 @@ const BREED_RATE: Record<string, number> = {
   'high+high': 0.90,
 };
 
-function breedRate(a: PackAnimal | null, b: PackAnimal | null): number | null {
+function breedRate(a: Animal | null, b: Animal | null): number | null {
   if (!a || !b) return null;
   const key = `${a.reproduction}+${b.reproduction}`;
   return BREED_RATE[key] ?? null;
@@ -37,7 +38,7 @@ function breedRate(a: PackAnimal | null, b: PackAnimal | null): number | null {
 
 // ─── Animal mini-card for result display ─────────────────────────────────────
 
-function AnimalResultCard({ animal }: { animal: PackAnimal }) {
+function AnimalResultCard({ animal }: { animal: Animal }) {
   const hab = HABITAT_INFO[animal.habitat];
   const genes: [string, GeneTier][] = [
     ['survival', animal.survival], ['reproduction', animal.reproduction],
@@ -78,7 +79,7 @@ function AnimalResultCard({ animal }: { animal: PackAnimal }) {
 
 function ParentSlot({ label, animal, onClick }: {
   label: string;
-  animal: PackAnimal | null;
+  animal: Animal | null;
   onClick: () => void;
 }) {
   if (!animal) {
@@ -117,20 +118,20 @@ function ParentSlot({ label, animal, onClick }: {
 // ─── Animal picker overlay ────────────────────────────────────────────────────
 
 function AnimalPicker({ animals, exclude, onPick, onClose }: {
-  animals: PackAnimal[];
+  animals: Animal[];
   exclude: number | null;
-  onPick: (a: PackAnimal) => void;
+  onPick: (a: Animal) => void;
   onClose: () => void;
 }) {
   const available = animals.filter(a => a.can_breed && a.id !== exclude);
 
-  return (
+  return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose}>
       <div className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[75vh] overflow-y-auto"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
           <p className="m-0 font-extrabold text-[15px]">Выбери родителя</p>
-          <button onClick={onClose} className="border-none bg-transparent text-[18px] cursor-pointer p-0"
+          <button onClick={onClose} aria-label="Закрыть" className="tap-target -mr-2 border-none bg-transparent text-[18px] cursor-pointer"
                   style={{ color: 'var(--tg-theme-hint-color)' }}>✕</button>
         </div>
 
@@ -157,7 +158,8 @@ function AnimalPicker({ animals, exclude, onPick, onClose }: {
           );
         })}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -165,10 +167,10 @@ function AnimalPicker({ animals, exclude, onPick, onClose }: {
 
 export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   void gs;
-  const [animals, setAnimals]   = useState<PackAnimal[]>([]);
+  const [animals, setAnimals]   = useState<Animal[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [parent1, setParent1]   = useState<PackAnimal | null>(null);
-  const [parent2, setParent2]   = useState<PackAnimal | null>(null);
+  const [parent1, setParent1]   = useState<Animal | null>(null);
+  const [parent2, setParent2]   = useState<Animal | null>(null);
   const [picking, setPicking]   = useState<1 | 2 | null>(null);
   const [breeding, setBreeding] = useState(false);
   const [result, setResult]     = useState<BreedResult | null>(null);
@@ -176,8 +178,8 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
   const load = async () => {
     try {
-      const info = await apiGetPacksInfo();
-      setAnimals(info.animals);
+      const { animals } = await apiGetAnimals();
+      setAnimals(animals);
     } catch {
       // ignore
     } finally {
@@ -195,12 +197,11 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
     try {
       const res = await apiBreed(parent1.id, parent2.id);
       setResult(res);
-      // Reload animals (both parents now can_breed=false)
-      const info = await apiGetPacksInfo();
-      setAnimals(info.animals);
-      // Update parent state to reflect can_breed=false
-      const p1 = info.animals.find(a => a.id === parent1.id);
-      const p2 = info.animals.find(a => a.id === parent2.id);
+      // Both parents are now `can_breed: false`.
+      const { animals: fresh } = await apiGetAnimals();
+      setAnimals(fresh);
+      const p1 = fresh.find(a => a.id === parent1.id);
+      const p2 = fresh.find(a => a.id === parent2.id);
       if (p1) setParent1(p1);
       if (p2) setParent2(p2);
       onRefresh();
@@ -219,7 +220,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
       {/* Header */}
       <div className="px-[14px] pt-4">
-        <p className="m-0 mb-[2px] font-extrabold text-[16px]">🧪 Лаборатория</p>
+        <p className="font-display m-0 mb-[2px] text-[15px]">🧪 Лаборатория</p>
         <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
           Скрещивай животных — каждое животное 1 раз в день
         </p>

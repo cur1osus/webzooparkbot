@@ -62,7 +62,7 @@ export function ExpeditionOverviewCard({ onOpen }: { onOpen: () => void }) {
       )}
       {active?.status === 'active' && (
         <span className="text-[11px] font-bold px-2 py-[4px] rounded-full"
-              style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(90,200,250,0.25)' }}>
+              style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(var(--c-cyan-rgb),0.28)' }}>
           В пути
         </span>
       )}

@@ -5,6 +5,10 @@ import type { GameState } from '@/types';
 import { apiGetBank, apiExchange } from '@/api';
 import { useZooStore } from '@/store';
 
+/**
+ * The bank buys dollars with rubles and never sells them back. Waiting for a cheap minute
+ * is the whole game; there is no round trip to arbitrage.
+ */
 export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const patchState = useZooStore(s => s.patchState);
   const [amount, setAmount] = useState('');
@@ -20,14 +24,12 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
     refetchInterval: 65_000,
   });
 
-  // Reset countdown when new bank data arrives
   useEffect(() => {
     if (bankInfo?.next_update_in != null) {
       setCountdown(bankInfo.next_update_in);
     }
   }, [bankInfo?.next_update_in]);
 
-  // Tick countdown every second
   useEffect(() => {
     if (countdown === null) return;
     if (countdown <= 0) {
@@ -40,22 +42,19 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
   const handleExchange = async (all: boolean) => {
     if (!all) {
-      const n = parseFloat(amount);
+      const n = parseInt(amount, 10);
       if (!n || n <= 0) return;
     }
     setExchLoading(true);
     setExchResult(null);
     try {
-      const res = all
-        ? await apiExchange('rub', 0, true)
-        : await apiExchange('rub', parseFloat(amount));
-      if (res.ok) {
-        setExchResult('Обмен выполнен!');
-        patchState({ rub: res.new_rub, usd: res.new_usd });
-        void onRefresh();
-      } else {
-        setExchResult(res.message ?? 'Ошибка');
-      }
+      const res = all ? await apiExchange(0, true) : await apiExchange(parseInt(amount, 10));
+      setExchResult(`Куплено $${fmt(res.received_usd)} за ₽${fmt(res.spent_rub)}`);
+      patchState({ rub: res.new_rub, usd: res.new_usd });
+      setAmount('');
+      // The fee just landed in the treasury, so the card above is stale.
+      await queryClient.invalidateQueries({ queryKey: ['bank'] });
+      void onRefresh();
     } catch (e) {
       setExchResult(e instanceof Error ? e.message : 'Ошибка');
     } finally {
@@ -63,30 +62,50 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
     }
   };
 
-  const rate = bankInfo?.rub_rate ?? 0;
+  const rate = bankInfo?.rate_rub_per_usd ?? 0;
+  const baseRate = bankInfo?.base_rate_rub_per_usd ?? 0;
+  const feePercent = bankInfo?.fee_percent ?? 0;
+  const discounted = bankInfo != null && rate < baseRate;
   const minExchange = bankInfo?.min_exchange_rub ?? 0;
 
-  const calcCommission = (gain: number) => {
-    if (gain <= 1) return 0;
-    const c = Math.floor(gain * 0.01);
-    return c > 0 ? c : 1;
+  // Mirrors `_bank_fee` on the server: a percentage of the dollars bought, at least one
+  // once more than one is bought.
+  const feeFor = (grossUsd: number) => {
+    if (grossUsd <= 1) return 0;
+    return Math.max(Math.floor((grossUsd * feePercent) / 100), 1);
   };
 
-  const grossUsd = rate && amount ? Math.floor(parseFloat(amount) / rate) : null;
-  const commission = grossUsd != null ? calcCommission(grossUsd) : null;
-  const previewAmount = grossUsd != null && commission != null ? grossUsd - commission : null;
+  const parsed = parseInt(amount, 10);
+  const grossUsd = rate && parsed > 0 ? Math.floor(parsed / rate) : null;
+  const fee = grossUsd != null ? feeFor(grossUsd) : null;
+  const previewUsd = grossUsd != null && fee != null ? grossUsd - fee : null;
 
-  const quickAmounts = [
-    minExchange,
-    Math.min(1000, gs.rub),
-    Math.min(1000000, gs.rub),
-  ].filter((v, i, a) => a.indexOf(v) === i && v > 0 && v <= gs.rub);
+  // Meaningful, visibly-distinct presets below the full balance ("Всё" covers 100%).
+  // Dedupe by the *displayed* value so two amounts never render as the same label.
+  const seenLabels = new Set<string>();
+  const quickAmounts = [minExchange, Math.floor(gs.rub * 0.25), Math.floor(gs.rub * 0.5)]
+    .filter(v => v >= minExchange && v < gs.rub)
+    .filter(v => { const k = fmt(v); if (seenLabels.has(k)) return false; seenLabels.add(k); return true; });
+
+  const history = bankInfo?.history ?? [];
+  const spark = (() => {
+    if (history.length < 2) return null;
+    const rates = history.map(p => p.rate);
+    const min = Math.min(...rates);
+    const max = Math.max(...rates);
+    const span = max - min || 1;
+    const points = rates
+      .map((r, i) => `${(i / (rates.length - 1)) * 100},${28 - ((r - min) / span) * 26}`)
+      .join(' ');
+    return { points, min, max };
+  })();
 
   return (
     <div className="px-[14px] pt-4 flex flex-col gap-3">
-      <p className="m-0 text-[13px] text-tg-hint">Обмен рублей на доллары по текущему курсу</p>
+      <p className="m-0 text-[13px] text-tg-hint">
+        Рубли приносят животные, доллары нужны в кузнице. Курс меняется каждую минуту — лови выгодный.
+      </p>
 
-      {/* Balance tiles */}
       <div className="flex gap-2">
         <div className="flex-1 card text-center" style={{ borderColor: 'rgba(var(--c-green-rgb),0.3)' }}>
           <p className="m-0 text-[11px] text-tg-hint">Рубли</p>
@@ -104,37 +123,51 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
         </div>
       </div>
 
-      {/* Rate card */}
       {bankInfo && (
         <div className="card">
           <p className="m-0 mb-2 text-[13px] text-tg-hint">Твой курс</p>
-          <p className="m-0 mb-3 text-[28px] font-extrabold text-[var(--c-blue)]">1$ = ₽ {fmt(rate)}</p>
-          
+          <p className="m-0 mb-1 text-[28px] font-extrabold text-[var(--c-blue)]">1$ = ₽ {fmt(rate)}</p>
+          {discounted && (
+            <p className="m-0 mb-3 text-[12px] text-tg-hint">
+              Без предметов: ₽ {fmt(baseRate)} · экономия {Math.round((1 - rate / baseRate) * 100)}%
+            </p>
+          )}
+
+          {spark && (
+            <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-full h-[36px] my-2" aria-label="Курс за последний час">
+              <polyline points={spark.points} fill="none" stroke="var(--c-blue)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+            </svg>
+          )}
+
           <div className="flex gap-2">
             <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(var(--c-blue-rgb),0.1)]">
               <p className="m-0 text-[10px] text-tg-hint">Хранилище банка</p>
-              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-blue)]">$ {fmt(bankInfo.vault_usd)}</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-blue)]">$ {fmt(bankInfo.treasury_usd)}</p>
             </div>
             <div className="flex-1 py-2 px-3 rounded-lg bg-[rgba(var(--c-orange-rgb),0.1)]">
               <p className="m-0 text-[10px] text-tg-hint">Комиссия банка</p>
-              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-orange)]">1% (мин. $1)</p>
+              <p className="mt-1 mb-0 text-[15px] font-bold text-[var(--c-orange)]">{feePercent}%</p>
             </div>
           </div>
+
+          {bankInfo.referral_percent > 0 && (
+            <p className="m-0 mt-2 text-[12px] text-tg-hint">
+              Пригласивший тебя получает {bankInfo.referral_percent}% от каждого купленного доллара.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Exchange section */}
       {isLoading && <p className="text-center text-tg-hint">Загрузка курса...</p>}
       {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка загрузки'}</p>}
 
       {bankInfo && (
         <div className="flex flex-col gap-3">
           <div>
-            <p className="m-0 mb-1 text-[15px] font-bold">Обменять рубли</p>
-            <p className="m-0 text-[12px] text-tg-hint">Минимальная сумма для обмена: ₽ {fmt(minExchange)}</p>
+            <p className="m-0 mb-1 text-[15px] font-bold">Купить доллары</p>
+            <p className="m-0 text-[12px] text-tg-hint">Минимальная сумма: ₽ {fmt(minExchange)}</p>
           </div>
 
-          {/* Quick buttons */}
           <div className="flex gap-2 flex-wrap">
             {quickAmounts.map(v => (
               <button
@@ -156,7 +189,6 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             )}
           </div>
 
-          {/* Input */}
           <input
             type="number"
             value={amount}
@@ -165,31 +197,30 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
             className="text-input text-sm"
           />
 
-          {previewAmount != null && grossUsd != null && commission != null && (
+          {previewUsd != null && fee != null && (
             <p className="m-0 text-[13px] text-tg-hint">
-              Получите: $ {fmt(previewAmount)}
-              {commission > 0 && <span className="text-[var(--c-orange)]"> · комиссия $ {fmt(commission)}</span>}
+              Получишь: $ {fmt(previewUsd)}
+              {fee > 0 && <span className="text-[var(--c-orange)]"> · комиссия $ {fmt(fee)}</span>}
             </p>
           )}
 
           {exchResult && (
-            <p className={`m-0 text-[13px] ${exchResult === 'Обмен выполнен!' ? 'text-[var(--c-green)]' : 'text-[var(--c-red-soft)]'}`}>
+            <p className={`m-0 text-[13px] ${exchResult.startsWith('Куплено') ? 'text-[var(--c-green)]' : 'text-[var(--c-red-soft)]'}`}>
               {exchResult}
             </p>
           )}
 
-          {/* Buttons */}
           <div className="flex gap-2">
             <button
               onClick={() => void handleExchange(true)}
-              disabled={exchLoading || gs.rub <= 0}
+              disabled={exchLoading || gs.rub < minExchange}
               className="flex-1 py-3 rounded-[10px] border-none cursor-pointer bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] font-bold text-sm disabled:opacity-60"
             >
               {exchLoading ? 'Обмен...' : 'Обменять всё'}
             </button>
             <button
               onClick={() => void handleExchange(false)}
-              disabled={exchLoading || !amount || parseFloat(amount) < minExchange}
+              disabled={exchLoading || !amount || parsed < minExchange}
               className="flex-1 py-3 rounded-[10px] border bg-transparent text-tg-hint font-bold text-sm disabled:opacity-40 cursor-pointer"
               style={{ borderColor: 'var(--surface-overlay-border)' }}
             >

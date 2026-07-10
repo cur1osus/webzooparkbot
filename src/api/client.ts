@@ -40,15 +40,37 @@ export function getHeaders(): HeadersInit {
   return { 'Content-Type': 'application/json', 'X-Init-Data': '' };
 }
 
+/**
+ * Turn a failed request into a plain-language message the player can act on
+ * (Nielsen heuristic #9). Meaningful domain messages from the server
+ * (e.g. "Недостаточно средств") are kept as-is; only technical/server/network
+ * failures get a friendly generic replacement.
+ */
+function friendlyError(status: number, serverDetail?: string): string {
+  if (status >= 500) return 'Сервер сейчас недоступен. Попробуйте через пару секунд.';
+  if (status === 429) return 'Слишком много запросов подряд. Немного подождите и повторите.';
+  const detail = serverDetail?.trim();
+  // Keep human server messages; drop raw HTTP reason phrases like "Bad Gateway".
+  if (detail && !/^[A-Z][a-z]+(\s[A-Za-z]+)*$/.test(detail)) return detail;
+  return 'Что-то пошло не так. Попробуйте ещё раз.';
+}
+
 export async function req<T>(path: string, init?: RequestInit, keepalive = false): Promise<T> {
-  const res = await fetch(`${env.apiUrl}${path}`, {
-    ...init,
-    keepalive,
-    headers: { ...getHeaders(), ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}${path}`, {
+      ...init,
+      keepalive,
+      headers: { ...getHeaders(), ...(init?.headers ?? {}) },
+    });
+  } catch {
+    // Network / offline / DNS — fetch rejects before any HTTP status exists.
+    throw new ApiError(0, 'Нет соединения с сервером. Проверьте интернет и попробуйте ещё раз.');
+  }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ApiError(res.status, (err as { detail?: string }).detail ?? res.statusText);
+    const body = await res.json().catch(() => null);
+    const serverDetail = (body as { detail?: string } | null)?.detail;
+    throw new ApiError(res.status, friendlyError(res.status, serverDetail));
   }
   return res.json() as Promise<T>;
 }

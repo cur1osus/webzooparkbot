@@ -17,11 +17,12 @@ export function CurrencyBar({ gs, showSeats = false }: { gs: GameState; showSeat
 function Chip({ color, children }: { color: string; children: React.ReactNode }) {
   return (
     <span
-      className="px-[10px] py-1 rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
+      className="px-[11px] py-[5px] rounded-full text-[13px] font-extrabold tabular-nums whitespace-nowrap shrink-0"
       style={{
-        background: `color-mix(in srgb, ${color} 10%, transparent)`,
+        background: `color-mix(in srgb, ${color} 13%, var(--tg-theme-secondary-bg-color))`,
         color,
-        border: `1px solid color-mix(in srgb, ${color} 19%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 26%, transparent)`,
+        boxShadow: `inset 0 1px 0 color-mix(in srgb, ${color} 20%, transparent)`,
       }}
     >
       {children}

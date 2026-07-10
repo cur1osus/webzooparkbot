@@ -13,11 +13,12 @@ import {
   HABITAT_INFO,
   lifeLeft,
 } from '@/data/packs';
-import type { ActiveExpedition, ExpeditionInfo, ExpeditionResult, Habitat, PackAnimal } from '@/types';
+import type { ActiveExpedition, ExpeditionInfo, ExpeditionResult, Habitat, Animal } from '@/types';
 import { formatCountdown, fmt } from '@/utils/format';
 
 function WildAnimalSummary({ habitat, result }: { habitat: Habitat; result: ExpeditionResult }) {
-  const wildHabitat = HABITAT_INFO[result.wild.habitat ?? habitat];
+  // The wild animal always comes from the expedition's own habitat.
+  const wildHabitat = HABITAT_INFO[result.habitat ?? habitat];
 
   return (
     <div className="rounded-2xl p-4 flex flex-col gap-3"
@@ -68,7 +69,7 @@ function ExpeditionAnimalCard({
   disabled,
   onToggle,
 }: {
-  animal: PackAnimal;
+  animal: Animal;
   selected?: boolean;
   disabled?: boolean;
   onToggle?: () => void;
@@ -100,7 +101,7 @@ function ExpeditionAnimalCard({
           <div className="flex items-center gap-2 flex-wrap">
             <p className="m-0 font-extrabold text-[14px]">{habitat.name}</p>
             <span className="text-[11px] font-bold px-2 py-[2px] rounded-full"
-                  style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(90,200,250,0.25)' }}>
+                  style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(var(--c-cyan-rgb),0.28)' }}>
               Сила {power}
             </span>
             {selected && (
@@ -183,7 +184,7 @@ function CurrentExpeditionCard({
                       color: expedition.status === 'finished' ? 'var(--c-green)' : 'var(--c-cyan)',
                       border: expedition.status === 'finished'
                         ? '1px solid rgba(var(--c-green-rgb),0.25)'
-                        : '1px solid rgba(90,200,250,0.25)',
+                        : '1px solid rgba(var(--c-cyan-rgb),0.28)',
                     }}>
                 {expedition.status === 'finished' ? 'Завершена' : isReadyToFinish ? 'Можно завершить' : 'В пути'}
               </span>
@@ -215,7 +216,7 @@ function CurrentExpeditionCard({
           <p className="m-0 text-[12px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>ОТРЯД</p>
           {expedition.animals.map(animal => {
             const animalHabitat = HABITAT_INFO[animal.habitat];
-            const lost = result?.killed_id === animal.id;
+            const lost = result?.killed_animal_id === animal.id;
             return (
               <div key={animal.id} className="rounded-xl px-3 py-[10px] flex items-center gap-3"
                    style={{

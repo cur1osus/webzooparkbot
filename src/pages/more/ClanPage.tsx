@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ClanListResponse, ClanMember, ClanOut, GameState } from '@/types';
 import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan, apiGetClanMembers } from '@/api';
-import { CLAN_SPECIALTIES, getClanSpecialtyLabel } from '@/utils/clan';
 import { fmt } from '@/utils/format';
 
 const CLAN_NAME_MIN_LENGTH = 1;
@@ -10,9 +9,9 @@ const CLAN_NAME_MAX_LENGTH = 20;
 
 type ClanTab = 'top' | 'members';
 
-const CLAN_TABS: { id: ClanTab; emoji: string }[] = [
-  { id: 'top',     emoji: '🏆' },
-  { id: 'members', emoji: '👥' },
+const CLAN_TABS: { id: ClanTab; emoji: string; label: string }[] = [
+  { id: 'top',     emoji: '🏆', label: 'Рейтинг' },
+  { id: 'members', emoji: '👥', label: 'Участники' },
 ];
 
 function formatMembers(count: number): string {
@@ -33,7 +32,6 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const [joiningClanId, setJoiningClanId] = useState<number | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newSpec, setNewSpec] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -55,9 +53,10 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const queryError = error instanceof Error ? error.message : null;
   const openClans = data?.clans ?? [];
   const trimmedName = newName.trim();
-  const canAffordCreate = gs.usd >= 1;
+  // Mirrors `CLAN_CREATE_COST_USD`.
+  const CLAN_CREATE_COST_USD = 100;
+  const canAffordCreate = gs.usd >= CLAN_CREATE_COST_USD;
   const canCreate = trimmedName.length >= CLAN_NAME_MIN_LENGTH && trimmedName.length <= CLAN_NAME_MAX_LENGTH && canAffordCreate;
-  const mySpecialty = gs.clan?.specialty ? CLAN_SPECIALTIES.find((s) => s.id === gs.clan?.specialty) : null;
   const isOwner = gs.clan?.role === 'owner';
 
   const clearMsgs = () => { setSuccessMsg(null); setErrorMsg(null); };
@@ -67,12 +66,11 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
     setCreating(true);
     clearMsgs();
     try {
-      const res = await apiCreateClan(trimmedName, newSpec ?? undefined);
+      const res = await apiCreateClan(trimmedName);
       if (res.ok) {
         setSuccessMsg(res.message);
         setShowCreate(false);
         setNewName('');
-        setNewSpec(null);
         onRefresh();
         void refetch();
       } else {
@@ -180,9 +178,6 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                       </span>
                     </div>
                     <p className="m-0 text-[20px] leading-tight font-extrabold truncate">«{gs.clan.name}»</p>
-                    <p className="mt-[3px] mb-0 text-[12px] text-tg-hint">
-                      {mySpecialty?.label ?? getClanSpecialtyLabel(gs.clan.specialty) ?? 'Без специализации'}
-                    </p>
                   </div>
                 </div>
 
@@ -197,17 +192,10 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                   </div>
                 </div>
 
-                {mySpecialty?.desc && (
-                  <div className="surface-subtle rounded-[14px] px-3 py-[10px] mb-3">
-                    <p className="m-0 text-[11px] text-tg-hint">Бонус специализации</p>
-                    <p className="m-0 mt-[2px] text-[13px] font-bold">{mySpecialty.desc}</p>
-                  </div>
-                )}
-
                 {confirmLeave && (
                   <div className="rounded-[14px] px-3 py-[10px] mb-3 border bg-[rgba(var(--c-red-rgb),0.08)]" style={{ borderColor: 'rgba(var(--c-red-rgb),0.24)' }}>
                     <p className="m-0 text-[13px] text-[var(--c-red-soft)]">
-                      {isOwner ? 'Выход владельца удалит клан и исключит участников.' : 'Ты потеряешь доступ к бонусам клана.'}
+                      {isOwner ? 'Выход владельца удалит клан и исключит участников.' : 'Ты покинешь клан.'}
                     </p>
                   </div>
                 )}
@@ -246,14 +234,15 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
-                  className="flex-1 flex items-center justify-center py-[10px] rounded-xl border-none transition-all duration-200"
+                  className="flex-1 flex flex-col items-center justify-center gap-[3px] py-[8px] rounded-xl border-none transition-all duration-200"
                   style={{
                     background: isActive ? 'color-mix(in srgb, var(--tg-theme-button-color) 15%, transparent)' : 'transparent',
                     color: isActive ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-hint-color)',
                     boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
                   }}
                 >
-                  <span className="text-[18px] leading-none">{t.emoji}</span>
+                  <span className="text-[17px] leading-none">{t.emoji}</span>
+                  <span className={`text-[10px] leading-none ${isActive ? 'font-bold' : 'font-semibold'}`}>{t.label}</span>
                 </button>
               );
             })}
@@ -269,11 +258,10 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                 </div>
               )}
               {openClans.map((clan: ClanOut, idx: number) => {
-                const specialtyLabel = getClanSpecialtyLabel(clan.specialty);
                 const isMe = gs.clan?.name === clan.name;
                 return (
                   <div
-                    key={clan.idpk}
+                    key={clan.id}
                     className="card"
                     style={{
                       border: isMe ? '1px solid rgba(var(--c-purple-rgb),0.4)' : '1px solid var(--surface-overlay-border)',
@@ -299,9 +287,6 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                         <p className="mt-[3px] mb-0 text-xs text-tg-hint truncate">
                           👑 {clan.owner_nickname} · {formatMembers(clan.member_count)}
                         </p>
-                        {specialtyLabel && (
-                          <p className="mt-[2px] mb-0 text-[11px] text-tg-hint truncate">{specialtyLabel}</p>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -447,27 +432,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                 <span className="text-tg-hint">{trimmedName.length}/{CLAN_NAME_MAX_LENGTH}</span>
               </div>
 
-              <p className="m-0 mb-[8px] text-[13px] font-extrabold">Специализация</p>
-              <div className="grid grid-cols-1 gap-[7px] mb-[12px]">
-                {CLAN_SPECIALTIES.map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => setNewSpec(prev => prev === s.id ? null : s.id)}
-                    aria-pressed={newSpec === s.id}
-                    className="flex items-center gap-3 px-3 py-[11px] rounded-[14px] border cursor-pointer text-left"
-                    style={{
-                      background: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.15)' : 'var(--surface-subtle)',
-                      borderColor: newSpec === s.id ? 'rgba(var(--c-blue-rgb),0.5)' : 'var(--surface-overlay-border)',
-                    }}
-                  >
-                    <div className="flex-1">
-                      <p className="m-0 text-[13px] font-extrabold">{s.label}</p>
-                      <p className="m-0 text-[11px] text-tg-hint">{s.desc}</p>
-                    </div>
-                    <span className={newSpec === s.id ? 'text-[var(--c-blue)] font-extrabold' : 'text-tg-hint'}>{newSpec === s.id ? '✓' : '+'}</span>
-                  </button>
-                ))}
-              </div>
+              <p className="m-0 mb-[12px] text-[12px] text-tg-hint">Создание клана стоит ${CLAN_CREATE_COST_USD}.</p>
               <button
                 onClick={() => void handleCreate()}
                 disabled={creating || !canCreate}
@@ -486,10 +451,9 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
               </div>
               <div className="flex flex-col gap-2 stagger-children">
                 {openClans.map((clan: ClanOut) => {
-                  const specialtyLabel = getClanSpecialtyLabel(clan.specialty);
-                  const isJoining = joiningClanId === clan.idpk;
+                  const isJoining = joiningClanId === clan.id;
                   return (
-                    <div key={clan.idpk} className="card card-pressable">
+                    <div key={clan.id} className="card card-pressable">
                       <div className="flex gap-3 items-start">
                         <div className="w-11 h-11 rounded-[14px] grid place-items-center text-[22px] shrink-0" style={{ background: 'rgba(var(--c-purple-rgb),0.13)' }}>
                           🏰
@@ -502,12 +466,9 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                           <p className="mt-[3px] mb-0 text-xs text-tg-hint truncate">
                             👑 {clan.owner_nickname} · {formatMembers(clan.member_count)}
                           </p>
-                          <p className="mt-[3px] mb-0 text-[11px] text-tg-hint truncate">
-                            {specialtyLabel ?? 'Без специализации'}
-                          </p>
                         </div>
                         <button
-                          onClick={() => void handleJoin(clan.idpk)}
+                          onClick={() => void handleJoin(clan.id)}
                           disabled={joiningClanId !== null}
                           className="px-3 py-[8px] rounded-xl border-none cursor-pointer bg-[rgba(var(--c-blue-rgb),0.16)] text-[var(--c-blue)] font-extrabold text-[13px] shrink-0 disabled:opacity-60"
                         >

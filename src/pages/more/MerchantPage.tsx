@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { GameState, MerchantAnimal } from '@/types';
+import type { GameState, MerchantOffer } from '@/types';
 import { apiGetMerchant, apiBuyFromMerchant } from '@/api';
 import { fmt } from '@/utils/format';
-import { ANIMALS, getAnimalByInfoId } from '@/data/animals';
 import { geneLabel, HABITAT_INFO } from '@/data/packs';
 
 export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }) {
@@ -15,18 +14,14 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
     staleTime: 30_000,
   });
 
-  const handleBuy = async (slot: 1 | 2 | 3) => {
+  const handleBuy = async (slot: number) => {
     setBuying(slot);
     setMsg(null);
     try {
       const res = await apiBuyFromMerchant(slot);
-      if (res.ok) {
-        setMsg('Куплено!');
-        onBuy();
-        void refetch();
-      } else {
-        setMsg(res.message ?? 'Ошибка');
-      }
+      setMsg(`Куплено за ₽${fmt(res.price_paid)}`);
+      onBuy();
+      void refetch();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Ошибка покупки');
     } finally {
@@ -59,30 +54,33 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
             Обновится: {new Date(data.refreshes_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
           </p>
 
-          {data.animals.map((offer: MerchantAnimal) => {
-            const def = getAnimalByInfoId(offer.animal_info_id) ?? ANIMALS.find(a => a.id === offer.animal_id);
+          {data.animals.map((offer: MerchantOffer) => {
             const habitat = HABITAT_INFO[offer.habitat];
             const affordable = gs.rub >= offer.final_price && !offer.bought;
             return (
               <div key={offer.slot} className="card">
                 <div className="flex items-center gap-3 mb-[10px]">
-                  <span className="text-[36px] shrink-0">{def?.emoji ?? '🐾'}</span>
+                  <span className="text-[36px] shrink-0">{offer.species_emoji}</span>
                   <div className="flex-1">
-                    <p className="m-0 font-bold text-sm">{def?.name ?? offer.animal_id}</p>
+                    <p className="m-0 font-bold text-sm">{offer.species_name}</p>
                     <p className="mt-[2px] mb-0 text-xs text-tg-hint">
                       {habitat.emoji} {habitat.name} · разм: {geneLabel('reproduction', offer.reproduction)}
                     </p>
                   </div>
-                  <div className="rounded-lg px-[10px] py-1 font-extrabold text-[15px]"
-                       style={{ background: offer.bought ? 'var(--surface-subtle)' : 'rgba(var(--c-green-rgb),0.15)', color: offer.bought ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
-                    {offer.bought ? '✓' : `-${offer.discount_pct}%`}
-                  </div>
+                  {(offer.bought || offer.discount_pct > 0) && (
+                    <div className="rounded-lg px-[10px] py-1 font-extrabold text-[15px]"
+                         style={{ background: offer.bought ? 'var(--surface-subtle)' : 'rgba(var(--c-green-rgb),0.15)', color: offer.bought ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
+                      {offer.bought ? '✓' : `-${offer.discount_pct}%`}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xs text-tg-hint line-through">₽ {fmt(offer.original_price)}</span>
-                    <span className="ml-2 text-[15px] font-extrabold">₽ {fmt(offer.final_price)}</span>
+                    {offer.discount_pct > 0 && (
+                      <span className="text-xs text-tg-hint line-through">₽ {fmt(offer.list_price)}</span>
+                    )}
+                    <span className={`${offer.discount_pct > 0 ? 'ml-2 ' : ''}text-[15px] font-extrabold`}>₽ {fmt(offer.final_price)}</span>
                   </div>
                   <button
                     onClick={() => void handleBuy(offer.slot)}

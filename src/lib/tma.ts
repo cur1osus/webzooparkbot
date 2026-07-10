@@ -75,9 +75,12 @@ function openBrowserFallback(url: string): void {
 }
 
 function mountThemeParams(): void {
+  // The game commits to its own "safari lodge at dusk" palette (defined in
+  // index.css) and deliberately does NOT inherit the user's Telegram theme, so
+  // its identity is consistent for every player. We mount themeParams (some SDK
+  // features expect it) but never bind its CSS vars over ours.
   if (!themeParams.mount.isAvailable()) return;
   themeParams.mount();
-  themeParams.bindCssVars();
 }
 
 async function initializeTma(): Promise<void> {
@@ -86,6 +89,11 @@ async function initializeTma(): Promise<void> {
     mountThemeParams();
     miniApp.mount();
     miniApp.bindCssVars();
+    // Match the native Telegram header to our dusk ground so there is no seam at
+    // the top edge. Progressive enhancement — never block init.
+    try {
+      if (miniApp.setHeaderColor.isAvailable()) miniApp.setHeaderColor('#14140e');
+    } catch { /* ignore — cosmetic only */ }
     sdkInitialized = true;
 
     if (readyRequested) {

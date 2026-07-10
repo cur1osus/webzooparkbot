@@ -29,7 +29,7 @@ export function ShopPage({
     <div className="page-content-safe">
       {/* Header */}
       <div className="px-[14px] pt-[14px]">
-        <p className="m-0 mb-[10px] text-[22px] font-extrabold">🛒 Зоомаркет</p>
+        <p className="font-display m-0 mb-[10px] text-[20px]">🛒 Зоомаркет</p>
 
         {/* Balance + seats */}
         <div className="flex gap-[6px] mb-[10px] overflow-x-auto">
@@ -44,7 +44,7 @@ export function ShopPage({
             </span>
           ))}
           <span className="px-[10px] py-1 rounded-[20px] text-[13px] font-bold whitespace-nowrap shrink-0"
-            style={{ background: 'rgba(143,149,171,0.15)', color: 'var(--tg-theme-hint-color)', border: '1px solid rgba(143,149,171,0.2)' }}>
+            style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 13%, transparent)', color: 'var(--tg-theme-hint-color)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 20%, transparent)' }}>
             🌍 {fmt(gs.localities_count)} местн.
           </span>
         </div>
@@ -61,14 +61,15 @@ export function ShopPage({
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="flex-1 flex items-center justify-center py-[10px] rounded-xl border-none transition-all duration-200"
+              className="flex-1 flex flex-col items-center justify-center gap-[3px] py-[8px] rounded-xl border-none transition-all duration-200"
               style={{
                 background: isActive ? 'color-mix(in srgb, var(--tg-theme-button-color) 15%, transparent)' : 'transparent',
                 color: isActive ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-hint-color)',
                 boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
               }}
             >
-              <span className="text-[18px]">{t.emoji}</span>
+              <span className="text-[17px] leading-none">{t.emoji}</span>
+              <span className={`text-[10px] leading-none ${isActive ? 'font-bold' : 'font-semibold'}`}>{t.label}</span>
             </button>
           );
         })}

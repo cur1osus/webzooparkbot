@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { GameState, Habitat, Locality, LocalitiesInfo, PackAnimal } from '@/types';
+import { createPortal } from 'react-dom';
+import type { Animal, GameState, Habitat, Locality, LocalitiesInfo } from '@/types';
 import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '@/api';
 import { fmt } from '@/utils/format';
 
@@ -15,7 +16,7 @@ const ALL_HABITATS: Habitat[] = ['desert', 'mountains', 'forest', 'fields', 'ant
 
 // ─── Animal chip inside a locality card ───────────────────────────────────────
 
-function AnimalChip({ animal, onRemove }: { animal: PackAnimal; onRemove: () => void }) {
+function AnimalChip({ animal, onRemove }: { animal: Animal; onRemove: () => void }) {
   const hab = HABITAT_INFO[animal.habitat];
   return (
     <div
@@ -123,7 +124,7 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
 // ─── Animal picker bottom sheet ────────────────────────────────────────────────
 
 function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
-  animals: PackAnimal[];
+  animals: Animal[];
   localityHabitat: Habitat;
   onPick: (id: number) => void;
   onClose: () => void;
@@ -132,7 +133,7 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
     (a, b) => (b.habitat === localityHabitat ? 1 : 0) - (a.habitat === localityHabitat ? 1 : 0)
   );
 
-  return (
+  return createPortal(
     <div
       className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center"
       onClick={onClose}
@@ -145,7 +146,8 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
           <p className="m-0 font-extrabold text-[15px]">Выбери животное</p>
           <button
             onClick={onClose}
-            className="border-none bg-transparent text-[18px] cursor-pointer p-0"
+            aria-label="Закрыть"
+            className="tap-target -mr-2 border-none bg-transparent text-[18px] cursor-pointer"
             style={{ color: 'var(--tg-theme-hint-color)' }}
           >
             ✕
@@ -193,7 +195,8 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
           );
         })}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -303,7 +306,7 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
               <p className="m-0 mb-2 font-bold text-[13px]">
                 Без местности
                 <span className="ml-2 font-normal text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {info.unassigned.length} шт. — дохода нет
+                  {info.unassigned.length} шт. — без бонуса ×1.5
                 </span>
               </p>
               <div

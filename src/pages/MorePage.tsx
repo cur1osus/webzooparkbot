@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import type { GameState, TransferOut } from '@/types';
 import { BankPage } from './BankPage';
@@ -8,7 +9,7 @@ import { ClanPage } from './more/ClanPage';
 import { TopPage } from './more/TopPage';
 import { ReferralPage } from './more/ReferralPage';
 import { DonatePage } from './more/DonatePage';
-import { apiConfig, apiCreateTransfer, apiGetMyTransfers } from '@/api';
+import { apiConfig, apiCreateTransfer, apiGetBonus, apiGetMyTransfers } from '@/api';
 import { fmt, formatDateShort } from '@/utils/format';
 import { copyTmaText, inTma } from '@/lib/tma';
 
@@ -31,7 +32,7 @@ const MENU_GROUPS = [
   {
     label: 'Сообщество',
     items: [
-      { id: 'clan',     emoji: '🏰',  title: 'Клан',               desc: 'Создай клан и получи бонусы' },
+      { id: 'clan',     emoji: '🏰',  title: 'Клан',               desc: 'Создай клан или вступи в чужой' },
       { id: 'top',      emoji: '🏆',  title: 'Таблица лидеров',    desc: 'Топ-20 по доходу' },
       { id: 'referral', emoji: '🤝',  title: 'Рефералы',           desc: 'Приглашай и зарабатывай' },
     ],
@@ -79,6 +80,9 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
 export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [section, setSection] = useState<Section>(null);
   const [botUsername, setBotUsername] = useState('ZooParkBot');
+  // Whether today's bonus is still unclaimed is server state, not something the game
+  // state carries around: `gs.bonus` was a column that stopped being the source of truth.
+  const { data: bonusOffer = null } = useQuery({ queryKey: ['bonus'], queryFn: apiGetBonus });
 
   useEffect(() => {
     apiConfig()
@@ -99,7 +103,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
   if (section === 'bonus') return (
     <MoreSectionLayer title="🎁 Ежедневный бонус" onBack={back}>
-      <BonusPage gs={gs} onClaim={onRefresh} />
+      <BonusPage onClaim={onRefresh} />
     </MoreSectionLayer>
   );
 
@@ -147,7 +151,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
   return (
     <div className="page-content-safe p-[14px] flex flex-col gap-[14px]">
-      <p className="m-0 text-[20px] font-extrabold">☰ Ещё</p>
+      <p className="font-display m-0 text-[18px]">☰ Ещё</p>
 
       {MENU_GROUPS.map(group => (
         <div key={group.label}>
@@ -163,7 +167,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="m-0 text-[15px] font-semibold">{item.title}</p>
-                    {item.id === 'bonus' && gs.bonus === 1 && (
+                    {item.id === 'bonus' && bonusOffer && !bonusOffer.claimed && (
                       <span className="text-[10px] font-bold bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] px-[6px] py-[2px] rounded-full">Доступен</span>
                     )}
                     {item.id === 'clan' && gs.clan && (
@@ -400,9 +404,9 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
           <p className="m-0 text-[11px] font-semibold text-tg-hint tracking-[0.8px] uppercase">Мои раздачи</p>
           {transfers.map(t => {
             const pct = t.max_claims > 0 ? (t.claims / t.max_claims) * 100 : 0;
-            const isCopied = copiedKey === t.key;
+            const isCopied = copiedKey === t.code;
             return (
-              <div key={t.key} className="card" style={{ opacity: t.active ? 1 : 0.6 }}>
+              <div key={t.code} className="card" style={{ opacity: t.active ? 1 : 0.6 }}>
                 {/* Заголовок */}
                 <div className="flex items-center justify-between mb-[10px]">
                   <span className="text-[17px] font-bold">₽ {fmt(t.total_rub)}</span>
@@ -445,7 +449,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
 
                 {t.active && (
                   <button
-                    onClick={() => copyLink(t.key)}
+                    onClick={() => copyLink(t.code)}
                     className="w-full py-[9px] rounded-[10px] cursor-pointer font-semibold text-[13px] transition-all"
                     style={{
                       background: 'transparent',
@@ -471,8 +475,8 @@ function WikiPage() {
   return (
     <div className="p-[14px] flex flex-col gap-[10px]">
       {[
-        { title: '💰 Как зарабатывать', body: 'Покупай животных в Зоомаркете → размещай в вольерах → получай доход каждую минуту. Чем больше видов — тем выше бонус к доходу.' },
-        { title: '🏗️ Вольеры', body: 'Вольеры — вместилища для животных. Без вольеров нет мест для животных. Покупай вольеры разного размера — от малого до большого.' },
+        { title: '💰 Как зарабатывать', body: 'Открывай паки и покупай животных у торговца → размещай их в местности с той же средой обитания, это даёт ×1.5 к доходу. Чем разнообразнее зоопарк, тем выше бонус.' },
+        { title: '🌍 Местности', body: 'Первая местность бесплатна и случайна, каждая следующая дороже в 1.5 раза. Животное в своей среде обитания приносит в полтора раза больше. Местность также открывает экспедиции в эту зону.' },
         { title: '⚒️ Кузница', body: 'Предметы из кузницы дают бонусы: больше ходов в играх, скидки в банке, ускорение дохода и другие эффекты.' },
         { title: '🎮 Игры', body: 'Играй соло или против игроков. Ставки в рублях, выигрыш удваивает ставку. В коктейль-игре угадывай рецепт за 10 попыток.' },
         { title: '🏰 Кланы', body: 'Вступи в клан для получения клановых бонусов. Клан может иметь специализацию, которая даёт дополнительные преимущества.' },

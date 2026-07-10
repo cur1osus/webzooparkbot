@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
-import type { GameState, MpGame } from '@/types';
+import type { Duel, GameState } from '@/types';
 import { GAMES } from '@/data/games';
 import {
   apiConfig,
-  apiCreateMpGame,
-  apiGetOpenGames,
+  apiCreateDuel,
+  apiGetOpenDuels,
   apiGetSoloStats,
-  apiJoinMpGame,
+  apiJoinDuel,
 } from '@/api';
 import { CocktailTab } from '@/features/games/CocktailTab';
 import { SoloGameFlow } from '@/features/games/SoloGameFlow';
@@ -44,11 +44,11 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const [betInput, setBetInput] = useState('100');
   const [message, setMessage] = useState<string | null>(null);
   const [screen, setScreen] = useState<MultiScreen>('list');
-  const [createdGame, setCreatedGame] = useState<MpGame | null>(null);
+  const [createdGame, setCreatedGame] = useState<Duel | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const { data: openGames, error: openGamesError, isLoading, refetch: refetchGames } = useQuery({
     queryKey: ['mp-games', 'open'],
-    queryFn: apiGetOpenGames,
+    queryFn: apiGetOpenDuels,
     staleTime: 10_000,
   });
   const { data: config } = useQuery({
@@ -63,7 +63,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const bet = parseRubInput(betInput);
   const betTooHigh = bet > gs.rub;
   const canCreate = bet > 0 && !betTooHigh;
-  const createdGameDef = createdGame ? getGameDef(createdGame.game_type) : null;
+  const createdGameDef = createdGame ? getGameDef(createdGame.kind) : null;
   const createdGameLink = createdGame ? `https://t.me/${botUsername}?startapp=mpgame_${createdGame.id}` : '';
   const invitedGameAvailable = inviteGameId ? games.some((game) => game.id === inviteGameId) : false;
   const visibleGames = inviteGameId
@@ -86,7 +86,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     setCreatedGame(null);
     setCopiedInvite(false);
     try {
-      const result = await apiCreateMpGame(selectedGame, bet);
+      const result = await apiCreateDuel(selectedGame, bet);
       setCreatedGame(result.game);
       setScreen('share');
       setMessage('Игра создана. Ждём второго игрока.');
@@ -114,8 +114,8 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
 
   const shareInviteLink = () => {
     if (!createdGame || !createdGameLink) return;
-    const title = createdGameDef?.name ?? createdGame.game_type;
-    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ₽${fmt(createdGame.bet_rub)}`);
+    const title = createdGameDef?.name ?? createdGame.kind;
+    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ₽${fmt(createdGame.stake_rub)}`);
   };
 
   const joinGame = async (gameId: number) => {
@@ -124,7 +124,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     setMessage(null);
     setActionError(null);
     try {
-      await apiJoinMpGame(gameId);
+      await apiJoinDuel(gameId);
       setMessage('Ты присоединился к игре.');
       onRefresh();
       void refetchGames();
@@ -160,7 +160,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
           <div>
             <p className="m-0 font-extrabold text-[18px]">Игра создана</p>
             <p className="m-0 mt-1 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {createdGameDef?.name ?? createdGame.game_type} · ставка ₽{fmt(createdGame.bet_rub)}
+              {createdGameDef?.name ?? createdGame.kind} · ставка ₽{fmt(createdGame.stake_rub)}
             </p>
           </div>
           <div className="surface-subtle w-full px-3 py-[10px] rounded-xl text-[12px] break-all select-all text-left" style={{ color: 'var(--tg-theme-hint-color)' }}>
@@ -303,7 +303,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
       )}
 
       {visibleGames.map(g => {
-        const gameDef = getGameDef(g.game_type);
+        const gameDef = getGameDef(g.kind);
         const invited = inviteGameId === g.id;
         return (
         <div
@@ -319,7 +319,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">
-              <p className="m-0 font-bold text-sm truncate">{gameDef ? `${gameDef.emoji} ${gameDef.name}` : g.game_type}</p>
+              <p className="m-0 font-bold text-sm truncate">{gameDef ? `${gameDef.emoji} ${gameDef.name}` : g.kind}</p>
               {invited && (
                 <span className="text-[10px] font-bold px-2 py-[2px] rounded-full shrink-0" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
                   По ссылке
@@ -327,7 +327,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
               )}
             </div>
             <p className="mt-[2px] mb-0 text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {g.creator_nickname} · ставка ₽{fmt(g.bet_rub)}
+              {g.creator_nickname} · ставка ₽{fmt(g.stake_rub)}
             </p>
           </div>
           <button
@@ -508,7 +508,7 @@ export function GamesPage({ gs, onRefresh, initialTab = 'solo', inviteGameId }: 
             >
               🎮
             </div>
-            <p className="m-0 text-[22px] font-extrabold tracking-tight">Игры</p>
+            <p className="font-display m-0 text-[20px] tracking-tight">Игры</p>
           </div>
           <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)', paddingLeft: 52 }}>
             Играй против ИИ или соревнуйся с друзьями!

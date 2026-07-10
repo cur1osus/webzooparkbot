@@ -1,4 +1,5 @@
-/* Nunito font — excellent Cyrillic support */
+/* Nunito — single type family across the whole app, excellent Cyrillic. One font,
+   hierarchy built from weight and size only (no clashing display face). */
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
 
 @import "tailwindcss";
@@ -17,22 +18,29 @@
 :root {
   color-scheme: dark;
   font-family: 'Nunito', 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Emphasis for big numbers = same family, just tighter. Not a second typeface. */
+  --font-display: 'Nunito', system-ui, sans-serif;
 
-  /* Telegram theme defaults (overridden in TMA) */
-  --tg-theme-bg-color: #0f111a;
-  --tg-theme-secondary-bg-color: #1a1d2b;
-  --tg-theme-text-color: #ffffff;
-  --tg-theme-hint-color: #8f95ab;
-  --tg-theme-button-color: #0a84ff;
-  --tg-theme-button-text-color: #ffffff;
-  --tg-theme-link-color: #5ac8fa;
-  --tg-theme-destructive-text-color: #ff6b63;
-  --tg-theme-subtitle-text-color: #b9bfd3;
-  --tg-theme-section-bg-color: #1a1d2b;
-  --tg-theme-section-header-text-color: #8f95ab;
-  --tg-theme-section-separator-color: #2a2f42;
-  --tg-theme-header-bg-color: #0f111a;
-  --tg-theme-bottom-bar-bg-color: #1a1d2b;
+  /*
+   * "Safari lodge at dusk" palette. The game owns its own identity and no longer
+   * inherits the user's Telegram theme (themeParams.bindCssVars is not called),
+   * so these --tg-theme-* values ARE the palette — warm canvas-and-brass darks,
+   * a setting sun, and foliage. Retuning them re-skins every inline usage at once.
+   */
+  --tg-theme-bg-color: #141414;            /* ground — neutral charcoal, whisper warm */
+  --tg-theme-secondary-bg-color: #1e1e1d;  /* surface — neutral raised charcoal       */
+  --tg-theme-text-color: #f1f0ed;          /* ink — near-white, minimal cream         */
+  --tg-theme-hint-color: #979490;          /* dim ink — neutral warm gray             */
+  --tg-theme-button-color: #f0a93c;        /* gold accent — the ONLY warm-loud colour */
+  --tg-theme-button-text-color: #fff8ec;   /* warm white for colored chips & badges   */
+  --tg-theme-link-color: #e0b24a;
+  --tg-theme-destructive-text-color: #ef6a5f;
+  --tg-theme-subtitle-text-color: #bdbab4;
+  --tg-theme-section-bg-color: #1e1e1d;
+  --tg-theme-section-header-text-color: #979490;
+  --tg-theme-section-separator-color: #2e2e2b;
+  --tg-theme-header-bg-color: #141414;
+  --tg-theme-bottom-bar-bg-color: #191918;
 
   /* Telegram viewport vars (set by bindCssVars) */
   --tg-viewport-height: 100dvh;
@@ -57,38 +65,45 @@
   --app-tabbar-base-height: 68px;
   --app-bottom-offset: calc(var(--app-tabbar-base-height) + var(--safe-bottom));
 
-  /* Game accent palette */
-  --c-green:    #34c759;
-  --c-gold:     #ffd60a;
-  --c-purple:   #bf5af2;
-  --c-blue:     #0a84ff;
-  --c-orange:   #ff6b3d;
-  --c-red:      #ff3b30;
-  --c-red-soft: #ff6b63;
-  --c-cyan:     #5ac8fa;
-  --c-teal:     #30d5c8;
-  --c-amber:    #ff9f0a;
+  /* Game accent palette — retuned to the dusk-lodge world, semantics preserved.
+     Every hue is warmed and slightly desaturated so accents feel lit by the
+     setting sun rather than a UI neon strip. */
+  --c-green:    #63c268;  /* foliage — income & growth (rub)            */
+  --c-gold:     #f3b53f;  /* the low sun — money ($) & premium surfaces */
+  --c-purple:   #c072d8;  /* orchid plumage — paw coins / premium       */
+  --c-blue:     #4f97d6;  /* dusk sky — info / neutral actions          */
+  --c-orange:   #ec7f4a;  /* terracotta — heat, expense, upkeep         */
+  --c-red:      #e8564c;  /* danger / sickness                          */
+  --c-red-soft: #f0837b;
+  --c-cyan:     #56bfdc;  /* lagoon water                               */
+  --c-teal:     #3fc4b4;  /* bioluminescence — rare                     */
+  --c-amber:    #eaa23a;  /* lantern amber — secondary warm             */
 
   /* RGB channels for rgba() opacity usage */
-  --c-green-rgb:  52, 199, 89;
-  --c-gold-rgb:   255, 214, 10;
-  --c-purple-rgb: 191, 90, 242;
-  --c-blue-rgb:   10, 132, 255;
-  --c-orange-rgb: 255, 107, 61;
-  --c-red-rgb:    255, 59, 48;
-  --c-teal-rgb:   48, 213, 200;
+  --c-green-rgb:  99, 194, 104;
+  --c-gold-rgb:   243, 181, 63;
+  --c-purple-rgb: 192, 114, 216;
+  --c-blue-rgb:   79, 151, 214;
+  --c-orange-rgb: 236, 127, 74;
+  --c-red-rgb:    232, 86, 76;
+  --c-teal-rgb:   63, 196, 180;
+  --c-cyan-rgb:   86, 191, 220;
+  --c-amber-rgb:  234, 162, 58;
 
-  /* Card system */
+  /* Card system — cards read as enameled brass collector badges */
   --card-radius: 16px;
   --card-bg: var(--tg-theme-secondary-bg-color);
-  --card-border: color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent);
+  --card-border: color-mix(in srgb, var(--tg-theme-text-color) 9%, transparent);
+  --card-highlight: color-mix(in srgb, var(--tg-theme-text-color) 5%, transparent);
   --card-surface: none;
   --surface-subtle: color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent);
   --surface-subtle-strong: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
   --surface-overlay: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 82%, transparent);
-  --surface-overlay-border: color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent);
-  --backdrop-overlay: color-mix(in srgb, var(--tg-theme-bg-color) 68%, transparent);
-  --sheet-surface: color-mix(in srgb, var(--tg-theme-bg-color) 92%, var(--tg-theme-secondary-bg-color));
+  --surface-overlay-border: color-mix(in srgb, var(--tg-theme-text-color) 10%, transparent);
+  --backdrop-overlay: color-mix(in srgb, #000 62%, transparent);
+  /* Sheets/popovers must read as raised panels — clearly lighter than the ground
+     so they don't melt into the dimmed backdrop. */
+  --sheet-surface: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 78%, #3a3520);
   --input-bg: color-mix(in srgb, var(--tg-theme-bg-color) 78%, var(--tg-theme-secondary-bg-color));
   --input-border: color-mix(in srgb, var(--tg-theme-hint-color) 20%, transparent);
   --input-border-focus: color-mix(in srgb, var(--tg-theme-button-color) 58%, transparent);
@@ -161,12 +176,13 @@ button, input, select, textarea { font: inherit; }
   border-radius: var(--card-radius);
   padding: 12px 14px;
   border: 1px solid var(--card-border);
+  box-shadow: inset 0 1px 0 var(--card-highlight);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s var(--spring-smooth);
   will-change: transform;
 }
 
 .card:hover {
-  border-color: color-mix(in srgb, var(--tg-theme-hint-color) 22%, transparent);
+  border-color: color-mix(in srgb, var(--tg-theme-text-color) 15%, transparent);
 }
 
 .card-pressable {
@@ -186,20 +202,20 @@ button, input, select, textarea { font: inherit; }
 
 /* ─── Rarity card variants ──────────────────────────────────────────────────── */
 .card-rare {
-  border-color: rgba(52,199,89,0.28) !important;
-  box-shadow: 0 0 16px rgba(52,199,89,0.07), inset 0 1px 0 rgba(52,199,89,0.06);
+  border-color: rgba(var(--c-green-rgb),0.30) !important;
+  box-shadow: 0 0 16px rgba(var(--c-green-rgb),0.08), inset 0 1px 0 rgba(var(--c-green-rgb),0.07);
 }
 .card-epic {
-  border-color: rgba(191,90,242,0.32) !important;
-  box-shadow: 0 0 16px rgba(191,90,242,0.09), inset 0 1px 0 rgba(191,90,242,0.07);
+  border-color: rgba(var(--c-purple-rgb),0.34) !important;
+  box-shadow: 0 0 16px rgba(var(--c-purple-rgb),0.10), inset 0 1px 0 rgba(var(--c-purple-rgb),0.08);
 }
 .card-mythic {
-  border-color: rgba(255,107,61,0.35) !important;
-  box-shadow: 0 0 18px rgba(255,107,61,0.1), inset 0 1px 0 rgba(255,107,61,0.08);
+  border-color: rgba(var(--c-orange-rgb),0.36) !important;
+  box-shadow: 0 0 18px rgba(var(--c-orange-rgb),0.11), inset 0 1px 0 rgba(var(--c-orange-rgb),0.09);
 }
 .card-legendary {
-  border-color: rgba(255,214,10,0.38) !important;
-  box-shadow: 0 0 22px rgba(255,214,10,0.13), inset 0 1px 0 rgba(255,214,10,0.1);
+  border-color: rgba(var(--c-gold-rgb),0.42) !important;
+  box-shadow: 0 0 22px rgba(var(--c-gold-rgb),0.15), inset 0 1px 0 rgba(var(--c-gold-rgb),0.11);
 }
 
 /* ─── Glass morphism ────────────────────────────────────────────────────────── */
@@ -226,6 +242,37 @@ button:active:not(:disabled) {
   transform: scale(0.96) translateY(0);
 }
 
+/* ─── Accessibility: keyboard focus (visible, on-brand) ─────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--tg-theme-button-color);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Pointer users don't need the ring; keyboard/switch users do. */
+:focus:not(:focus-visible) { outline: none; }
+
+/* Any element acting as a tap target gets a comfortable min size (Fitts's law). */
+.tap-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+}
+
+/* ─── Accessibility: respect reduced-motion (comfort, vestibular safety) ─────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Keep hover/press position changes off so nothing jumps */
+  button:hover:not(:disabled),
+  .card-pressable:hover { transform: none !important; }
+  .income-glow { animation: none !important; }
+}
+
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -236,12 +283,22 @@ button:disabled {
   background: linear-gradient(
     135deg,
     color-mix(in srgb, var(--tg-theme-button-color) 92%, white) 0%,
-    color-mix(in srgb, var(--tg-theme-button-color) 76%, black) 100%
+    color-mix(in srgb, var(--tg-theme-button-color) 82%, #7a4a12) 100%
   );
   border: none;
-  color: var(--tg-theme-button-text-color);
-  font-weight: 700;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--tg-theme-button-color) 28%, transparent);
+  /* Dark ink on the gold face — reads as engraving on brass, and passes contrast
+     where warm-white would fail on a light accent. */
+  color: #241c08;
+  font-weight: 800;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--tg-theme-button-color) 30%, transparent);
+}
+
+/* Number emphasis — same Nunito family, heavier and tighter for big figures */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -267,22 +324,32 @@ button:disabled {
 .sheet-panel {
   background: var(--sheet-surface);
   border: 1px solid var(--surface-overlay-border);
+  border-top: 1px solid color-mix(in srgb, var(--tg-theme-text-color) 14%, transparent);
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.55), inset 0 1px 0 color-mix(in srgb, var(--tg-theme-text-color) 8%, transparent);
+  /* Clear the home indicator / nav so the last row never jams against the edge */
+  padding-bottom: calc(16px + var(--safe-bottom));
+  animation: sheet-up 0.32s var(--spring-smooth) both;
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: none; }
 }
 
 /* Glow buttons */
 .btn-glow-green:hover:not(:disabled) {
-  box-shadow: 0 0 20px rgba(52,199,89,0.4);
+  box-shadow: 0 0 20px rgba(var(--c-green-rgb),0.4);
 }
 .btn-glow-gold:hover:not(:disabled) {
-  box-shadow: 0 0 20px rgba(255,214,10,0.4);
+  box-shadow: 0 0 20px rgba(var(--c-gold-rgb),0.4);
 }
 
 /* ─── Glow utilities ────────────────────────────────────────────────────────── */
-.glow-green  { box-shadow: 0 0 18px rgba(52,199,89,0.3); }
-.glow-gold   { box-shadow: 0 0 18px rgba(255,214,10,0.3); }
-.glow-purple { box-shadow: 0 0 18px rgba(191,90,242,0.3); }
-.glow-blue   { box-shadow: 0 0 18px rgba(10,132,255,0.3); }
-.glow-orange { box-shadow: 0 0 18px rgba(255,107,61,0.3); }
+.glow-green  { box-shadow: 0 0 18px rgba(var(--c-green-rgb),0.3); }
+.glow-gold   { box-shadow: 0 0 18px rgba(var(--c-gold-rgb),0.3); }
+.glow-purple { box-shadow: 0 0 18px rgba(var(--c-purple-rgb),0.3); }
+.glow-blue   { box-shadow: 0 0 18px rgba(var(--c-blue-rgb),0.3); }
+.glow-orange { box-shadow: 0 0 18px rgba(var(--c-orange-rgb),0.3); }
 
 /* ─── Stat tile ──────────────────────────────────────────────────────────────── */
 .stat-tile {
@@ -295,7 +362,7 @@ button:disabled {
 
 /* ─── Shimmer text (for countdown / gold values) ────────────────────────────── */
 .text-shimmer-gold {
-  background: linear-gradient(90deg, #ffd60a 0%, #ffe566 40%, #ffd60a 80%);
+  background: linear-gradient(90deg, #f3b53f 0%, #ffdd8a 40%, #f3b53f 80%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -304,7 +371,7 @@ button:disabled {
 }
 
 .text-shimmer-green {
-  background: linear-gradient(90deg, #34c759 0%, #5de37c 40%, #34c759 80%);
+  background: linear-gradient(90deg, #63c268 0%, #93df95 40%, #63c268 80%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -314,17 +381,24 @@ button:disabled {
 
 /* ─── Income pulse ──────────────────────────────────────────────────────────── */
 .income-glow {
-  text-shadow: 0 0 12px rgba(52,199,89,0.6);
+  text-shadow: 0 0 12px rgba(var(--c-green-rgb),0.55);
   animation: income-pulse 3s ease-in-out infinite;
 }
 
 .expense-glow {
-  text-shadow: 0 0 10px rgba(255,107,61,0.5);
+  text-shadow: 0 0 10px rgba(var(--c-orange-rgb),0.5);
 }
 
 /* ─── Page entrance ─────────────────────────────────────────────────────────── */
+/*
+ * Fade only — NEVER animate transform on the page/scroll container. A transform
+ * (even the resting identity matrix that fill-mode keeps) turns this element into
+ * a containing block AND stacking context for position:fixed, which traps every
+ * modal/bottom-sheet inside the scroll area and behind the tab bar. Cards inside
+ * still get their own slide-up, so the page never feels flat.
+ */
 .page-enter {
-  animation: slide-up 0.22s ease both;
+  animation: fade-in 0.22s ease both;
 }
 
 /* ─── Rarity badge chip ─────────────────────────────────────────────────────── */
@@ -421,7 +495,10 @@ button:disabled {
 
 @keyframes slide-up {
   from { transform: translateY(16px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
+  /* Rest at `none`, not `translateY(0)`: a lingering transform (kept by
+     animation-fill-mode: both) would make .page-enter a containing block for
+     position:fixed, trapping modals/sheets inside the scroll area. */
+  to   { transform: none; opacity: 1; }
 }
 
 @keyframes slide-down {
@@ -445,8 +522,8 @@ button:disabled {
 }
 
 @keyframes income-pulse {
-  0%, 100% { text-shadow: 0 0 8px rgba(52,199,89,0.4); }
-  50%       { text-shadow: 0 0 18px rgba(52,199,89,0.8); }
+  0%, 100% { text-shadow: 0 0 8px rgba(var(--c-green-rgb),0.35); }
+  50%       { text-shadow: 0 0 18px rgba(var(--c-green-rgb),0.7); }
 }
 
 @keyframes float {
