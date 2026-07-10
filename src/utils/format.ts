@@ -36,6 +36,18 @@ export function fmt(value: number | string): string {
   return `${sign}${Math.round(abs)}`;
 }
 
+/**
+ * Balance format for the counting header: full grouped digits so per-second
+ * accrual is visible, switching to the compact suffix form only once the number
+ * gets too long to read digit-by-digit.
+ */
+export function fmtBalance(value: number | string): string {
+  const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (!Number.isFinite(n)) return String(value);
+  if (Math.abs(n) >= 1e8) return fmt(n);
+  return Math.round(n).toLocaleString('ru-RU');
+}
+
 export function fmtRub(value: number | string): string {
   return `₽ ${fmt(value)}`;
 }

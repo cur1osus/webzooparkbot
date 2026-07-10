@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmt } from '@/utils/format';
-import type { GameState, PackAnimal, PackInfo } from '@/types';
+import type { Animal, GameState, PackInfo } from '@/types';
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
-import { getAnimalByInfoId } from '@/data/animals';
 import { GENE_META, lifeLeft } from '@/data/packs';
 
 // ─── Pack tiers ───────────────────────────────────────────────────────────────
@@ -15,7 +14,7 @@ const TIERS: Record<TierKey, {
   glow: string;
   bg: string;
   border: string;
-  idleVideo: string;
+  image: string;
   openVideo: string;
   description: string;
 }> = {
@@ -23,51 +22,49 @@ const TIERS: Record<TierKey, {
     name: 'Редкий',
     color: '#4A9EDD',
     glow: 'rgba(74,158,221,0.55)',
-    bg: 'radial-gradient(ellipse at 50% 30%, rgba(74,158,221,0.22) 0%, rgba(10,15,30,0.98) 70%)',
+    bg: 'radial-gradient(ellipse at 50% 34%, rgba(74,158,221,0.20) 0%, rgba(10,15,30,0.98) 72%)',
     border: 'rgba(74,158,221,0.45)',
-    idleVideo: '/packs/zoopark-idle-rare.mp4',
+    image: '/packs/pack-rare.png',
     openVideo: '/packs/zoopark-rare.mp4',
-    description: 'Базовые животные со случайными генами',
+    description: 'Первый пак дня — бесплатный',
   },
   epic: {
     name: 'Эпический',
     color: '#A855F7',
     glow: 'rgba(168,85,247,0.55)',
-    bg: 'radial-gradient(ellipse at 50% 30%, rgba(168,85,247,0.22) 0%, rgba(12,8,30,0.98) 70%)',
+    bg: 'radial-gradient(ellipse at 50% 34%, rgba(168,85,247,0.20) 0%, rgba(12,8,30,0.98) 72%)',
     border: 'rgba(168,85,247,0.45)',
-    idleVideo: '/packs/zoopark-idle-epic.mp4',
+    image: '/packs/pack-epic.png',
     openVideo: '/packs/zoopark-epic.mp4',
-    description: 'Улучшенные гены, выше шанс редких',
+    description: 'Второй пак дня. Шансы генов те же, цена выше',
   },
   legendary: {
     name: 'Легендарный',
     color: '#F59E0B',
     glow: 'rgba(245,158,11,0.55)',
-    bg: 'radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.22) 0%, rgba(20,14,4,0.98) 70%)',
+    bg: 'radial-gradient(ellipse at 50% 34%, rgba(245,158,11,0.20) 0%, rgba(20,14,4,0.98) 72%)',
     border: 'rgba(245,158,11,0.45)',
-    idleVideo: '/packs/zoopark-idle-legendary.mp4',
+    image: '/packs/pack-legendary.png',
     openVideo: '/packs/zoopark-legendary.mp4',
-    description: 'Высокий шанс идеальных генов',
+    description: 'Третий пак дня. Шансы генов те же, цена выше',
   },
   mythic: {
     name: 'Мифический',
     color: '#EF4444',
     glow: 'rgba(239,68,68,0.55)',
-    bg: 'radial-gradient(ellipse at 50% 30%, rgba(239,68,68,0.22) 0%, rgba(20,6,6,0.98) 70%)',
+    bg: 'radial-gradient(ellipse at 50% 34%, rgba(239,68,68,0.20) 0%, rgba(20,6,6,0.98) 72%)',
     border: 'rgba(239,68,68,0.45)',
-    idleVideo: '/packs/zoopark-idle-mythic.mp4',
+    image: '/packs/pack-mythic.png',
     openVideo: '/packs/zoopark-mythic.mp4',
-    description: 'Максимальные показатели, лучшие животные',
+    description: 'Четвёртый и далее. Шансы генов те же, цена выше',
   },
 };
 
 const TIER_ORDER: TierKey[] = ['rare', 'epic', 'legendary', 'mythic'];
 
+/** The server decides which tier is next; the client used to recompute it and could drift. */
 function getCurrentTierKey(info: PackInfo): TierKey {
-  if (info.free_available) return 'rare';
-  if (info.packs_today <= 1) return 'epic';
-  if (info.packs_today <= 2) return 'legendary';
-  return 'mythic';
+  return info.tier;
 }
 
 // ─── Habitat & quality helpers ────────────────────────────────────────────────
@@ -80,7 +77,7 @@ const HABITAT_INFO: Record<string, { emoji: string; name: string; color: string 
   antarctica: { emoji: '🐧', name: 'Антарктида', color: 'var(--c-cyan)' },
 };
 
-function qualityScore(a: PackAnimal): number {
+function qualityScore(a: Animal): number {
   const w: Record<string, number> = { low: 0, medium: 1, high: 2 };
   return w[a.survival] + w[a.reproduction] + w[a.appearance] + w[a.size_trait];
 }
@@ -154,9 +151,8 @@ function GeneDots({ tier }: { tier: string }) {
 
 // ─── Animal result card ───────────────────────────────────────────────────────
 
-function AnimalCard({ animal }: { animal: PackAnimal }) {
+function AnimalCard({ animal }: { animal: Animal }) {
   const hab   = HABITAT_INFO[animal.habitat];
-  const def   = getAnimalByInfoId(animal.animal_info_id);
   const score = qualityScore(animal);
   const qt    = qualityTier(score);
   const life  = lifeLeft(animal.dies_at);
@@ -183,12 +179,12 @@ function AnimalCard({ animal }: { animal: PackAnimal }) {
           className="w-[52px] h-[52px] rounded-2xl grid place-items-center text-[26px] shrink-0"
           style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
-          {def?.emoji ?? hab.emoji}
+          {animal.species_emoji}
         </div>
 
         <div className="flex-1 min-w-0">
           <p className="m-0 font-extrabold text-[15px] leading-tight truncate">
-            {def?.name ?? hab.name}
+            {animal.species_name}
           </p>
           <p className="m-0 mt-[3px] text-[11px]" style={{ color: 'rgba(148,163,184,0.7)' }}>
             {hab.emoji} {hab.name}
@@ -250,7 +246,45 @@ function AnimalCard({ animal }: { animal: PackAnimal }) {
   );
 }
 
-// ─── Pack tile (idle video card in grid) ─────────────────────────────────────
+// ─── Pack art (levitating still, replaces the looped video) ──────────────────
+
+function PackArt({ tier }: { tier: (typeof TIERS)[TierKey] }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      {/* Ambient tier glow — our own light, no video glare */}
+      <div
+        className="absolute inset-0"
+        aria-hidden
+        style={{ background: `radial-gradient(ellipse 62% 44% at 50% 40%, ${tier.glow} 0%, transparent 66%)` }}
+      />
+      {/* Levitating pack with a grounding shadow that breathes in counter-phase */}
+      <div className="absolute inset-0 grid place-items-center">
+        <div className="relative" style={{ width: '66%', aspectRatio: '210 / 345' }}>
+          <div
+            className="pack-shadow absolute left-1/2"
+            aria-hidden
+            style={{
+              bottom: '-8%',
+              width: '74%',
+              height: '11%',
+              background: `radial-gradient(ellipse, ${tier.glow} 0%, transparent 72%)`,
+              filter: 'blur(3px)',
+            }}
+          />
+          <img
+            src={tier.image}
+            alt=""
+            draggable={false}
+            className="pack-float w-full h-full object-contain select-none"
+            style={{ filter: 'drop-shadow(0 12px 20px rgba(0,0,0,0.55))' }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pack tile (idle card in grid) ───────────────────────────────────────────
 
 function PackTile({
   tier, isCurrent, isFree, onClick,
@@ -275,15 +309,7 @@ function PackTile({
         transition: 'transform 0.15s ease, box-shadow 0.15s ease',
       }}
     >
-      <video
-        src={tier.idleVideo}
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="w-full h-full object-cover"
-        style={{ display: 'block' }}
-      />
+      <PackArt tier={tier} />
 
       {/* Tier name badge */}
       <div
@@ -338,7 +364,7 @@ function PackTile({
 
 // ─── Pack modal ───────────────────────────────────────────────────────────────
 
-type ModalOpenState = 'idle' | 'opening' | 'revealed';
+type ModalOpenState = 'idle' | 'opening';
 
 function PackModal({
   tierKey, info, gs,
@@ -348,7 +374,7 @@ function PackModal({
   info: PackInfo;
   gs: GameState;
   onClose: () => void;
-  onSuccess: (updatedInfo: PackInfo, animal: PackAnimal) => void;
+  onSuccess: (updatedInfo: PackInfo, animal: Animal) => void;
 }) {
   const tier      = TIERS[tierKey];
   const isCurrent = tierKey === getCurrentTierKey(info);
@@ -356,18 +382,11 @@ function PackModal({
   const canOpen   = isCurrent;
 
   const [openState, setOpenState] = useState<ModalOpenState>('idle');
-  const [newAnimal, setNewAnimal] = useState<PackAnimal | null>(null);
+  const [newAnimal, setNewAnimal] = useState<Animal | null>(null);
   const [apiDone, setApiDone]     = useState(false);
   const [animDone, setAnimDone]   = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  // Reveal once both animation and API done
-  useEffect(() => {
-    if (apiDone && animDone && openState === 'opening') {
-      setOpenState('revealed');
-    }
-  }, [apiDone, animDone, openState]);
 
   // Imperatively attach 'ended' listener
   useEffect(() => {
@@ -413,8 +432,8 @@ function PackModal({
         ...info,
         packs_today: res.packs_today,
         free_available: false,
+        tier: res.next_tier,
         next_price: res.next_price,
-        animals: [res.animal, ...info.animals],
       };
       setNewAnimal(res.animal);
       setApiDone(true);
@@ -425,8 +444,9 @@ function PackModal({
     }
   };
 
-  const isOpening  = openState === 'opening';
-  const isRevealed = openState === 'revealed';
+  // Reveal is derived: the card flips once both the animation and the request are done.
+  const isRevealed = openState === 'opening' && apiDone && animDone;
+  const isOpening  = openState === 'opening' && !isRevealed;
 
   return (
     /* Backdrop */
@@ -469,17 +489,20 @@ function PackModal({
                 boxShadow: `0 0 40px ${tier.glow}, 0 10px 30px rgba(0,0,0,0.6)`,
               }}
             >
-              <video
-                ref={videoRef}
-                key={openState}
-                src={isOpening ? tier.openVideo : tier.idleVideo}
-                autoPlay
-                loop={!isOpening}
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-                style={{ display: 'block' }}
-              />
+              {isOpening ? (
+                <video
+                  ref={videoRef}
+                  key="opening"
+                  src={tier.openVideo}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                  style={{ display: 'block' }}
+                />
+              ) : (
+                <PackArt tier={tier} />
+              )}
               <div className="absolute bottom-3 left-0 right-0 flex justify-center" style={{ pointerEvents: 'none' }}>
                 <span
                   className="px-4 py-[5px] rounded-full text-[12px] font-extrabold tracking-wide"
@@ -531,7 +554,9 @@ function PackModal({
               >
                 <span className="text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Цена</span>
                 <span className="font-extrabold text-[14px]" style={{ color: isFree ? 'var(--c-green)' : tier.color }}>
-                  {isFree ? '🎁 Бесплатно' : `₽${fmt(info.next_price)}`}
+                  {/* `next_price` belongs to the tier the server says is next. Showing it on
+                      any other tile promised a price that tile does not have. */}
+                  {isFree ? '🎁 Бесплатно' : isCurrent ? `₽${fmt(info.next_price)}` : '—'}
                 </span>
               </div>
 
@@ -682,7 +707,7 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSuccess = (updatedInfo: PackInfo, _animal: PackAnimal) => {
+  const handleSuccess = (updatedInfo: PackInfo) => {
     setInfo(updatedInfo);
     onRefresh();
   };

@@ -1,5 +1,6 @@
 import { useEffect, useState, type SetStateAction } from 'react';
-import { fmt, fmtMin } from '@/utils/format';
+import { fmt, fmtMin, fmtBalance } from '@/utils/format';
+import { AnimatedNumber } from '@/components/AnimatedNumber';
 import type { GameState } from '@/types';
 import { HABITAT_INFO } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
@@ -156,8 +157,9 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.5px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Касса зоопарка
           </p>
-          <p className="font-display m-0 mt-[3px] text-[30px] leading-none">
-            <span className="text-[19px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>₽ </span>{fmt(gs.rub)}
+          <p className="font-display m-0 mt-[3px] text-[28px] leading-none tabular-nums">
+            <span className="text-[19px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>₽ </span>
+            <AnimatedNumber value={gs.rub} format={fmtBalance} durationMs={850} />
           </p>
           <p className="m-0 mt-[7px] text-[13px] font-extrabold tabular-nums"
             style={{ color: netPerMin >= 0 ? 'var(--c-green)' : 'var(--c-orange)' }}>
