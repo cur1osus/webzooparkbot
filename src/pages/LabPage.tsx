@@ -7,20 +7,12 @@ import { apiBreed, apiGetAnimals } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
 
-// success rate table matching GDD §6
-const BREED_RATE: Record<string, number> = {
-  'low+low': 0.30, 'low+medium': 0.45, 'medium+low': 0.45,
-  'medium+medium': 0.60, 'medium+high': 0.75, 'high+medium': 0.75,
-  'high+high': 0.90,
-};
-
 const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
+const BREED_TIER_INDEX: Record<GeneTier, number> = { low: 0, medium: 1, high: 2 };
 
 function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
   if (!a || !b) return null;
-  const key = `${a.reproduction}+${b.reproduction}`;
-  const baseRate = BREED_RATE[key];
-  if (baseRate == null) return null;
+  const baseRate = (30 + 15 * (BREED_TIER_INDEX[a.reproduction] + BREED_TIER_INDEX[b.reproduction])) / 100;
   const bonus = GENETICS_BONUS_BY_LEVEL[Math.min(Math.max(geneticsLevel, 0), 5)] ?? 0;
   return Math.min(0.95, baseRate + bonus / 100);
 }
