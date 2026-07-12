@@ -153,21 +153,21 @@ function ParentSlot({ label, animal, onClick }: {
   const rarity = SPECIES_RARITY_META[animal.species_rarity];
   return (
     <button onClick={onClick}
-            className="flex-1 rounded-2xl border-none cursor-pointer flex flex-col gap-2 p-3 text-left"
+            className="flex-1 rounded-2xl border-none cursor-pointer flex flex-col gap-3 p-3 text-left"
             style={{ background: `${rarity.color}12`, border: `1px solid ${rarity.color}40` }}>
-      <div className="flex items-center gap-2">
-        <div className="w-10 h-10 rounded-xl grid place-items-center overflow-hidden shrink-0"
+      <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-3">
+        <div className="w-16 h-16 rounded-2xl grid place-items-center overflow-hidden shrink-0"
              style={{ background: `${rarity.color}18` }}>
-          <AnimalArt animal={animal} size={38} />
+          <AnimalArt animal={animal} size={58} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="m-0 text-[12px] font-bold truncate">{animal.name}</p>
-          <p className="m-0 text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>
+          <p className="m-0 text-[13px] font-bold leading-tight break-words">{animal.name}</p>
+          <p className="m-0 mt-1 text-[10px] leading-tight break-words" style={{ color: 'var(--tg-theme-hint-color)' }}>
             {animal.species_name}
           </p>
         </div>
       </div>
-      <span className="text-[10px] px-2 py-[3px] rounded-full self-start"
+      <span className="text-[10px] px-3 py-[6px] rounded-xl self-start"
             style={{ background: 'rgba(143,149,171,0.15)', color: 'var(--tg-theme-hint-color)' }}>
         сменить
       </span>
