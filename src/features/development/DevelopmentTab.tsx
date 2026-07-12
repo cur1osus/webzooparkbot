@@ -63,6 +63,13 @@ function EffectLines({ effects }: { effects: string[] }) {
   return <ul className="m-0 pl-4 text-[11px] leading-[1.55] text-tg-hint">{effects.map(effect => <li key={effect}>{effect}</li>)}</ul>;
 }
 
+function animalLabel(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  const noun = mod10 === 1 && mod100 !== 11 ? 'животное' : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? 'животных' : 'животных';
+  return `${count} ${noun}`;
+}
+
 function TrackCard({ kind, level, busy, onUpgrade }: { kind: GlobalTrack; level: number; busy: boolean; onUpgrade: () => void }) {
   const track = TRACKS[kind];
   const current = track.levels[level - 1];
@@ -155,7 +162,35 @@ export function DevelopmentTab({ gs, onRefresh }: { gs: GameState; onRefresh: ()
 
       <div><p className="m-0 mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Глобальные направления</p><div className="flex flex-col gap-2"><TrackCard kind="vet" level={gs.vet_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('vet')} /><TrackCard kind="genetics" level={gs.genetics_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('genetics')} /></div></div>
 
-      <div><div className="flex items-baseline justify-between gap-3 mb-2 px-1"><p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Инфраструктура местностей</p><span className="text-[10px] text-tg-hint">до 5 уровней</span></div>{loading ? <div className="card text-center text-[12px] text-tg-hint">Загружаем местности…</div> : <div className="flex flex-col gap-2">{info?.localities.map(locality => { const habitat = HABITATS[locality.habitat]; const maxed = locality.upgrade_cost_rub === null; const nextDiscount = locality.level < 5 ? locality.upkeep_discount_percent + 5 : locality.upkeep_discount_percent; return <div key={locality.id} className="rounded-2xl p-3" style={{ background: 'var(--surface-subtle)', border: `1px solid color-mix(in srgb, ${habitat.color} 28%, transparent)` }}><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl grid place-items-center text-[22px]" style={{ background: `color-mix(in srgb, ${habitat.color} 16%, transparent)` }}>{habitat.emoji}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2"><p className="m-0 text-[13px] font-extrabold">{habitat.name}</p><LevelDots level={locality.level} /></div><p className="m-0 mt-1 text-[11px] text-tg-hint">Сейчас: −{locality.upkeep_discount_percent}% содержания</p>{!maxed && <p className="m-0 mt-1 text-[10px] font-bold" style={{ color: habitat.color }}>Следующий уровень: −{nextDiscount}% содержания · ₽{fmt(locality.upgrade_cost_rub ?? 0)} · {locality.animals.length} животных</p>}</div><button type="button" disabled={busy !== null || maxed} onClick={() => void upgradeLocality(locality.id)} className="rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : habitat.color, color: maxed ? 'var(--tg-theme-hint-color)' : '#161616' }}>{maxed ? 'MAX' : `₽${fmt(locality.upgrade_cost_rub ?? 0)}`}</button></div></div>; })}</div>}</div>
+      <div>
+        <div className="flex items-baseline justify-between gap-3 mb-2 px-1"><p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Инфраструктура местностей</p><span className="text-[10px] text-tg-hint">до 5 уровней</span></div>
+        {loading ? <div className="card text-center text-[12px] text-tg-hint">Загружаем местности…</div> : <div className="flex flex-col gap-2">{info?.localities.map(locality => {
+          const habitat = HABITATS[locality.habitat];
+          const maxed = locality.upgrade_cost_rub === null;
+          const nextDiscount = locality.level < 5 ? locality.upkeep_discount_percent + 5 : locality.upkeep_discount_percent;
+          return (
+            <div key={locality.id} className="rounded-2xl p-3" style={{ background: 'var(--surface-subtle)', border: `1px solid color-mix(in srgb, ${habitat.color} 28%, transparent)` }}>
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl grid place-items-center text-[22px] shrink-0" style={{ background: `color-mix(in srgb, ${habitat.color} 16%, transparent)` }}>{habitat.emoji}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2"><p className="m-0 text-[13px] font-extrabold">{habitat.name}</p><LevelDots level={locality.level} /></div>
+                  <div className="mt-2 rounded-xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.12)' }}>
+                    <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px] text-tg-hint">Сейчас</p>
+                    <p className="m-0 mt-1 text-[11px] text-tg-hint">Содержание животных дешевле на {locality.upkeep_discount_percent}%.</p>
+                    <p className="m-0 mt-1 text-[11px] text-tg-hint">Внутри: {animalLabel(locality.animals.length)}.</p>
+                  </div>
+                  {!maxed && <div className="mt-2 rounded-xl px-3 py-2" style={{ background: `color-mix(in srgb, ${habitat.color} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${habitat.color} 18%, transparent)` }}>
+                    <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px]" style={{ color: habitat.color }}>Что даст улучшение</p>
+                    <p className="m-0 mt-1 text-[11px] text-tg-hint">Содержание животных будет дешевле на {nextDiscount}%.</p>
+                    <p className="m-0 mt-1 text-[11px] font-bold text-tg-hint">Цена улучшения: ₽{fmt(locality.upgrade_cost_rub ?? 0)}.</p>
+                  </div>}
+                </div>
+              </div>
+              <button type="button" disabled={busy !== null || maxed} onClick={() => void upgradeLocality(locality.id)} className="w-full mt-3 rounded-xl py-2 border-none text-[11px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : habitat.color, color: maxed ? 'var(--tg-theme-hint-color)' : '#161616' }}>{maxed ? 'Местность улучшена полностью' : `Улучшить за ₽${fmt(locality.upgrade_cost_rub ?? 0)}`}</button>
+            </div>
+          );
+        })}</div>}
+      </div>
     </div>
   );
 }
