@@ -8,6 +8,7 @@ import type {
   ExpeditionInfo,
   ExpeditionStartResponse,
   LocalitiesInfo,
+  UpgradeLocalityResult,
   MerchantBuyResponse,
   MerchantResponse,
   PackInfo,
@@ -34,6 +35,12 @@ export const apiOpenPack = (tier?: string) =>
 export const apiGetLocalities = () => req<LocalitiesInfo>('/localities');
 export const apiBuyLocality = (habitat: string) =>
   req<BuyLocalityResult>('/localities/buy', { method: 'POST', body: JSON.stringify({ habitat }) });
+export const apiUpgradeLocality = (localityId: number) =>
+  req<UpgradeLocalityResult>('/localities/upgrade', { method: 'POST', body: JSON.stringify({ locality_id: localityId }) });
+export const apiUpgradeDevelopment = (kind: 'vet' | 'genetics') =>
+  req<{ ok: boolean; kind: 'vet' | 'genetics'; level: number; next_cost_rub: number | null; new_rub: number }>(
+    '/development/upgrade', { method: 'POST', body: JSON.stringify({ kind }) },
+  );
 export const apiAssignLocality = (animal_id: number, locality_id: number | null) =>
   req<AssignLocalityResult>('/localities/assign', {
     method: 'POST',

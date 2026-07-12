@@ -143,7 +143,7 @@ def cure_animal(tg_id: int, body: CureBody) -> dict:
                 select(Locality.habitat).where(Locality.id == animal.locality_id)
             ).first()
         bonuses = bonuses_module.load(session, player.id)
-        cost_usd = cure_cost_usd(animal, locality_habitat, bonuses)
+        cost_usd = cure_cost_usd(animal, locality_habitat, bonuses, player.vet_level)
 
         ledger.spend(session, player, "usd", cost_usd, "cure_animal", ref_table="animals", ref_id=animal.id)
         animal.sick_since = None

@@ -4,6 +4,7 @@ import type { Animal } from './progression';
 export type PropertyKind =
   | 'income_total'
   | 'income_species'
+  | 'discount_upkeep'
   | 'discount_packs'
   | 'discount_locality'
   | 'discount_bank'
@@ -61,6 +62,8 @@ export interface GameState {
   rub: number;
   usd: number;
   paw_coins: number;
+  vet_level: number;
+  genetics_level: number;
 
   income_rub_per_min: number;
   /** Upkeep grows with the size of the zoo. Net income is income minus this. */

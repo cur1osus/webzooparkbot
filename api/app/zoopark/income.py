@@ -29,8 +29,10 @@ from api.app.zoopark.catalog import (
     CURE_INCOME_HOURS,
     DIVERSITY_BONUS_PERCENT_PER_SPECIES,
     HABITAT_MATCH_BONUS,
+    HABITAT_MATCH_UPKEEP_DISCOUNT,
     RATE_START_RUB_PER_USD,
     SICK_INCOME_MULT,
+    locality_upkeep_discount,
     UPKEEP_BASE_PERCENT,
     UPKEEP_MAX_PERCENT,
     UPKEEP_PERCENT_PER_LOG10_ANIMALS,
@@ -87,7 +89,7 @@ def animal_income(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
     )
 
 
-def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses) -> int:
+def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, vet_level: int = 0) -> int:
     """Price of curing this animal, in dollars: CURE_INCOME_HOURS of its *healthy* income
     (the sick penalty is excluded so the cost reflects the animal's real worth), converted
     to USD at the reference rate. Authoritative — recompute this on cure, never trust the
@@ -101,7 +103,8 @@ def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
         species_multiplier=bonuses.species_income_multiplier(animal.species_id),
     )
     cost_rub = healthy_rub_per_min * 60 * CURE_INCOME_HOURS
-    return max(1, round(cost_rub / RATE_START_RUB_PER_USD))
+    clinic_discount = min(max(vet_level, 0), 3) * 10
+    return max(1, round(cost_rub / RATE_START_RUB_PER_USD * (100 - clinic_discount) / 100))
 
 
 def effective_species_count(species_counts: list[int]) -> float:
@@ -137,7 +140,7 @@ def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None
     active_bonuses = bonuses if bonuses is not None else bonuses_module.load(session, player_id)
 
     rows = session.execute(
-        select(Animal, Locality.habitat)
+        select(Animal, Locality.habitat, Locality.level)
         .outerjoin(Locality, Animal.locality_id == Locality.id)
         .where(
             Animal.player_id == player_id,
@@ -147,18 +150,43 @@ def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None
     ).all()
 
     total = 0
+    locality_discounted_income = 0.0
+    level_discounted_income = 0.0
+    levelled_locality_levels = 0
     counts_by_species: dict[int, int] = {}
-    for animal, locality_habitat in rows:
-        total += animal_income(animal, locality_habitat, active_bonuses)
+    for animal, locality_habitat, locality_level in rows:
+        current_income = animal_income(animal, locality_habitat, active_bonuses)
+        total += current_income
+        upkeep_discount = locality_upkeep_discount(locality_level)
+        level_discounted_income += current_income * upkeep_discount / 100
+        levelled_locality_levels += max(int(locality_level or 0), 0)
+        if locality_habitat and locality_habitat == animal.habitat:
+            upkeep_discount += HABITAT_MATCH_UPKEEP_DISCOUNT
+        locality_discounted_income += current_income * upkeep_discount / 100
         counts_by_species[animal.species_id] = counts_by_species.get(animal.species_id, 0) + 1
 
     # After the 100× denomination rebase, truncating every multiplier is too coarse for
     # small zoos (e.g. 42 × 1.30 should become 55, not 54). Round each derived rate so
     # percentage bonuses remain visible at the new scale.
-    total = round(total * active_bonuses.income_multiplier())
-    total = round(total * diversity_multiplier(list(counts_by_species.values())))
+    total = round(total * active_bonuses.income_multiplier() * diversity_multiplier(list(counts_by_species.values())))
 
-    return total, upkeep_rub_per_min(total, len(rows))
+    base_upkeep = upkeep_rub_per_min(total, len(rows))
+    base_percent = 0.0 if total <= 0 else base_upkeep / total
+    locality_relief = round(locality_discounted_income * base_percent)
+    if levelled_locality_levels > 0 and base_upkeep > 0:
+        # A levelled locality should be visible even in a very small zoo where one
+        # percentage point would otherwise disappear into integer rounding. The extra
+        # minimum is based on upgrade levels, so a habitat-match bonus cannot consume
+        # the entire visible effect of the first locality upgrade.
+        locality_relief = max(
+            round(level_discounted_income * base_percent) + levelled_locality_levels,
+            locality_relief,
+        )
+    elif locality_discounted_income > 0 and base_upkeep > 0:
+        locality_relief = max(1, locality_relief)
+    upkeep = max(0, base_upkeep - locality_relief)
+    upkeep = round(upkeep * active_bonuses.upkeep_discount_multiplier())
+    return total, upkeep
 
 
 def accrue(session: Session, player: Player) -> int:

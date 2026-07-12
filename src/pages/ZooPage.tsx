@@ -13,8 +13,9 @@ import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ForgeTab, ItemDetailPage, ItemSelectPage } from '@/features/forge/ForgeInventory';
 import { VetTab } from '@/features/vet/VetTab';
+import { DevelopmentTab } from '@/features/development/DevelopmentTab';
 
-type ZooTab = 'overview' | 'forge' | 'vet' | 'medals';
+type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
 // ─── ZooPage ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ function routeForSubPage(subPage: SubPage): string | null {
 
 const ZOO_TABS: { id: ZooTab; emoji: string; label: string; badge?: (gs: GameState) => number | null }[] = [
   { id: 'overview', emoji: '🏠', label: 'Обзор' },
+  { id: 'development', emoji: '🏗️', label: 'Развитие' },
   { id: 'forge',    emoji: '⚒️',  label: 'Кузня',  badge: gs => gs.items.length > 0 ? gs.items.length : null },
   { id: 'vet',      emoji: '🩺', label: 'Ветеринар', badge: gs => gs.sick_animal_ids.length > 0 ? gs.sick_animal_ids.length : null },
   { id: 'medals',   emoji: '🏅', label: 'Медали' },
@@ -259,6 +261,10 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       </div>
 
       {/* ── Tab content ── */}
+
+      {tab === 'development' && (
+        <DevelopmentTab gs={gs} onRefresh={onRefresh} />
+      )}
 
       {tab === 'overview' && (
         <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">

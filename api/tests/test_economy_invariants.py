@@ -213,6 +213,17 @@ class TestEveryItemPropertyIsApplied:
         with get_session() as session:
             assert bonuses_module.load(session, 1).total("discount_bank") == 80
 
+    def test_discount_upkeep_lowers_the_stored_maintenance_rate(self, db, player):
+        from api.app.zoopark.core import me
+        from api.app.zoopark.progression import open_pack
+
+        open_pack(player)
+        before = me(player)["upkeep_rub_per_min"]
+        _activate(player, "discount_upkeep", 30)
+        after = me(player)["upkeep_rub_per_min"]
+        assert before > 0
+        assert after < before
+
 
 def _activate(telegram_id: int, kind: str, value: int, species_id: int | None = None) -> None:
     with get_session() as session:

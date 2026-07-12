@@ -7,6 +7,7 @@ import type { PropertyKind } from '@/types';
 export const PROPERTY_ICON: Record<PropertyKind, string> = {
   income_total: '📈',
   income_species: '🐾',
+  discount_upkeep: '🧾',
   discount_packs: '📉',
   discount_locality: '🌍',
   discount_bank: '🔄',
@@ -18,6 +19,7 @@ export const PROPERTY_ICON: Record<PropertyKind, string> = {
 export const PROPERTY_SHORT: Record<PropertyKind, string> = {
   income_total: 'Общий доход',
   income_species: 'Доход вида',
+  discount_upkeep: 'Содержание',
   discount_packs: 'Скидка на паки',
   discount_locality: 'Местности',
   discount_bank: 'Курс банка',

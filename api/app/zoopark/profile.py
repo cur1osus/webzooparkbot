@@ -121,7 +121,7 @@ def list_item_sets(session: Session, player_id: int) -> list[dict]:
     return payload
 
 
-def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, today=None) -> dict:
+def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, today=None, vet_level: int = 0) -> dict:
     species = SPECIES_BY_ID[animal.species_id]
     day = today or utcnow().date()
     matches = bool(locality_habitat) and locality_habitat == animal.habitat
@@ -144,7 +144,7 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
         "is_sick": animal.sick_since is not None,
         "can_breed": animal.last_bred_on != day,
         "income": animal_income(animal, locality_habitat, bonuses),
-        "cure_cost_usd": cure_cost_usd(animal, locality_habitat, bonuses),
+        "cure_cost_usd": cure_cost_usd(animal, locality_habitat, bonuses, vet_level),
         "habitat_bonus": matches,
         "parent_a_id": animal.parent_a_id,
         "parent_b_id": animal.parent_b_id,
@@ -190,7 +190,7 @@ def build_state(session: Session, player: Player) -> dict:
 
     rows = alive_animals(session, player.id, season.id)
     today = utcnow().date()
-    animals = [animal_payload(animal, habitat, bonuses, today) for animal, habitat in rows]
+    animals = [animal_payload(animal, habitat, bonuses, today, player.vet_level) for animal, habitat in rows]
 
     counts_by_species: dict[int, int] = {}
     for animal, _habitat in rows:
@@ -216,6 +216,8 @@ def build_state(session: Session, player: Player) -> dict:
         "rub": player.balance_rub,
         "usd": player.balance_usd,
         "paw_coins": player.balance_paw,
+        "vet_level": player.vet_level,
+        "genetics_level": player.genetics_level,
         "income_rub_per_min": player.income_rub_per_min,
         "upkeep_rub_per_min": player.upkeep_rub_per_min,
         "income_synced_at": _iso(player.income_synced_at),

@@ -106,6 +106,8 @@ class Player(Base):
         CheckConstraint("balance_rub >= 0", name="ck_players_balance_rub"),
         CheckConstraint("balance_usd >= 0", name="ck_players_balance_usd"),
         CheckConstraint("balance_paw >= 0", name="ck_players_balance_paw"),
+        CheckConstraint("vet_level BETWEEN 0 AND 3", name="ck_players_vet_level"),
+        CheckConstraint("genetics_level BETWEEN 0 AND 3", name="ck_players_genetics_level"),
         Index("ix_players_income", "income_rub_per_min"),
         MYSQL,
     )
@@ -129,6 +131,8 @@ class Player(Base):
     balance_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     balance_usd: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     balance_paw: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    vet_level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    genetics_level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
 
     # Cached so the leaderboard is an indexed read instead of a full scan of every
     # animal of every player. Recomputed by `income.sync_player_income` on any change
@@ -215,6 +219,7 @@ class Locality(Base):
     __table_args__ = (
         UniqueConstraint("player_id", "season_id", "habitat", name="uq_localities_player_season_habitat"),
         CheckConstraint(_one_of("habitat", HABITATS), name="ck_localities_habitat"),
+        CheckConstraint("level BETWEEN 0 AND 3", name="ck_localities_level"),
         MYSQL,
     )
 
@@ -224,6 +229,7 @@ class Locality(Base):
     )
     season_id: Mapped[int] = mapped_column(Integer, ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False)
     habitat: Mapped[str] = mapped_column(String(16), nullable=False)
+    level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     price_paid_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     purchased_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 

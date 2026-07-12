@@ -214,6 +214,38 @@ UPKEEP_BASE_PERCENT = 5.0
 UPKEEP_PERCENT_PER_LOG10_ANIMALS = 12.0
 UPKEEP_MAX_PERCENT = 45.0
 
+# Infrastructure upgrades turn the five localities into a real development choice.
+LOCALITY_UPKEEP_DISCOUNTS: tuple[int, ...] = (0, 5, 10, 15)
+LOCALITY_UPGRADE_COSTS_RUB: tuple[int, ...] = (0, 500, 1_500, 4_000)
+HABITAT_MATCH_UPKEEP_DISCOUNT = 5
+
+
+def locality_upkeep_discount(level: int) -> int:
+    normalized = int(level or 0)
+    return LOCALITY_UPKEEP_DISCOUNTS[min(max(normalized, 0), len(LOCALITY_UPKEEP_DISCOUNTS) - 1)]
+
+
+def locality_upgrade_cost_rub(level: int) -> int | None:
+    if level >= len(LOCALITY_UPGRADE_COSTS_RUB) - 1:
+        return None
+    return LOCALITY_UPGRADE_COSTS_RUB[level + 1]
+
+
+# Global development tracks. They are capped: every level is useful, but no combination
+# can erase the upkeep sink or turn breeding into a guaranteed jackpot.
+DEVELOPMENT_MAX_LEVEL = 3
+DEVELOPMENT_UPGRADE_COSTS_RUB: dict[str, tuple[int, ...]] = {
+    "vet": (0, 750, 2_000, 5_000),
+    "genetics": (0, 1_000, 2_500, 6_000),
+}
+
+
+def development_upgrade_cost_rub(kind: str, level: int) -> int | None:
+    costs = DEVELOPMENT_UPGRADE_COSTS_RUB[kind]
+    if level >= DEVELOPMENT_MAX_LEVEL:
+        return None
+    return costs[level + 1]
+
 # ─── Diversity ────────────────────────────────────────────────────────────────
 #
 # Rewards a balanced zoo rather than one whale plus decoration. The effective species
@@ -445,6 +477,7 @@ def item_sell_price_usd(rarity: ItemRarity, level: int) -> int:
 PropertyKind = Literal[
     "income_total",
     "income_species",
+    "discount_upkeep",
     "discount_packs",
     "discount_locality",
     "discount_bank",
@@ -488,6 +521,18 @@ ITEM_PROPERTIES: dict[PropertyKind, PropertyDef] = {
             "mythical": (10, 20), "legendary": (10, 20),
         },
         "applies_to": "income.animal_income",
+    },
+    "discount_upkeep": {
+        "label": "Снижение содержания",
+        "unit": "percent_discount",
+        "per_species": False,
+        "cap": 50,
+        "weight": 18,
+        "ranges": {
+            "common": (3, 6), "rare": (8, 12), "epic": (15, 20),
+            "mythical": (25, 35), "legendary": (35, 45),
+        },
+        "applies_to": "income.upkeep_rub_per_min",
     },
     "discount_packs": {
         "label": "Скидка на паки",

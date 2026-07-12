@@ -40,6 +40,9 @@ class Bonuses:
     def species_income_multiplier(self, species_id: int) -> float:
         return 1 + self.for_species("income_species", species_id) / 100
 
+    def upkeep_discount_multiplier(self) -> float:
+        return 1 - self.total("discount_upkeep") / 100
+
     def pack_discount_multiplier(self) -> float:
         return 1 - self.total("discount_packs") / 100
 

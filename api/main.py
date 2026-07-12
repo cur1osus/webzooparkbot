@@ -16,6 +16,7 @@ from api.app.core.config import validate_config
 from api.app.db.seed import seed_reference_data
 from api.app.routes.telegram_webhook import router as telegram_webhook_router
 from api.app.routes.zoopark_core import router as core_router
+from api.app.routes.zoopark_development import router as development_router
 from api.app.routes.zoopark_admin import router as admin_router
 from api.app.routes.zoopark_economy import router as economy_router
 from api.app.routes.zoopark_forge import router as forge_router
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     for router in (
         admin_router,
         core_router,
+        development_router,
         economy_router,
         status_router,
         merchant_router,

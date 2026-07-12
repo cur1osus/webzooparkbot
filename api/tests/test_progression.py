@@ -157,6 +157,39 @@ class TestExpeditionLifecycle:
             row = session.query(Player).filter_by(telegram_id=player).one()
             assert row.income_rub_per_min < before
 
+    def test_locality_upgrade_reduces_upkeep(self, db, player, grant):
+        from api.app.zoopark.core import me
+        from api.app.schemas.progression import AssignLocalityBody, UpgradeLocalityBody
+
+        progression.open_pack(player)
+        grant(player, "rub", 1_000)
+        locality_id = progression.list_localities(player)["localities"][0]["id"]
+        animal_id = progression.list_available_animals(player)["animals"][0]["id"]
+        progression.assign_locality(player, AssignLocalityBody(animal_id=animal_id, locality_id=locality_id))
+        before = me(player)
+        result = progression.upgrade_locality(player, UpgradeLocalityBody(locality_id=locality_id))
+        after = me(player)
+
+        assert result["level"] == 1
+        assert result["upkeep_discount_percent"] == 5
+        assert after["income_rub_per_min"] == before["income_rub_per_min"]
+        assert after["upkeep_rub_per_min"] < before["upkeep_rub_per_min"]
+
+    def test_global_development_tracks_upgrade(self, db, player, grant):
+        from api.app.schemas.development import UpgradeDevelopmentBody
+        from api.app.zoopark import development
+        from api.app.zoopark.core import me
+
+        grant(player, "rub", 2_000)
+        vet = development.upgrade(player, UpgradeDevelopmentBody(kind="vet"))
+        genetics = development.upgrade(player, UpgradeDevelopmentBody(kind="genetics"))
+
+        assert vet["level"] == 1
+        assert vet["next_cost_rub"] == 2_000
+        assert genetics["level"] == 1
+        assert me(player)["vet_level"] == 1
+        assert me(player)["genetics_level"] == 1
+
     def test_finishing_early_is_refused(self, db, player, grant):
         squad = self._squad(player, grant)
         locality_id = progression.list_localities(player)["localities"][0]["id"]

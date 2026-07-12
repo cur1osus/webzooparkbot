@@ -80,6 +80,9 @@ export interface PackOpenResult {
 export interface Locality {
   id: number;
   habitat: Habitat;
+  level: number;
+  upkeep_discount_percent: number;
+  upgrade_cost_rub: number | null;
   animals: Animal[];
 }
 
@@ -96,6 +99,15 @@ export interface BuyLocalityResult {
   id: number;
   habitat: Habitat;
   price_paid: number;
+  new_rub: number;
+}
+
+export interface UpgradeLocalityResult {
+  ok: boolean;
+  id: number;
+  level: number;
+  upkeep_discount_percent: number;
+  upgrade_cost_rub: number | null;
   new_rub: number;
 }
 

@@ -23,7 +23,7 @@ from api.app.db.models import (
     Player,
     utcnow,
 )
-from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, StartExpeditionBody
+from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
@@ -38,6 +38,8 @@ from api.app.zoopark.catalog import (
     LIFESPAN_DAYS,
     LOCALITY_BASE_PRICE_RUB,
     LOCALITY_PRICE_GROWTH,
+    locality_upkeep_discount,
+    locality_upgrade_cost_rub,
     MAX_LOCALITIES,
     PackTier,
     SPECIES_IDS_BY_RARITY,
@@ -374,6 +376,9 @@ def list_localities(tg_id: int) -> dict:
                 {
                     "id": loc.id,
                     "habitat": loc.habitat,
+                    "level": loc.level,
+                    "upkeep_discount_percent": locality_upkeep_discount(loc.level),
+                    "upgrade_cost_rub": locality_upgrade_cost_rub(loc.level),
                     "animals": [animal_payload(a, loc.habitat, bonuses) for a in buckets[loc.id]],
                 }
                 for loc in localities
@@ -432,6 +437,41 @@ def buy_locality(tg_id: int, body: BuyLocalityBody) -> dict:
         return result
 
 
+def upgrade_locality(tg_id: int, body: UpgradeLocalityBody) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        locality = session.scalars(
+            select(Locality)
+            .where(
+                Locality.id == body.locality_id,
+                Locality.player_id == player.id,
+                Locality.season_id == season.id,
+            )
+            .with_for_update()
+        ).first()
+        if locality is None:
+            raise HTTPException(404, "Местность не найдена")
+        cost = locality_upgrade_cost_rub(locality.level)
+        if cost is None:
+            raise HTTPException(400, "Местность уже улучшена до максимума")
+        ledger.spend(session, player, "rub", cost, "locality_upgrade")
+        locality.level += 1
+        sync_player_income(session, player)
+        result = {
+            "ok": True,
+            "id": locality.id,
+            "level": locality.level,
+            "upkeep_discount_percent": locality_upkeep_discount(locality.level),
+            "upgrade_cost_rub": locality_upgrade_cost_rub(locality.level),
+            "new_rub": ledger.balance(player, "rub"),
+        }
+        session.commit()
+        return result
+
+
 def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
     with get_session() as session:
         player = get_player(session, tg_id, for_update=True)
@@ -472,12 +512,12 @@ def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
 # ─── Breeding ─────────────────────────────────────────────────────────────────
 
 
-def inherit_gene(a: GeneTier, b: GeneTier) -> GeneTier:
+def inherit_gene(a: GeneTier, b: GeneTier, worse_gene_chance: float = BREED_WORSE_GENE_CHANCE) -> GeneTier:
     """GDD §6: identical genes pass through; otherwise the worse one wins 60% of the time."""
     if a == b:
         return a
     worse, better = (a, b) if BREED_TIER_INDEX[a] < BREED_TIER_INDEX[b] else (b, a)
-    return worse if random.random() < BREED_WORSE_GENE_CHANCE else better
+    return worse if random.random() < worse_gene_chance else better
 
 
 def breed(tg_id: int, body: BreedBody) -> dict:
@@ -514,7 +554,8 @@ def breed(tg_id: int, body: BreedBody) -> dict:
             if parent.last_bred_on == today:
                 raise HTTPException(400, "Одно из животных уже скрещивалось сегодня")
 
-        rate = breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction)  # type: ignore[arg-type]
+        rate = min(0.95, breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction) + player.genetics_level * 0.05)  # type: ignore[arg-type]
+        worse_gene_chance = max(0.45, BREED_WORSE_GENE_CHANCE - player.genetics_level * 0.05)
         succeeded = random.random() < rate
         parent_a.last_bred_on = today
         parent_b.last_bred_on = today
@@ -522,10 +563,10 @@ def breed(tg_id: int, body: BreedBody) -> dict:
         child = None
         if succeeded:
             genes = {
-                "gene_survival": inherit_gene(parent_a.gene_survival, parent_b.gene_survival),  # type: ignore[arg-type]
-                "gene_reproduction": inherit_gene(parent_a.gene_reproduction, parent_b.gene_reproduction),  # type: ignore[arg-type]
-                "gene_appearance": inherit_gene(parent_a.gene_appearance, parent_b.gene_appearance),  # type: ignore[arg-type]
-                "gene_size": inherit_gene(parent_a.gene_size, parent_b.gene_size),  # type: ignore[arg-type]
+                "gene_survival": inherit_gene(parent_a.gene_survival, parent_b.gene_survival, worse_gene_chance),  # type: ignore[arg-type]
+                "gene_reproduction": inherit_gene(parent_a.gene_reproduction, parent_b.gene_reproduction, worse_gene_chance),  # type: ignore[arg-type]
+                "gene_appearance": inherit_gene(parent_a.gene_appearance, parent_b.gene_appearance, worse_gene_chance),  # type: ignore[arg-type]
+                "gene_size": inherit_gene(parent_a.gene_size, parent_b.gene_size, worse_gene_chance),  # type: ignore[arg-type]
             }
             child = create_animal(
                 session,
@@ -643,19 +684,20 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
             victim.removal_reason = "expedition_loss"
             victim.sick_since = None
         result["killed_animal_id"] = victim.id if victim else None
-        result["sick_animal_ids"] = _wound_survivors(alive, victim, now)
+        result["sick_animal_ids"] = _wound_survivors(alive, victim, now, player.vet_level)
 
     expedition.resolved_at = now
     expedition.result_json = json.dumps(result, ensure_ascii=False)
     return result
 
 
-def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime) -> list[int]:
+def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime, vet_level: int = 0) -> list[int]:
     wounded: list[int] = []
+    sickness_chance = EXPEDITION_SICK_CHANCE * max(0.55, 1 - min(vet_level, 3) * 0.15)
     for animal in squad:
         if (victim is not None and animal.id == victim.id) or animal.sick_since is not None:
             continue
-        if random.random() >= EXPEDITION_SICK_CHANCE:
+        if random.random() >= sickness_chance:
             continue
         animal.sick_since = now
         wounded.append(animal.id)
