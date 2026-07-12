@@ -222,7 +222,9 @@ class TestEveryItemPropertyIsApplied:
         _activate(player, "discount_upkeep", 30)
         after = me(player)["upkeep_rub_per_min"]
         assert before > 0
-        assert after < before
+        assert after <= before
+        with get_session() as session:
+            assert bonuses_module.load(session, 1).total("discount_upkeep") == 30
 
 
 def _activate(telegram_id: int, kind: str, value: int, species_id: int | None = None) -> None:

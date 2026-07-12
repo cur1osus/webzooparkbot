@@ -14,10 +14,15 @@ const BREED_RATE: Record<string, number> = {
   'high+high': 0.90,
 };
 
-function breedRate(a: Animal | null, b: Animal | null): number | null {
+const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
+
+function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
   if (!a || !b) return null;
   const key = `${a.reproduction}+${b.reproduction}`;
-  return BREED_RATE[key] ?? null;
+  const baseRate = BREED_RATE[key];
+  if (baseRate == null) return null;
+  const bonus = GENETICS_BONUS_BY_LEVEL[Math.min(Math.max(geneticsLevel, 0), 5)] ?? 0;
+  return Math.min(0.95, baseRate + bonus / 100);
 }
 
 // ─── Animal mini-card for result display ─────────────────────────────────────
@@ -190,7 +195,6 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  void gs;
   const [animals, setAnimals]   = useState<Animal[]>([]);
   const [loading, setLoading]   = useState(true);
   const [parent1, setParent1]   = useState<Animal | null>(null);
@@ -236,7 +240,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
     }
   };
 
-  const rate = breedRate(parent1, parent2);
+  const rate = breedRate(parent1, parent2, gs.genetics_level);
   const canBreed = parent1?.can_breed && parent2?.can_breed && !breeding;
 
   return (

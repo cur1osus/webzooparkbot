@@ -183,7 +183,8 @@ def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None
         locality_relief = max(
             round(non_level_discounted_income * base_percent)
             + round(level_discounted_income * base_percent)
-            + levelled_locality_levels,
+            + levelled_locality_levels
+            + 1,
             locality_relief,
         )
     elif locality_discounted_income > 0 and base_upkeep > 0:
