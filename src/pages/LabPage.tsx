@@ -322,6 +322,16 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           </div>
 
           {parent1 && parent2 && <GeneComparison parentA={parent1} parentB={parent2} />}
+          {parent1 && parent2 && (
+            <button
+              type="button"
+              onClick={() => { setParent1(null); setParent2(null); setResult(null); setError(null); }}
+              className="self-center rounded-xl border-none px-4 py-2 text-[11px] font-bold"
+              style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)', color: 'var(--tg-theme-hint-color)' }}
+            >
+              ↺ Сбросить выбор
+            </button>
+          )}
 
           {/* Success probability */}
           {rate !== null && (
