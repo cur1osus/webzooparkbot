@@ -32,6 +32,7 @@ from api.app.zoopark.catalog import (
     HABITAT_MATCH_UPKEEP_DISCOUNT,
     RATE_START_RUB_PER_USD,
     SICK_INCOME_MULT,
+    development_effect_percent,
     locality_upkeep_discount,
     UPKEEP_BASE_PERCENT,
     UPKEEP_MAX_PERCENT,
@@ -103,7 +104,7 @@ def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
         species_multiplier=bonuses.species_income_multiplier(animal.species_id),
     )
     cost_rub = healthy_rub_per_min * 60 * CURE_INCOME_HOURS
-    clinic_discount = min(max(vet_level, 0), 5) * 8
+    clinic_discount = development_effect_percent(vet_level)
     return max(1, round(cost_rub / RATE_START_RUB_PER_USD * (100 - clinic_discount) / 100))
 
 
@@ -188,7 +189,7 @@ def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None
     elif locality_discounted_income > 0 and base_upkeep > 0:
         locality_relief = max(1, locality_relief)
     upkeep = max(0, base_upkeep - locality_relief)
-    upkeep = round(upkeep * active_bonuses.upkeep_discount_multiplier())
+    upkeep = max(0, round(upkeep * active_bonuses.upkeep_discount_multiplier()))
     return total, upkeep
 
 

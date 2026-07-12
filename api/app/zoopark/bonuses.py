@@ -41,7 +41,8 @@ class Bonuses:
         return 1 + self.for_species("income_species", species_id) / 100
 
     def upkeep_discount_multiplier(self) -> float:
-        return 1 - self.total("discount_upkeep") / 100
+        # Keep upkeep non-negative even if a future bonus payload bypasses item caps.
+        return 1 - min(max(self.total("discount_upkeep"), 0), 50) / 100
 
     def pack_discount_multiplier(self) -> float:
         return 1 - self.total("discount_packs") / 100

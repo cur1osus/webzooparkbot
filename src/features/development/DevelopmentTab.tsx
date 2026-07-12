@@ -27,11 +27,11 @@ const TRACKS: Record<GlobalTrack, {
     summary: 'Животные реже болеют, а лечение обходится дешевле.',
     accent: 'var(--c-cyan)',
     levels: [
-      { level: 1, cost: 1_000, effects: ['болезни случаются на 10% реже', 'лечение дешевле на 8%'] },
-      { level: 2, cost: 5_000, effects: ['болезни случаются на 20% реже', 'лечение дешевле на 16%'] },
-      { level: 3, cost: 20_000, effects: ['болезни случаются на 30% реже', 'лечение дешевле на 24%'] },
-      { level: 4, cost: 75_000, effects: ['болезни случаются на 40% реже', 'лечение дешевле на 32%'] },
-      { level: 5, cost: 250_000, effects: ['болезни случаются на 50% реже', 'лечение дешевле на 40%'] },
+      { level: 1, cost: 1_000, effects: ['болезни случаются на 1% реже', 'лечение дешевле на 1%'] },
+      { level: 2, cost: 5_000, effects: ['болезни случаются на 3% реже', 'лечение дешевле на 3%'] },
+      { level: 3, cost: 20_000, effects: ['болезни случаются на 6% реже', 'лечение дешевле на 6%'] },
+      { level: 4, cost: 75_000, effects: ['болезни случаются на 9% реже', 'лечение дешевле на 9%'] },
+      { level: 5, cost: 250_000, effects: ['болезни случаются на 12% реже', 'лечение дешевле на 12%'] },
     ],
   },
   genetics: {
@@ -167,7 +167,7 @@ export function DevelopmentTab({ gs, onRefresh }: { gs: GameState; onRefresh: ()
         {loading ? <div className="card text-center text-[12px] text-tg-hint">Загружаем местности…</div> : <div className="flex flex-col gap-2">{info?.localities.map(locality => {
           const habitat = HABITATS[locality.habitat];
           const maxed = locality.upgrade_cost_rub === null;
-          const nextDiscount = locality.level < 5 ? locality.upkeep_discount_percent + 5 : locality.upkeep_discount_percent;
+          const nextDiscount = locality.next_upkeep_discount_percent;
           return (
             <div key={locality.id} className="rounded-2xl p-3" style={{ background: 'var(--surface-subtle)', border: `1px solid color-mix(in srgb, ${habitat.color} 28%, transparent)` }}>
               <div className="flex items-start gap-3">

@@ -52,6 +52,7 @@ from api.app.zoopark.catalog import (
     breed_success_rate,
     combat_power,
     DAILY_GIFT_TIER_WEIGHTS,
+    development_effect_percent,
     PACK_TIER_ORDER,
     pack_price_usd_for_tier,
     pack_reward_range,
@@ -378,6 +379,7 @@ def list_localities(tg_id: int) -> dict:
                     "habitat": loc.habitat,
                     "level": loc.level,
                     "upkeep_discount_percent": locality_upkeep_discount(loc.level),
+                    "next_upkeep_discount_percent": locality_upkeep_discount(loc.level + 1) if locality_upgrade_cost_rub(loc.level) is not None else None,
                     "upgrade_cost_rub": locality_upgrade_cost_rub(loc.level),
                     "animals": [animal_payload(a, loc.habitat, bonuses) for a in buckets[loc.id]],
                 }
@@ -465,6 +467,7 @@ def upgrade_locality(tg_id: int, body: UpgradeLocalityBody) -> dict:
             "id": locality.id,
             "level": locality.level,
             "upkeep_discount_percent": locality_upkeep_discount(locality.level),
+            "next_upkeep_discount_percent": locality_upkeep_discount(locality.level + 1) if locality_upgrade_cost_rub(locality.level) is not None else None,
             "upgrade_cost_rub": locality_upgrade_cost_rub(locality.level),
             "new_rub": ledger.balance(player, "rub"),
         }
@@ -554,8 +557,9 @@ def breed(tg_id: int, body: BreedBody) -> dict:
             if parent.last_bred_on == today:
                 raise HTTPException(400, "Одно из животных уже скрещивалось сегодня")
 
-        rate = min(0.95, breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction) + player.genetics_level * 0.05)  # type: ignore[arg-type]
-        worse_gene_chance = max(0.35, BREED_WORSE_GENE_CHANCE - player.genetics_level * 0.05)
+        genetics_bonus = development_effect_percent(player.genetics_level)
+        rate = min(0.95, breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction) + genetics_bonus / 100)  # type: ignore[arg-type]
+        worse_gene_chance = max(0.48, BREED_WORSE_GENE_CHANCE - genetics_bonus / 100)
         succeeded = random.random() < rate
         parent_a.last_bred_on = today
         parent_b.last_bred_on = today
@@ -693,7 +697,7 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
 
 def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime, vet_level: int = 0) -> list[int]:
     wounded: list[int] = []
-    sickness_chance = EXPEDITION_SICK_CHANCE * max(0.5, 1 - min(vet_level, 5) * 0.1)
+    sickness_chance = EXPEDITION_SICK_CHANCE * (1 - development_effect_percent(vet_level) / 100)
     for animal in squad:
         if (victim is not None and animal.id == victim.id) or animal.sick_since is not None:
             continue

@@ -82,6 +82,7 @@ export interface Locality {
   habitat: Habitat;
   level: number;
   upkeep_discount_percent: number;
+  next_upkeep_discount_percent: number | null;
   upgrade_cost_rub: number | null;
   animals: Animal[];
 }
@@ -107,6 +108,7 @@ export interface UpgradeLocalityResult {
   id: number;
   level: number;
   upkeep_discount_percent: number;
+  next_upkeep_discount_percent: number | null;
   upgrade_cost_rub: number | null;
   new_rub: number;
 }

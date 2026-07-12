@@ -215,7 +215,7 @@ UPKEEP_PERCENT_PER_LOG10_ANIMALS = 12.0
 UPKEEP_MAX_PERCENT = 45.0
 
 # Infrastructure upgrades turn the five localities into a real development choice.
-LOCALITY_UPKEEP_DISCOUNTS: tuple[int, ...] = (0, 5, 10, 15, 20, 25)
+LOCALITY_UPKEEP_DISCOUNTS: tuple[int, ...] = (0, 1, 3, 6, 9, 12)
 LOCALITY_UPGRADE_COSTS_RUB: tuple[int, ...] = (0, 500, 2_000, 8_000, 30_000, 100_000)
 HABITAT_MATCH_UPKEEP_DISCOUNT = 5
 
@@ -229,6 +229,15 @@ def locality_upgrade_cost_rub(level: int) -> int | None:
     if level >= len(LOCALITY_UPGRADE_COSTS_RUB) - 1:
         return None
     return LOCALITY_UPGRADE_COSTS_RUB[level + 1]
+
+
+# Small, predictable development bonuses shared by veterinary and genetics upgrades.
+DEVELOPMENT_EFFECT_PERCENT_BY_LEVEL: tuple[int, ...] = (0, 1, 3, 6, 9, 12)
+
+
+def development_effect_percent(level: int) -> int:
+    normalized = int(level or 0)
+    return DEVELOPMENT_EFFECT_PERCENT_BY_LEVEL[min(max(normalized, 0), len(DEVELOPMENT_EFFECT_PERCENT_BY_LEVEL) - 1)]
 
 
 # Global development tracks. They are capped: every level is useful, but no combination

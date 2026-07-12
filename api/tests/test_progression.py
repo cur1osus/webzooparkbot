@@ -171,7 +171,8 @@ class TestExpeditionLifecycle:
         after = me(player)
 
         assert result["level"] == 1
-        assert result["upkeep_discount_percent"] == 5
+        assert result["upkeep_discount_percent"] == 1
+        assert result["next_upkeep_discount_percent"] == 3
         assert after["income_rub_per_min"] == before["income_rub_per_min"]
         assert after["upkeep_rub_per_min"] < before["upkeep_rub_per_min"]
 
