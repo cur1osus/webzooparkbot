@@ -210,10 +210,19 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             <span className="text-[19px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>₽ </span>
             <AnimatedNumber value={gs.rub} format={fmtBalance} durationMs={850} />
           </p>
-          <p className="m-0 mt-[7px] text-[13px] font-extrabold tabular-nums"
-            style={{ color: netPerMin >= 0 ? 'var(--c-green)' : 'var(--c-orange)' }}>
-            {netPerMin >= 0 ? '▲' : '▼'} {fmtMin(netPerMin)} ₽/мин
-          </p>
+          <div className="m-0 mt-[7px] flex items-center justify-between gap-3 text-[13px] font-extrabold tabular-nums">
+            <span className="text-[11px] font-bold text-tg-hint">Чистый доход</span>
+            <span
+              style={{ color: netPerMin >= 0 ? 'var(--c-green)' : 'var(--c-orange)' }}
+            >
+              {netPerMin >= 0 ? '▲' : '▼'} {fmtMin(netPerMin)} ₽/мин
+            </span>
+          </div>
+          <div className="mt-[7px] flex items-center gap-2 text-[10px] font-bold tabular-nums text-tg-hint">
+            <span>Доход <b className="text-tg-text">{fmt(gs.income_rub_per_min)} ₽</b></span>
+            <span aria-hidden>−</span>
+            <span>содержание <b style={{ color: 'var(--c-orange)' }}>{fmt(gs.upkeep_rub_per_min)} ₽</b></span>
+          </div>
         </div>
       </div>
 
