@@ -286,14 +286,11 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             {breeding ? '🧬 Скрещиваем...' : '🧬 Скрестить'}
           </button>
 
-          {!parent1 || !parent2
-            ? null
-            : (!parent1.can_breed || !parent2.can_breed) && (
-              <p className="m-0 text-center text-[12px]" style={{ color: 'var(--c-amber)' }}>
-                ⚠️ Одно из животных уже скрещивалось сегодня
-              </p>
-            )
-          }
+          {!result && parent1 && parent2 && (!parent1.can_breed || !parent2.can_breed) && (
+            <p className="m-0 text-center text-[12px]" style={{ color: 'var(--c-amber)' }}>
+              ⚠️ Одно из животных уже скрещивалось сегодня
+            </p>
+          )}
 
           {error && (
             <div className="rounded-xl px-4 py-3 text-sm"
@@ -338,24 +335,6 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             </div>
           </div>
 
-          {/* Breed rate table */}
-          <div className="card">
-            <p className="m-0 mb-2 font-bold text-[13px]">Таблица шансов</p>
-            <div className="flex flex-col gap-[4px] text-[12px]">
-              {[
-                ['Неохотно + Неохотно', '30%'],
-                ['Неохотно + Обычно',   '45%'],
-                ['Обычно + Обычно',     '60%'],
-                ['Обычно + Активное',   '75%'],
-                ['Активное + Активное', '90%'],
-              ].map(([combo, chance]) => (
-                <div key={combo} className="flex justify-between py-[3px]">
-                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>{combo}</span>
-                  <span className="font-bold">{chance}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </>
       )}
 
@@ -370,6 +349,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           onPick={a => {
             if (picking === 1) setParent1(a);
             else setParent2(a);
+            setResult(null);
             setPicking(null);
           }}
           onClose={() => setPicking(null)}
