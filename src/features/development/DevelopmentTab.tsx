@@ -182,7 +182,6 @@ export function DevelopmentTab({ gs, onRefresh }: { gs: GameState; onRefresh: ()
                   {!maxed && <div className="mt-2 rounded-xl px-3 py-2" style={{ background: `color-mix(in srgb, ${habitat.color} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${habitat.color} 18%, transparent)` }}>
                     <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px]" style={{ color: habitat.color }}>Что даст улучшение</p>
                     <p className="m-0 mt-1 text-[11px] text-tg-hint">Содержание животных будет дешевле на {nextDiscount}%.</p>
-                    <p className="m-0 mt-1 text-[11px] font-bold text-tg-hint">Цена улучшения: ₽{fmt(locality.upgrade_cost_rub ?? 0)}.</p>
                   </div>}
                 </div>
               </div>
