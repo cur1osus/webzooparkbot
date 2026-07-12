@@ -85,6 +85,29 @@ function waitForAnimationEnd(picture: HTMLPictureElement): Promise<void> {
   });
 }
 
+function nextFrame(): Promise<void> {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+
+function waitForCanvas(picture: HTMLPictureElement, timeoutMs = 1200): Promise<boolean> {
+  return new Promise(resolve => {
+    const deadline = performance.now() + timeoutMs;
+    const check = () => {
+      if (picture.querySelector('canvas')) {
+        syncPlayerCanvas(picture);
+        resolve(true);
+        return;
+      }
+      if (performance.now() >= deadline) {
+        resolve(false);
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+    check();
+  });
+}
+
 export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size }, ref) => {
   const pictureRef = useRef<HTMLPictureElement>(null);
   const sourceRef = useRef<HTMLSourceElement>(null);
@@ -108,8 +131,20 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size }, ref
       source.setAttribute('srcset', src);
 
       const animationEnd = waitForAnimationEnd(picture);
+      // The Zoo page is remounted on every tab change. When RLottie is already
+      // loaded, initializing in the same frame as the new <picture> can leave a
+      // blank avatar, so give the browser a frame and retry once if no canvas appears.
+      await nextFrame();
+      if (pictureRef.current !== picture || sourceRef.current !== source) return;
       window.RLottie!.init(picture, { playUntilEnd: true });
-      requestAnimationFrame(() => syncPlayerCanvas(picture));
+      if (!(await waitForCanvas(picture))) {
+        resetPlayer(picture);
+        source.setAttribute('srcset', src);
+        await nextFrame();
+        if (pictureRef.current !== picture || sourceRef.current !== source) return;
+        window.RLottie!.init(picture, { playUntilEnd: true });
+        await waitForCanvas(picture);
+      }
       await animationEnd;
     },
   }), []);
