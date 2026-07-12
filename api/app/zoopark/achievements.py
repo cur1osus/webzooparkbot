@@ -1,0 +1,105 @@
+"""Lifetime achievement progress for the medals tab.
+
+Achievements are derived from the event tables that already record the game's important
+actions. There is no second counter to keep in sync, and progress never goes backwards
+when an animal dies or an item is sold.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from api.app.db.models import Animal, BreedingAttempt, Expedition, LedgerEntry, Locality, Player, SoloStats
+
+
+@dataclass(frozen=True)
+class AchievementDefinition:
+    id: str
+    title: str
+    description: str
+    target: int
+
+
+ACHIEVEMENTS: tuple[AchievementDefinition, ...] = (
+    AchievementDefinition("first_beast", "Первый зверь", "Заведи первое животное в зоопарке", 1),
+    AchievementDefinition("growing_zoo", "Зоопарк растёт", "Заведи 10 животных за всё время", 10),
+    AchievementDefinition("collector", "Коллекционер", "Собери животных пяти разных видов", 5),
+    AchievementDefinition("first_baby", "Первый детёныш", "Получи первого детёныша при скрещивании", 1),
+    AchievementDefinition("geneticist", "Генетический фонд", "Успешно проведи 10 скрещиваний", 10),
+    AchievementDefinition("first_expedition", "Первый поход", "Одержи первую победу в экспедиции", 1),
+    AchievementDefinition("pathfinder", "Покоритель дикой природы", "Победи в пяти экспедициях", 5),
+    AchievementDefinition("architect", "Архитектор", "Открой три местности в зоопарке", 3),
+    AchievementDefinition("blacksmith", "Кузнец", "Создай три артефакта в кузнице", 3),
+    AchievementDefinition("arena_winner", "Победитель арены", "Выиграй пять одиночных игр", 5),
+)
+
+
+def list_achievements(session: Session, player: Player) -> list[dict]:
+    """Return every medal in a stable order, including incomplete progress."""
+
+    player_id = player.id
+    animal_count = int(session.scalar(select(func.count(Animal.id)).where(Animal.player_id == player_id)) or 0)
+    species_count = int(
+        session.scalar(
+            select(func.count(func.distinct(Animal.species_id))).where(Animal.player_id == player_id)
+        )
+        or 0
+    )
+    successful_breedings = int(
+        session.scalar(
+            select(func.count(BreedingAttempt.id)).where(
+                BreedingAttempt.player_id == player_id,
+                BreedingAttempt.succeeded.is_(True),
+            )
+        )
+        or 0
+    )
+    expedition_victories = int(
+        session.scalar(
+            select(func.count(Expedition.id)).where(
+                Expedition.player_id == player_id,
+                Expedition.outcome == "victory",
+            )
+        )
+        or 0
+    )
+    locality_count = int(session.scalar(select(func.count(Locality.id)).where(Locality.player_id == player_id)) or 0)
+    forge_creations = int(
+        session.scalar(
+            select(func.count(LedgerEntry.id)).where(
+                LedgerEntry.player_id == player_id,
+                LedgerEntry.reason == "forge_create",
+            )
+        )
+        or 0
+    )
+    solo_stats = session.get(SoloStats, player_id)
+    solo_wins = solo_stats.wins if solo_stats else 0
+
+    values = {
+        "first_beast": animal_count,
+        "growing_zoo": animal_count,
+        "collector": species_count,
+        "first_baby": successful_breedings,
+        "geneticist": successful_breedings,
+        "first_expedition": expedition_victories,
+        "pathfinder": expedition_victories,
+        "architect": locality_count,
+        "blacksmith": forge_creations,
+        "arena_winner": solo_wins,
+    }
+
+    return [
+        {
+            "id": definition.id,
+            "title": definition.title,
+            "description": definition.description,
+            "value": min(values[definition.id], definition.target),
+            "target": definition.target,
+            "completed": values[definition.id] >= definition.target,
+        }
+        for definition in ACHIEVEMENTS
+    ]

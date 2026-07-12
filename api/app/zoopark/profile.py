@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from api.app.db.models import Animal, Clan, ClanMember, Item, ItemSet, Locality, Player, PlayerCosmetic, Season, utcnow
+from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark.bonuses import Bonuses
 from api.app.zoopark.catalog import (
@@ -236,5 +237,6 @@ def build_state(session: Session, player: Player) -> dict:
         "items": items,
         "item_sets": list_item_sets(session, player.id),
         "clan": get_clan(session, player.id),
+        "achievements": achievements_module.list_achievements(session, player),
         "diversity_bonus_percent_per_species": DIVERSITY_BONUS_PERCENT_PER_SPECIES,
     }

@@ -14,6 +14,7 @@ import { tmaConfirm } from '@/lib/tma';
 import { ForgeTab, ItemDetailPage, ItemSelectPage } from '@/features/forge/ForgeInventory';
 import { VetTab } from '@/features/vet/VetTab';
 import { DevelopmentTab } from '@/features/development/DevelopmentTab';
+import { AchievementsTab } from '@/features/achievements/AchievementsTab';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -405,15 +406,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       )}
 
       {tab === 'medals' && (
-        <div className="px-[14px] pt-3 page-enter">
-          <div className="card text-center py-10">
-            <p className="m-0 text-[48px]" style={{ animation: 'float 3s ease-in-out infinite' }}>🏅</p>
-            <p className="mt-3 mb-1 font-bold text-[15px]">Медали уже в пути</p>
-            <p className="m-0 text-tg-hint text-[13px] max-w-[260px] mx-auto leading-snug">
-              Развивай зоопарк и открывай виды — скоро за это начнут давать награды.
-            </p>
-          </div>
-        </div>
+        <AchievementsTab achievements={gs.achievements} />
       )}
 
       {selectedAnimal && (

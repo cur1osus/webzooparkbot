@@ -31,6 +31,7 @@ const baseState: GameState = {
   items: [],
   item_sets: [],
   clan: null,
+  achievements: [],
 };
 
 describe('netRubPerMin', () => {

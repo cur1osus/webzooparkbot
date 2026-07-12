@@ -1,5 +1,14 @@
 import type { Animal } from './progression';
 
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  value: number;
+  target: number;
+  completed: boolean;
+}
+
 /** Which effect an item property has. Every one of these is read somewhere on the server. */
 export type PropertyKind =
   | 'income_total'
@@ -89,6 +98,7 @@ export interface GameState {
   items: ForgeItem[];
   item_sets: ForgeSet[];
   clan: ClanInfo | null;
+  achievements: Achievement[];
 }
 
 export type NicknameColor = 'ivory' | 'gold' | 'jade' | 'lagoon' | 'orchid' | 'coral' | 'aurora' | 'embers' | 'spectrum' | 'neon' | 'google';
