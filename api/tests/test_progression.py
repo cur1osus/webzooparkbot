@@ -108,12 +108,12 @@ class TestExpeditionsCanBeLost:
 
     @pytest.mark.parametrize("habitat", sorted(progression.EXPEDITIONS))
     def test_an_average_squad_wins_sometimes_and_loses_sometimes(self, habitat):
-        average = 5 * combat_power("medium", "medium", "medium")
+        average = 4 * combat_power("medium", "medium", "medium")
         outcomes = {average >= progression.wild_encounter(habitat)[1] for _ in range(500)}
         assert outcomes == {True, False}, f"{habitat} has only one possible outcome"
 
     def test_harder_habitats_are_harder(self):
-        average = 5 * combat_power("medium", "medium", "medium")
+        average = 4 * combat_power("medium", "medium", "medium")
 
         def win_rate(habitat: str) -> float:
             trials = 4000

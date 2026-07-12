@@ -371,11 +371,10 @@ def pack_price_usd_for_tier(tier: PackTier, discount_mult: float = 1.0) -> int:
 
 EXPEDITION_SQUAD_MIN = 3
 EXPEDITION_SQUAD_MAX = 5
-# Tuned so that a five-animal squad of average animals takes the easiest habitat about
-# two thirds of the time and the hardest about a third, while three average animals take
-# neither. Because the beast is a flat cost, every extra body raises the squad's odds —
-# which is what gives weak animals their GDD §9 role as cannon fodder.
-EXPEDITION_WILD_SCALE = 4.5
+# Tuned so that three average animals have a real chance in the easy habitats, while
+# difficult habitats still reward bringing four or five animals. The old 4.5 multiplier
+# made a normal three-animal squad lose almost every encounter, especially in Antarctica.
+EXPEDITION_WILD_SCALE = 3.2
 
 
 class ExpeditionDef(TypedDict):
