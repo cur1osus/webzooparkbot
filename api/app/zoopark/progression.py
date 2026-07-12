@@ -555,7 +555,7 @@ def breed(tg_id: int, body: BreedBody) -> dict:
                 raise HTTPException(400, "Одно из животных уже скрещивалось сегодня")
 
         rate = min(0.95, breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction) + player.genetics_level * 0.05)  # type: ignore[arg-type]
-        worse_gene_chance = max(0.45, BREED_WORSE_GENE_CHANCE - player.genetics_level * 0.05)
+        worse_gene_chance = max(0.35, BREED_WORSE_GENE_CHANCE - player.genetics_level * 0.05)
         succeeded = random.random() < rate
         parent_a.last_bred_on = today
         parent_b.last_bred_on = today
@@ -693,7 +693,7 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
 
 def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime, vet_level: int = 0) -> list[int]:
     wounded: list[int] = []
-    sickness_chance = EXPEDITION_SICK_CHANCE * max(0.55, 1 - min(vet_level, 3) * 0.15)
+    sickness_chance = EXPEDITION_SICK_CHANCE * max(0.5, 1 - min(vet_level, 5) * 0.1)
     for animal in squad:
         if (victim is not None and animal.id == victim.id) or animal.sick_since is not None:
             continue

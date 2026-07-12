@@ -106,8 +106,8 @@ class Player(Base):
         CheckConstraint("balance_rub >= 0", name="ck_players_balance_rub"),
         CheckConstraint("balance_usd >= 0", name="ck_players_balance_usd"),
         CheckConstraint("balance_paw >= 0", name="ck_players_balance_paw"),
-        CheckConstraint("vet_level BETWEEN 0 AND 3", name="ck_players_vet_level"),
-        CheckConstraint("genetics_level BETWEEN 0 AND 3", name="ck_players_genetics_level"),
+        CheckConstraint("vet_level BETWEEN 0 AND 5", name="ck_players_vet_level"),
+        CheckConstraint("genetics_level BETWEEN 0 AND 5", name="ck_players_genetics_level"),
         Index("ix_players_income", "income_rub_per_min"),
         MYSQL,
     )

@@ -12,31 +12,90 @@ const HABITATS: Record<Habitat, { emoji: string; name: string; color: string }> 
 };
 
 type GlobalTrack = 'vet' | 'genetics';
+type TrackLevel = { level: number; cost: number; effects: string[] };
 
-function LevelDots({ level }: { level: number }) {
-  return <div className="flex gap-1" aria-label={`Уровень ${level} из 3`}>{[1, 2, 3].map(step => <span key={step} className="w-2 h-2 rounded-full" style={{ background: step <= level ? 'var(--c-gold)' : 'rgba(255,255,255,0.16)', boxShadow: step <= level ? '0 0 8px rgba(var(--c-gold-rgb),0.5)' : 'none' }} />)}</div>;
+const TRACKS: Record<GlobalTrack, {
+  icon: string;
+  title: string;
+  summary: string;
+  accent: string;
+  levels: TrackLevel[];
+}> = {
+  vet: {
+    icon: '🩺',
+    title: 'Ветеринарный блок',
+    summary: 'Животные реже болеют, а лечение обходится дешевле.',
+    accent: 'var(--c-cyan)',
+    levels: [
+      { level: 1, cost: 1_000, effects: ['болезни случаются на 10% реже', 'лечение дешевле на 8%'] },
+      { level: 2, cost: 5_000, effects: ['болезни случаются на 20% реже', 'лечение дешевле на 16%'] },
+      { level: 3, cost: 20_000, effects: ['болезни случаются на 30% реже', 'лечение дешевле на 24%'] },
+      { level: 4, cost: 75_000, effects: ['болезни случаются на 40% реже', 'лечение дешевле на 32%'] },
+      { level: 5, cost: 250_000, effects: ['болезни случаются на 50% реже', 'лечение дешевле на 40%'] },
+    ],
+  },
+  genetics: {
+    icon: '🧬',
+    title: 'Генетический центр',
+    summary: 'Больше удачных потомков и меньше шансов получить слабые гены.',
+    accent: 'var(--c-purple)',
+    levels: [
+      { level: 1, cost: 1_500, effects: ['к шансу успешного скрещивания добавляется 5 процентных пунктов', 'шанс получить слабейший ген ниже на 5 процентных пунктов'] },
+      { level: 2, cost: 7_500, effects: ['к шансу успешного скрещивания добавляется 10 процентных пунктов', 'шанс получить слабейший ген ниже на 10 процентных пунктов'] },
+      { level: 3, cost: 30_000, effects: ['к шансу успешного скрещивания добавляется 15 процентных пунктов', 'шанс получить слабейший ген ниже на 15 процентных пунктов'] },
+      { level: 4, cost: 100_000, effects: ['к шансу успешного скрещивания добавляется 20 процентных пунктов', 'шанс получить слабейший ген ниже на 20 процентных пунктов'] },
+      { level: 5, cost: 350_000, effects: ['к шансу успешного скрещивания добавляется 25 процентных пунктов', 'шанс получить слабейший ген ниже на 25 процентных пунктов'] },
+    ],
+  },
+};
+
+function LevelDots({ level, max = 5 }: { level: number; max?: number }) {
+  return (
+    <div className="flex gap-1" aria-label={`Уровень ${level} из ${max}`}>
+      {Array.from({ length: max }, (_, index) => index + 1).map(step => (
+        <span key={step} className="w-2 h-2 rounded-full" style={{ background: step <= level ? 'var(--c-gold)' : 'rgba(255,255,255,0.16)', boxShadow: step <= level ? '0 0 8px rgba(var(--c-gold-rgb),0.5)' : 'none' }} />
+      ))}
+    </div>
+  );
+}
+
+function EffectLines({ effects }: { effects: string[] }) {
+  return <ul className="m-0 pl-4 text-[11px] leading-[1.55] text-tg-hint">{effects.map(effect => <li key={effect}>{effect}</li>)}</ul>;
 }
 
 function TrackCard({ kind, level, busy, onUpgrade }: { kind: GlobalTrack; level: number; busy: boolean; onUpgrade: () => void }) {
-  const vet = kind === 'vet';
-  const nextCost = vet ? [750, 2_000, 5_000][level] : [1_000, 2_500, 6_000][level];
-  const maxed = level >= 3;
+  const track = TRACKS[kind];
+  const current = track.levels[level - 1];
+  const next = track.levels[level];
+  const maxed = !next;
+
   return (
-    <div className="rounded-2xl p-3" style={{ background: vet ? 'linear-gradient(140deg, rgba(var(--c-cyan-rgb),0.13), var(--surface-subtle) 62%)' : 'linear-gradient(140deg, rgba(var(--c-purple-rgb),0.14), var(--surface-subtle) 62%)', border: `1px solid ${vet ? 'rgba(var(--c-cyan-rgb),0.28)' : 'rgba(var(--c-purple-rgb),0.30)'}` }}>
+    <div className="rounded-2xl p-3" style={{ background: `linear-gradient(140deg, color-mix(in srgb, ${track.accent} 14%, transparent), var(--surface-subtle) 62%)`, border: `1px solid color-mix(in srgb, ${track.accent} 30%, transparent)` }}>
       <div className="flex items-start gap-3">
-        <div className="w-11 h-11 rounded-[14px] grid place-items-center text-[23px] shrink-0" style={{ background: vet ? 'rgba(var(--c-cyan-rgb),0.14)' : 'rgba(var(--c-purple-rgb),0.15)' }}>{vet ? '🩺' : '🧬'}</div>
+        <div className="w-11 h-11 rounded-[14px] grid place-items-center text-[23px] shrink-0" style={{ background: `color-mix(in srgb, ${track.accent} 16%, transparent)` }}>{track.icon}</div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2"><p className="m-0 text-[14px] font-extrabold">{vet ? 'Ветеринарный блок' : 'Генетический центр'}</p><LevelDots level={level} /></div>
-          <p className="m-0 mt-1 text-[11px] leading-[1.4] text-tg-hint">{vet ? 'Меньше болезней и дешевле лечение.' : 'Лучше шанс на потомство и сильные гены.'}</p>
+          <div className="flex items-center justify-between gap-2"><p className="m-0 text-[14px] font-extrabold">{track.title}</p><LevelDots level={level} /></div>
+          <p className="m-0 mt-1 text-[11px] leading-[1.45] text-tg-hint">{track.summary}</p>
         </div>
       </div>
-      <div className="mt-3 rounded-xl px-3 py-2 text-[11px]" style={{ background: 'rgba(0,0,0,0.12)' }}>
-        {level === 0 && (vet ? 'Базовая клиника' : 'Базовая лаборатория')}
-        {level > 0 && vet && `−${level * 15}% шанс болезни · −${level * 10}% лечение`}
-        {level > 0 && !vet && `+${level * 5} п.п. к скрещиванию · лучшее наследование генов`}
+
+      <div className="mt-3 rounded-xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.12)' }}>
+        <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px] text-tg-hint">Сейчас · уровень {level}</p>
+        {current ? <EffectLines effects={current.effects} /> : <p className="m-0 mt-1 text-[11px] text-tg-hint">Базовый уровень без дополнительных бонусов.</p>}
       </div>
-      <button type="button" disabled={busy || maxed} onClick={onUpgrade} className="w-full mt-3 rounded-xl py-2 border-none text-[12px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : vet ? 'var(--c-cyan)' : 'var(--c-purple)', color: maxed ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)' }}>
-        {maxed ? 'Максимальный уровень' : `Улучшить за ₽${fmt(nextCost)}`}
+
+      {!maxed && next && <div className="mt-2 rounded-xl px-3 py-2" style={{ background: `color-mix(in srgb, ${track.accent} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${track.accent} 18%, transparent)` }}>
+        <div className="flex items-center justify-between gap-2"><p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px]" style={{ color: track.accent }}>Следующий шаг · уровень {next.level}</p><span className="text-[11px] font-extrabold">₽{fmt(next.cost)}</span></div>
+        <EffectLines effects={next.effects} />
+      </div>}
+
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[11px] font-bold text-tg-hint">Показать все 5 уровней</summary>
+        <div className="mt-2 flex flex-col gap-1">{track.levels.map(item => <div key={item.level} className="flex gap-2 rounded-lg px-2 py-1.5 text-[10px]" style={{ background: item.level <= level ? 'rgba(var(--c-gold-rgb),0.08)' : 'rgba(255,255,255,0.035)', opacity: item.level < level ? 0.62 : 1 }}><span className="w-8 shrink-0 font-extrabold">{item.level <= level ? '✓' : `Ур. ${item.level}`}</span><span className="flex-1 text-tg-hint">{item.effects[0]}</span><span className="shrink-0 font-bold">₽{fmt(item.cost)}</span></div>)}</div>
+      </details>
+
+      <button type="button" disabled={busy || maxed} onClick={onUpgrade} className="w-full mt-3 rounded-xl py-2 border-none text-[12px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : track.accent, color: maxed ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)' }}>
+        {maxed ? 'Все уровни открыты' : `Открыть уровень ${next?.level} за ₽${fmt(next?.cost ?? 0)}`}
       </button>
     </div>
   );
@@ -89,15 +148,14 @@ export function DevelopmentTab({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   return (
     <div className="px-[14px] pt-3 pb-5 flex flex-col gap-3">
       <div className="rounded-[22px] p-4" style={{ background: 'radial-gradient(circle at 100% 0%, rgba(var(--c-gold-rgb),0.24), transparent 48%), linear-gradient(145deg, rgba(var(--c-gold-rgb),0.12), var(--surface-subtle) 68%)', border: '1px solid rgba(var(--c-gold-rgb),0.28)' }}>
-        <div className="flex items-center gap-2"><span className="text-[25px]">🏗️</span><div><p className="m-0 font-extrabold text-[16px]">Развитие зоопарка</p><p className="m-0 mt-1 text-[11px] text-tg-hint">Вкладывай рубли в то, что важнее именно сейчас.</p></div></div>
-        <div className="mt-3 flex items-center justify-between gap-3"><span className="text-[11px] text-tg-hint">Чистый доход</span><span className="font-display text-[17px]" style={{ color: gs.income_rub_per_min - gs.upkeep_rub_per_min >= 0 ? 'var(--c-green)' : 'var(--c-orange)' }}>₽ {fmt(gs.income_rub_per_min - gs.upkeep_rub_per_min)}/мин</span></div>
+        <div className="flex items-center gap-2"><span className="text-[25px]">🏗️</span><div><p className="m-0 font-extrabold text-[16px]">Развитие зоопарка</p><p className="m-0 mt-1 text-[11px] text-tg-hint">Выбирай, куда направить рубли: стабильность, генетику или содержание.</p></div></div>
       </div>
 
       {error && <div className="rounded-xl px-3 py-2 text-[12px]" style={{ color: 'var(--c-red-soft)', background: 'rgba(var(--c-red-rgb),0.11)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>⚠️ {error}</div>}
 
       <div><p className="m-0 mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Глобальные направления</p><div className="flex flex-col gap-2"><TrackCard kind="vet" level={gs.vet_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('vet')} /><TrackCard kind="genetics" level={gs.genetics_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('genetics')} /></div></div>
 
-      <div><div className="flex items-baseline justify-between gap-3 mb-2 px-1"><p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Инфраструктура местностей</p><span className="text-[10px] text-tg-hint">бонус содержания</span></div>{loading ? <div className="card text-center text-[12px] text-tg-hint">Загружаем местности…</div> : <div className="flex flex-col gap-2">{info?.localities.map(locality => { const habitat = HABITATS[locality.habitat]; const maxed = locality.upgrade_cost_rub === null; return <div key={locality.id} className="rounded-2xl p-3" style={{ background: 'var(--surface-subtle)', border: `1px solid color-mix(in srgb, ${habitat.color} 28%, transparent)` }}><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl grid place-items-center text-[22px]" style={{ background: `color-mix(in srgb, ${habitat.color} 16%, transparent)` }}>{habitat.emoji}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2"><p className="m-0 text-[13px] font-extrabold">{habitat.name}</p><LevelDots level={locality.level} /></div><p className="m-0 mt-1 text-[11px] text-tg-hint">{locality.animals.length} животных · −{locality.upkeep_discount_percent}% содержания</p></div><button type="button" disabled={busy !== null || maxed} onClick={() => void upgradeLocality(locality.id)} className="rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : habitat.color, color: maxed ? 'var(--tg-theme-hint-color)' : '#161616' }}>{maxed ? 'MAX' : `₽${fmt(locality.upgrade_cost_rub ?? 0)}`}</button></div></div>; })}</div>}</div>
+      <div><div className="flex items-baseline justify-between gap-3 mb-2 px-1"><p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Инфраструктура местностей</p><span className="text-[10px] text-tg-hint">до 5 уровней</span></div>{loading ? <div className="card text-center text-[12px] text-tg-hint">Загружаем местности…</div> : <div className="flex flex-col gap-2">{info?.localities.map(locality => { const habitat = HABITATS[locality.habitat]; const maxed = locality.upgrade_cost_rub === null; const nextDiscount = locality.level < 5 ? locality.upkeep_discount_percent + 5 : locality.upkeep_discount_percent; return <div key={locality.id} className="rounded-2xl p-3" style={{ background: 'var(--surface-subtle)', border: `1px solid color-mix(in srgb, ${habitat.color} 28%, transparent)` }}><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-xl grid place-items-center text-[22px]" style={{ background: `color-mix(in srgb, ${habitat.color} 16%, transparent)` }}>{habitat.emoji}</div><div className="flex-1 min-w-0"><div className="flex items-center gap-2"><p className="m-0 text-[13px] font-extrabold">{habitat.name}</p><LevelDots level={locality.level} /></div><p className="m-0 mt-1 text-[11px] text-tg-hint">Сейчас: −{locality.upkeep_discount_percent}% содержания</p>{!maxed && <p className="m-0 mt-1 text-[10px] font-bold" style={{ color: habitat.color }}>Следующий уровень: −{nextDiscount}% содержания · ₽{fmt(locality.upgrade_cost_rub ?? 0)} · {locality.animals.length} животных</p>}</div><button type="button" disabled={busy !== null || maxed} onClick={() => void upgradeLocality(locality.id)} className="rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : habitat.color, color: maxed ? 'var(--tg-theme-hint-color)' : '#161616' }}>{maxed ? 'MAX' : `₽${fmt(locality.upgrade_cost_rub ?? 0)}`}</button></div></div>; })}</div>}</div>
     </div>
   );
 }

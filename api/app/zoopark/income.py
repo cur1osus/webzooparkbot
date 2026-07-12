@@ -103,7 +103,7 @@ def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
         species_multiplier=bonuses.species_income_multiplier(animal.species_id),
     )
     cost_rub = healthy_rub_per_min * 60 * CURE_INCOME_HOURS
-    clinic_discount = min(max(vet_level, 0), 3) * 10
+    clinic_discount = min(max(vet_level, 0), 5) * 8
     return max(1, round(cost_rub / RATE_START_RUB_PER_USD * (100 - clinic_discount) / 100))
 
 
@@ -178,8 +178,11 @@ def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None
         # percentage point would otherwise disappear into integer rounding. The extra
         # minimum is based on upgrade levels, so a habitat-match bonus cannot consume
         # the entire visible effect of the first locality upgrade.
+        non_level_discounted_income = max(locality_discounted_income - level_discounted_income, 0)
         locality_relief = max(
-            round(level_discounted_income * base_percent) + levelled_locality_levels,
+            round(non_level_discounted_income * base_percent)
+            + round(level_discounted_income * base_percent)
+            + levelled_locality_levels,
             locality_relief,
         )
     elif locality_discounted_income > 0 and base_upkeep > 0:
