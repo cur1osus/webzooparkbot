@@ -27,12 +27,12 @@ function WildAnimalSummary({ habitat, result }: { habitat: Habitat; result: Expe
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 rounded-2xl grid place-items-center text-[26px] shrink-0"
              style={{ background: `${wildHabitat.color}20`, border: `1px solid ${wildHabitat.color}35` }}>
-          🐾
+          {result.wild.species_emoji}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="m-0 font-extrabold text-[15px]">Дикое животное</p>
+          <p className="m-0 font-extrabold text-[15px]">{result.wild.species_name}</p>
           <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {wildHabitat.name} · сила {result.wild_power}
+            Дикое животное · {wildHabitat.name} · сила {result.wild_power}
           </p>
         </div>
       </div>

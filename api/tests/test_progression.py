@@ -209,6 +209,9 @@ class TestExpeditionLifecycle:
 
         result = progression.finish_expedition(player)["result"]
         assert result["outcome"] in ("victory", "defeat")
+        assert result["wild"]["species_name"]
+        if result["outcome"] == "victory":
+            assert result["captured_animal"]["species_code"] == result["wild"]["species_code"]
         with pytest.raises(Exception, match="Нет активной"):
             progression.finish_expedition(player)
 

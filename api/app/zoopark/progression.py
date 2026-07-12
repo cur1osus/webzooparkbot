@@ -43,6 +43,7 @@ from api.app.zoopark.catalog import (
     MAX_LOCALITIES,
     PackTier,
     SPECIES_IDS_BY_RARITY,
+    SPECIES_BY_ID,
     SPECIES_RARITY_WEIGHTS,
     BREED_WORSE_GENE_CHANCE,
     BREED_TIER_INDEX,
@@ -681,12 +682,22 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
     )
     habitat: Habitat = expedition.locality.habitat  # type: ignore[assignment]
     genes, wild_power = wild_encounter(habitat)
+    wild_species_id = roll_species_id()
+    wild_species = SPECIES_BY_ID[wild_species_id]
     power = squad_power(squad)
 
     now = utcnow()
     # The client names the size gene `size_trait` everywhere else; keep it one name.
     wild_payload = {key.removeprefix("gene_"): value for key, value in genes.items()}
     wild_payload["size_trait"] = wild_payload.pop("size")
+    wild_payload.update(
+        {
+            "species_code": wild_species["code"],
+            "species_name": wild_species["name"],
+            "species_emoji": wild_species["emoji"],
+            "species_rarity": wild_species["rarity"],
+        }
+    )
     result: dict = {
         "squad_power": power,
         "wild_power": wild_power,
@@ -704,6 +715,7 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
             origin="expedition",
             genes=genes,
             habitat=habitat,
+            species_id=wild_species_id,
         )
         expedition.outcome = "victory"
         result["outcome"] = "victory"

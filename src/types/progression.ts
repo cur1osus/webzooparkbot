@@ -147,6 +147,10 @@ export interface ExpeditionResult {
   wild_power: number;
   habitat: Habitat;
   wild: {
+    species_code: string;
+    species_name: string;
+    species_emoji: string;
+    species_rarity: SpeciesRarity;
     survival: GeneTier;
     reproduction: GeneTier;
     appearance: GeneTier;
