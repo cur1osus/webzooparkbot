@@ -92,7 +92,7 @@ function TrackCard({ kind, level, busy, onUpgrade }: { kind: GlobalTrack; level:
       </div>
 
       {!maxed && next && <div className="mt-2 rounded-xl px-3 py-2" style={{ background: `color-mix(in srgb, ${track.accent} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${track.accent} 18%, transparent)` }}>
-        <div className="flex items-center justify-between gap-2"><p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px]" style={{ color: track.accent }}>Следующий шаг · уровень {next.level}</p><span className="text-[11px] font-extrabold">₽{fmt(next.cost)}</span></div>
+        <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px]" style={{ color: track.accent }}>Следующий шаг · уровень {next.level}</p>
         <EffectLines effects={next.effects} />
       </div>}
 
@@ -102,7 +102,7 @@ function TrackCard({ kind, level, busy, onUpgrade }: { kind: GlobalTrack; level:
       </details>
 
       <button type="button" disabled={busy || maxed} onClick={onUpgrade} className="w-full mt-3 rounded-xl py-2 border-none text-[12px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : track.accent, color: maxed ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)' }}>
-        {maxed ? 'Все уровни открыты' : `Открыть уровень ${next?.level} за ₽${fmt(next?.cost ?? 0)}`}
+        {maxed ? 'Все уровни открыты' : `Улучшить за ₽${fmt(next?.cost ?? 0)}`}
       </button>
     </div>
   );
