@@ -24,6 +24,8 @@ export interface AdminPlayer {
   paw: number;
   animals_count: number;
   income_rub_per_min: number;
+  upkeep_rub_per_min: number;
+  net_income_rub_per_min: number;
 }
 
 export interface AdminOverview {

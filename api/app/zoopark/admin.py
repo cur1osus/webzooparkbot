@@ -35,6 +35,8 @@ def _player_payload(player: Player, animals_count: int) -> dict:
         "paw": player.balance_paw,
         "animals_count": animals_count,
         "income_rub_per_min": player.income_rub_per_min,
+        "upkeep_rub_per_min": player.upkeep_rub_per_min,
+        "net_income_rub_per_min": player.income_rub_per_min - player.upkeep_rub_per_min,
     }
 
 

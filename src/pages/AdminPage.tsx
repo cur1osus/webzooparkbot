@@ -50,7 +50,7 @@ function PlayerRow({ player, selected, onSelect, asOf }: { player: AdminPlayer; 
           <p className="m-0 mt-1 truncate text-[11px] text-tg-hint">{player.username ? `@${player.username}` : `id ${player.tg_id}`} · {player.animals_count} жив.</p>
         </div>
         <div className="text-right shrink-0">
-          <p className="m-0 text-[12px] font-extrabold" style={{ color: 'var(--c-green)' }}>₽ {fmt(player.income_rub_per_min)}/мин</p>
+          <p className="m-0 text-[12px] font-extrabold" style={{ color: player.net_income_rub_per_min >= 0 ? 'var(--c-green)' : 'var(--c-orange)' }}>₽ {fmt(player.net_income_rub_per_min)}/мин</p>
           <p className="m-0 mt-1 text-[10px] text-tg-hint">{fmt(player.rub)} ₽</p>
         </div>
       </div>
