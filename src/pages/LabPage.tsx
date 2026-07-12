@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimalArt } from '@/components/AnimalArt';
 import { PageHeader } from '@/components/PageHeader';
-import type { Animal, BreedResult, GameState, GeneTier } from '@/types';
+import type { Animal, BreedResult, GameState, GeneTier, InheritedGene } from '@/types';
 import { apiBreed, apiGetAnimals } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
@@ -15,6 +15,48 @@ function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): n
   const baseRate = (30 + 15 * (BREED_TIER_INDEX[a.reproduction] + BREED_TIER_INDEX[b.reproduction])) / 100;
   const bonus = GENETICS_BONUS_BY_LEVEL[Math.min(Math.max(geneticsLevel, 0), 5)] ?? 0;
   return Math.min(0.95, baseRate + bonus / 100);
+}
+
+const GENE_STAT_ROWS: Array<{ key: keyof typeof GENE_META; short: string }> = [
+  { key: 'survival', short: 'Выж' },
+  { key: 'reproduction', short: 'Разм' },
+  { key: 'appearance', short: 'Вид' },
+  { key: 'size_trait', short: 'Размер' },
+];
+
+function GeneStats({ animal, compact = false }: { animal: Animal; compact?: boolean }) {
+  return (
+    <div className={`grid grid-cols-2 gap-x-2 gap-y-1 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
+      {GENE_STAT_ROWS.map(({ key, short }) => {
+        const meta = GENE_META[key][animal[key]];
+        return <span key={key} className="truncate" style={{ color: meta.color }}>{short}: {meta.label}</span>;
+      })}
+    </div>
+  );
+}
+
+function InheritanceCard({ genes }: { genes: InheritedGene[] }) {
+  return (
+    <div className="rounded-2xl p-3" style={{ background: 'rgba(var(--c-purple-rgb),0.08)', border: '1px solid rgba(var(--c-purple-rgb),0.22)' }}>
+      <p className="m-0 text-[13px] font-extrabold">🧬 Какие гены получил детёныш</p>
+      <p className="m-0 mt-1 text-[11px] text-tg-hint">Здесь видно, от какого родителя пришло каждое свойство.</p>
+      <div className="mt-3 flex flex-col gap-2">
+        {genes.map(entry => {
+          const meta = GENE_META[entry.gene][entry.value];
+          const parentAMeta = GENE_META[entry.gene][entry.parent_a_value];
+          const parentBMeta = GENE_META[entry.gene][entry.parent_b_value];
+          const geneLabel = GENE_STAT_ROWS.find(row => row.key === entry.gene)?.short ?? entry.gene;
+          return (
+            <div key={entry.gene} className="rounded-xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.12)' }}>
+              <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-bold text-tg-hint">{geneLabel}</span><span className="text-[11px] font-extrabold" style={{ color: meta.color }}>{meta.label}</span></div>
+              <p className="m-0 mt-1 text-[10px] text-tg-hint">{entry.parent_a_name}: <span style={{ color: parentAMeta.color }}>{parentAMeta.label}</span> · {entry.parent_b_name}: <span style={{ color: parentBMeta.color }}>{parentBMeta.label}</span></p>
+              <p className="m-0 mt-1 text-[10px] font-bold" style={{ color: entry.source === 'both' ? 'var(--c-purple)' : 'var(--c-green)' }}>Получено от: {entry.source_name}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ─── Animal mini-card for result display ─────────────────────────────────────
@@ -99,6 +141,7 @@ function ParentSlot({ label, animal, onClick }: {
           <p className="m-0 text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>
             {animal.species_name}
           </p>
+          <div className="mt-1"><GeneStats animal={animal} compact /></div>
         </div>
       </div>
       <span className="text-[10px] px-2 py-[3px] rounded-full self-start"
@@ -144,7 +187,6 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
           })
           .map(a => {
           const rarity = SPECIES_RARITY_META[a.species_rarity];
-          const repro = GENE_META.reproduction[a.reproduction];
           const incompatible = mateSpeciesCode !== null && a.species_code !== mateSpeciesCode;
           return (
             <button key={a.id} onClick={() => { if (!incompatible) onPick(a); }}
@@ -164,14 +206,12 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
                 <p className="m-0 text-[13px] font-bold truncate">
                   {a.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {a.species_name}</span>
                 </p>
+                <div className="mt-1"><GeneStats animal={a} compact /></div>
                 <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
                   {incompatible ? (
                     <span style={{ color: 'var(--c-amber)' }}>Другой вид — нельзя скрестить</span>
                   ) : (
-                    <>
-                      Разм: <span style={{ color: repro.color }}>{repro.label}</span>
-                      {' · '}₽{fmt(a.income)}/мин
-                    </>
+                    <>Доход: ₽{fmt(a.income)}/мин</>
                   )}
                 </p>
               </div>
@@ -312,7 +352,10 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
                 {result.success ? '✅ Успех! Родился новый детёныш' : '❌ Попытка не удалась'}
               </div>
               {result.success && result.animal && (
-                <AnimalResultCard animal={result.animal} />
+                <>
+                  {result.inherited_genes && <InheritanceCard genes={result.inherited_genes} />}
+                  <AnimalResultCard animal={result.animal} />
+                </>
               )}
             </div>
           )}

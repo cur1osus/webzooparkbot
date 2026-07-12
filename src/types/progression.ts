@@ -123,6 +123,21 @@ export interface BreedResult {
   success: boolean;
   rate: number;
   animal: Animal | null;
+  inherited_genes?: InheritedGene[];
+}
+
+export type InheritedGeneKey = 'survival' | 'reproduction' | 'appearance' | 'size_trait';
+export type InheritanceSource = 'parent_a' | 'parent_b' | 'both';
+
+export interface InheritedGene {
+  gene: InheritedGeneKey;
+  value: GeneTier;
+  source: InheritanceSource;
+  source_name: string;
+  parent_a_name: string;
+  parent_b_name: string;
+  parent_a_value: GeneTier;
+  parent_b_value: GeneTier;
 }
 
 export interface ExpeditionResult {

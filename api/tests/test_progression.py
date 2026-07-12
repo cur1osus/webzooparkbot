@@ -258,7 +258,12 @@ class TestBreeding:
             mate_id = mate.id
             session.commit()
 
-        progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
+        result = progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
+        if result["success"]:
+            assert len(result["inherited_genes"]) == 4
+            assert {entry["gene"] for entry in result["inherited_genes"]} == {
+                "survival", "reproduction", "appearance", "size_trait"
+            }
         with pytest.raises(Exception, match="уже скрещивалось"):
             progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
 

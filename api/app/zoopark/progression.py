@@ -523,6 +523,14 @@ def inherit_gene(a: GeneTier, b: GeneTier, worse_gene_chance: float = BREED_WORS
     return worse if random.random() < worse_gene_chance else better
 
 
+def inheritance_source(child: GeneTier, parent_a: GeneTier, parent_b: GeneTier) -> str:
+    if parent_a == parent_b:
+        return "both"
+    if child == parent_a:
+        return "parent_a"
+    return "parent_b"
+
+
 def breed(tg_id: int, body: BreedBody) -> dict:
     if body.animal_id_1 == body.animal_id_2:
         raise HTTPException(400, "Нельзя скрещивать животное с самим собой")
@@ -565,6 +573,7 @@ def breed(tg_id: int, body: BreedBody) -> dict:
         parent_b.last_bred_on = today
 
         child = None
+        inherited_genes = None
         if succeeded:
             genes = {
                 "gene_survival": inherit_gene(parent_a.gene_survival, parent_b.gene_survival, worse_gene_chance),  # type: ignore[arg-type]
@@ -584,6 +593,26 @@ def breed(tg_id: int, body: BreedBody) -> dict:
                 parent_a_id=parent_a.id,
                 parent_b_id=parent_b.id,
             )
+            inherited_genes = []
+            for gene, child_value, parent_a_value, parent_b_value in (
+                ("survival", child.gene_survival, parent_a.gene_survival, parent_b.gene_survival),
+                ("reproduction", child.gene_reproduction, parent_a.gene_reproduction, parent_b.gene_reproduction),
+                ("appearance", child.gene_appearance, parent_a.gene_appearance, parent_b.gene_appearance),
+                ("size_trait", child.gene_size, parent_a.gene_size, parent_b.gene_size),
+            ):
+                source = inheritance_source(child_value, parent_a_value, parent_b_value)
+                inherited_genes.append(
+                    {
+                        "gene": gene,
+                        "value": child_value,
+                        "source": source,
+                        "source_name": "Оба родителя" if source == "both" else parent_a.name if source == "parent_a" else parent_b.name,
+                        "parent_a_name": parent_a.name,
+                        "parent_b_name": parent_b.name,
+                        "parent_a_value": parent_a_value,
+                        "parent_b_value": parent_b_value,
+                    }
+                )
 
         session.add(
             BreedingAttempt(
@@ -604,6 +633,7 @@ def breed(tg_id: int, body: BreedBody) -> dict:
             "success": succeeded,
             "rate": rate,
             "animal": animal_payload(child, None, bonuses) if child else None,
+            "inherited_genes": inherited_genes,
         }
         session.commit()
         return result
