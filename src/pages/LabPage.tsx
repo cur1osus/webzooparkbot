@@ -17,11 +17,11 @@ function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): n
   return Math.min(0.95, baseRate + bonus / 100);
 }
 
-const GENE_STAT_ROWS: Array<{ key: keyof typeof GENE_META; short: string }> = [
-  { key: 'survival', short: 'Выж' },
-  { key: 'reproduction', short: 'Разм' },
-  { key: 'appearance', short: 'Вид' },
-  { key: 'size_trait', short: 'Размер' },
+const GENE_STAT_ROWS: Array<{ key: keyof typeof GENE_META; short: string; label: string }> = [
+  { key: 'survival', short: 'Выж', label: 'Выживание' },
+  { key: 'reproduction', short: 'Разм', label: 'Размножение' },
+  { key: 'appearance', short: 'Вид', label: 'Внешний вид' },
+  { key: 'size_trait', short: 'Размер', label: 'Размер' },
 ];
 
 function GeneStats({ animal, compact = false }: { animal: Animal; compact?: boolean }) {
@@ -31,6 +31,30 @@ function GeneStats({ animal, compact = false }: { animal: Animal; compact?: bool
         const meta = GENE_META[key][animal[key]];
         return <span key={key} className="truncate" style={{ color: meta.color }}>{short}: {meta.label}</span>;
       })}
+    </div>
+  );
+}
+
+function GeneComparison({ parentA, parentB }: { parentA: Animal; parentB: Animal }) {
+  return (
+    <div className="rounded-2xl p-3" style={{ background: 'rgba(var(--c-purple-rgb),0.07)', border: '1px solid rgba(var(--c-purple-rgb),0.2)' }}>
+      <p className="m-0 text-[12px] font-extrabold">Сравнение родителей</p>
+      <div className="mt-2 grid grid-cols-[76px_minmax(0,1fr)_minmax(0,1fr)] gap-2 items-center text-[10px]">
+        <span />
+        <span className="truncate font-bold text-tg-hint">{parentA.name}</span>
+        <span className="truncate font-bold text-tg-hint">{parentB.name}</span>
+        {GENE_STAT_ROWS.map(({ key, label }) => {
+          const metaA = GENE_META[key][parentA[key]];
+          const metaB = GENE_META[key][parentB[key]];
+          return (
+            <div key={key} className="contents">
+              <span className="text-tg-hint">{label}</span>
+              <span className="truncate font-extrabold" style={{ color: metaA.color }}>{metaA.label}</span>
+              <span className="truncate font-extrabold" style={{ color: metaB.color }}>{metaB.label}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -141,7 +165,6 @@ function ParentSlot({ label, animal, onClick }: {
           <p className="m-0 text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>
             {animal.species_name}
           </p>
-          <div className="mt-1"><GeneStats animal={animal} compact /></div>
         </div>
       </div>
       <span className="text-[10px] px-2 py-[3px] rounded-full self-start"
@@ -297,6 +320,8 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             <div className="flex items-center text-[24px]" style={{ color: 'var(--tg-theme-hint-color)' }}>×</div>
             <ParentSlot label="Родитель 2" animal={parent2} onClick={() => setPicking(2)} />
           </div>
+
+          {parent1 && parent2 && <GeneComparison parentA={parent1} parentB={parent2} />}
 
           {/* Success probability */}
           {rate !== null && (
