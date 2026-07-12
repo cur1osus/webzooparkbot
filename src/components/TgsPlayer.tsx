@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import pakoUrl from '../lib/tgsticker/pako-inflate.min.js?url';
 import tgstickerUrl from '../lib/tgsticker/tgsticker.js?url';
 import rlottieRuntimeUrl from '../lib/tgsticker/rlottie-wasm.js?url';
@@ -109,9 +109,37 @@ function waitForCanvas(picture: HTMLPictureElement, timeoutMs = 1200): Promise<b
   });
 }
 
-export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size }, ref) => {
+export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string }>(({ size, src }, ref) => {
   const pictureRef = useRef<HTMLPictureElement>(null);
   const sourceRef = useRef<HTMLSourceElement>(null);
+
+  const playAnimation = useCallback(async (src: string): Promise<void> => {
+    await loadRLottie();
+    const picture = pictureRef.current;
+    const source = sourceRef.current;
+    if (!picture || !source || !window.RLottie) return;
+
+    resetPlayer(picture);
+    source.setAttribute('srcset', src);
+
+    const animationEnd = waitForAnimationEnd(picture);
+    // A TGS player can be remounted inside a page when returning from a
+    // subpage. When RLottie is already loaded, initializing in the same frame
+    // as the new <picture> can leave a blank avatar, so give the browser a
+    // frame and retry once if no canvas appears.
+    await nextFrame();
+    if (pictureRef.current !== picture || sourceRef.current !== source) return;
+    window.RLottie!.init(picture, { playUntilEnd: true });
+    if (!(await waitForCanvas(picture))) {
+      resetPlayer(picture);
+      source.setAttribute('srcset', src);
+      await nextFrame();
+      if (pictureRef.current !== picture || sourceRef.current !== source) return;
+      window.RLottie!.init(picture, { playUntilEnd: true });
+      await waitForCanvas(picture);
+    }
+    await animationEnd;
+  }, []);
 
   useImperativeHandle(ref, () => ({
     clearAnimation(): void {
@@ -122,33 +150,12 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size }, ref
       resetPlayer(picture);
       source.setAttribute('srcset', '');
     },
-    async playAnimation(src: string): Promise<void> {
-      await loadRLottie();
-      const picture = pictureRef.current;
-      const source = sourceRef.current;
-      if (!picture || !source || !window.RLottie) return;
+    playAnimation,
+  }), [playAnimation]);
 
-      resetPlayer(picture);
-      source.setAttribute('srcset', src);
-
-      const animationEnd = waitForAnimationEnd(picture);
-      // The Zoo page is remounted on every tab change. When RLottie is already
-      // loaded, initializing in the same frame as the new <picture> can leave a
-      // blank avatar, so give the browser a frame and retry once if no canvas appears.
-      await nextFrame();
-      if (pictureRef.current !== picture || sourceRef.current !== source) return;
-      window.RLottie!.init(picture, { playUntilEnd: true });
-      if (!(await waitForCanvas(picture))) {
-        resetPlayer(picture);
-        source.setAttribute('srcset', src);
-        await nextFrame();
-        if (pictureRef.current !== picture || sourceRef.current !== source) return;
-        window.RLottie!.init(picture, { playUntilEnd: true });
-        await waitForCanvas(picture);
-      }
-      await animationEnd;
-    },
-  }), []);
+  useEffect(() => {
+    if (src) void playAnimation(src);
+  }, [playAnimation, src]);
 
   useEffect(() => {
     const picture = pictureRef.current;

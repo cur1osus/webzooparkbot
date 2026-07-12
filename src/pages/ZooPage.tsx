@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
+import { useEffect, useMemo, useState, type SetStateAction } from 'react';
 import { fmt, fmtMin, fmtBalance } from '@/utils/format';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-import { TgsPlayer, type TgsHandle } from '@/components/TgsPlayer';
+import { TgsPlayer } from '@/components/TgsPlayer';
 import { AnimalDetailCard } from '@/components/AnimalDetailCard';
 import { AnimalArt } from '@/components/AnimalArt';
 import type { Animal, GameState } from '@/types';
@@ -89,16 +89,11 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   const [message, setMessage] = useState<string | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [animalSort, setAnimalSort] = useState<AnimalSort>('new');
-  const tgsRef = useRef<TgsHandle>(null);
 
   const sortedAnimals = useMemo(
     () => [...gs.animals].sort(compareAnimals(animalSort)),
     [gs.animals, animalSort],
   );
-
-  useEffect(() => {
-    void tgsRef.current?.playAnimation('/nft_TopHat-3159.tgs');
-  }, []);
 
   useEffect(() => {
     const onHashChange = () => setSubPageState(getZooSubPageFromHash());
@@ -183,7 +178,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         <div className="relative px-[14px] flex items-center gap-3">
           <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden"
             style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
-            <TgsPlayer ref={tgsRef} />
+            <TgsPlayer src="/nft_TopHat-3159.tgs" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="m-0 text-[16px] font-extrabold leading-tight truncate">{gs.nickname}</p>
