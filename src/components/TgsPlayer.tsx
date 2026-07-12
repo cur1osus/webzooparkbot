@@ -10,6 +10,7 @@ declare global {
     RLottie?: {
       init: (el: HTMLElement, opts?: Record<string, unknown>) => void;
       destroy: (el: HTMLElement) => void;
+      destroyWorkers?: () => void;
     };
     RLottieWorkerUrl?: string;
   }
@@ -159,6 +160,10 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size }, ref
     return () => {
       observer.disconnect();
       resetPlayer(picture);
+      // The bundled RLottie runtime keeps its shared workers and proxy table
+      // alive after destroying a player. Recreate that pool on the next mount
+      // so switching root tabs cannot accumulate stale TGS players.
+      window.RLottie?.destroyWorkers?.();
     };
   }, []);
 
