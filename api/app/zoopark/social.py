@@ -1,244 +1,344 @@
+"""Leaderboard, clans, referrals and money transfers.
+
+The leaderboard reads `players.income_rub_per_min`, an indexed column kept current by
+`income.sync_player_income`. It used to be a full scan of every player joined to every
+animal, run twice for anyone outside the top twenty.
+"""
+
 from __future__ import annotations
 
-import random
-import string
+import secrets
+from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import Referral, TransferLink, Unity, User
+from api.app.db.models import Clan, ClanMember, Player, Transfer, TransferClaim, utcnow
 from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
-from api.app.zoopark.income import calc_pack_income, sync_passive_balance
-from api.app.zoopark.profile import get_user
-from api.app.zoopark.season import active_season
+from api.app.zoopark import ledger
+from api.app.zoopark.catalog import (
+    CLAN_CREATE_COST_USD,
+    CLAN_MAX_MEMBERS,
+    REFERRAL_SIGNUP_REWARD_USD,
+    TOP_LIMIT,
+    TRANSFER_MAX_CLAIMS,
+    TRANSFER_TTL_HOURS,
+)
+from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.profile import get_player
 
 
-def api_top(tg_id: int):
+# ─── Leaderboard ──────────────────────────────────────────────────────────────
+
+
+def top(tg_id: int) -> dict:
     with get_session() as session:
-        season = active_season(session)
-        users = session.query(User).all()
+        me = get_player(session, tg_id)
+        my_id = me.id if me else None
 
-        me_user = session.query(User).filter(User.id_user == tg_id).first()
-        me_id = me_user.id if me_user else None
-        ranked = sorted(
-            (
-                {"id": user.id, "id_user": user.id_user, "nickname": user.nickname, "income": calc_pack_income(session, user.id, season.id)}
-                for user in users
-            ),
-            key=lambda row: row["income"],
-            reverse=True,
-        )[:20]
+        rows = session.scalars(
+            select(Player)
+            .where(Player.status == "active")
+            .order_by(Player.income_rub_per_min.desc(), Player.id.asc())
+            .limit(TOP_LIMIT)
+        ).all()
 
-        entries: list[dict] = []
+        entries = []
         my_rank = None
-        for index, row in enumerate(ranked):
-            is_me = row["id"] == me_id
+        for index, player in enumerate(rows, start=1):
+            is_me = player.id == my_id
             if is_me:
-                my_rank = index + 1
-            entries.append({
-                "rank": index + 1,
-                "tg_id": int(row["id_user"]),
-                "nickname": row["nickname"] or "—",
-                "income_rub_per_min": int(row["income"]),
-                "name_color": None,
-                "is_me": is_me,
-            })
+                my_rank = index
+            entries.append(
+                {
+                    "rank": index,
+                    "tg_id": player.telegram_id,
+                    "nickname": player.nickname,
+                    "nickname_color": player.nickname_color,
+                    "income_rub_per_min": player.income_rub_per_min,
+                    "is_me": is_me,
+                }
+            )
+
+        if my_rank is None and me is not None:
+            ahead = session.scalar(
+                select(func.count(Player.id)).where(
+                    Player.status == "active",
+                    Player.income_rub_per_min > me.income_rub_per_min,
+                )
+            )
+            my_rank = int(ahead or 0) + 1
+
         return {"entries": entries, "my_rank": my_rank}
 
 
-def api_clan_list(tg_id: int):
+# ─── Clans ────────────────────────────────────────────────────────────────────
+
+
+def _member_counts(session: Session) -> dict[int, int]:
+    rows = session.execute(
+        select(ClanMember.clan_id, func.count(ClanMember.player_id)).group_by(ClanMember.clan_id)
+    ).all()
+    return {clan_id: int(count) for clan_id, count in rows}
+
+
+def clan_list(tg_id: int) -> dict:
     with get_session() as session:
-        me_user = session.query(User).filter(User.id_user == tg_id).first()
-        my_unity = me_user.unity_id if me_user else None
-        my_user_id = me_user.id if me_user else None
+        me = get_player(session, tg_id)
+        my_membership = (
+            session.scalars(select(ClanMember).where(ClanMember.player_id == me.id)).first() if me else None
+        )
 
-        rows = session.execute(text(
-            """
-            SELECT c.idpk, c.name, c.level, c.owner_id,
-                COUNT(u2.id) AS member_count,
-                u3.nickname AS owner_nickname
-            FROM zoopark_unity c
-            LEFT JOIN zoopark_users u2 ON u2.unity_id=c.idpk
-            LEFT JOIN zoopark_users u3 ON u3.id=c.owner_id
-            GROUP BY c.idpk ORDER BY c.level DESC LIMIT 20
-            """
-        )).mappings().all()
+        clans = session.scalars(select(Clan).order_by(Clan.level.desc(), Clan.id.asc()).limit(20)).all()
+        counts = _member_counts(session)
+        owners = {
+            player.id: player.nickname
+            for player in session.scalars(
+                select(Player).where(Player.id.in_([clan.owner_id for clan in clans] or [0]))
+            ).all()
+        }
 
+        payload = []
         my_clan = None
-        my_role = None
-        clan_list = []
-        for clan in rows:
+        for clan in clans:
             entry = {
-                "idpk": clan["idpk"],
-                "name": clan["name"],
-                "level": int(clan["level"]),
-                "member_count": int(clan["member_count"]),
-                "specialty": None,
-                "owner_nickname": clan["owner_nickname"] or "—",
+                "id": clan.id,
+                "name": clan.name,
+                "level": clan.level,
+                "member_count": counts.get(clan.id, 0),
+                "owner_nickname": owners.get(clan.owner_id, "—"),
             }
-            clan_list.append(entry)
-            if my_unity and clan["idpk"] == my_unity:
+            payload.append(entry)
+            if my_membership and my_membership.clan_id == clan.id:
                 my_clan = entry
-                my_role = "owner" if my_user_id and clan["owner_id"] == my_user_id else "member"
-        return {"clans": clan_list, "my_clan": my_clan, "my_role": my_role}
+
+        return {
+            "clans": payload,
+            "my_clan": my_clan,
+            "my_role": my_membership.role if my_membership else None,
+        }
 
 
-def api_clan_create(tg_id: int, body: ClanCreateBody):
+def clan_create(tg_id: int, body: ClanCreateBody) -> dict:
+    name = body.name.strip()
+    if not (1 <= len(name) <= 32):
+        raise HTTPException(400, "Название 1–32 символа")
+
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        if user.unity_id:
+        if session.scalars(select(ClanMember).where(ClanMember.player_id == player.id)).first():
             raise HTTPException(400, "Ты уже в клане")
 
-        name = body.name.strip()
-        if not (1 <= len(name) <= 20):
-            raise HTTPException(400, "Название 1-20 символов")
-        if user.usd < 1:
-            raise HTTPException(400, "Нужен $1 для создания клана")
-        if session.query(Unity).filter(Unity.name == name).first():
-            raise HTTPException(400, "Клан уже существует")
+        ledger.spend(session, player, "usd", CLAN_CREATE_COST_USD, "clan_create")
 
-        clan_id = random.randint(100000, 999999)
-        clan = Unity(id=clan_id, name=name, level=1, owner_id=user.id)
+        clan = Clan(name=name, owner_id=player.id)
         session.add(clan)
-        session.flush()
-        user.unity_id = clan.idpk
-        user.usd -= 1
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            raise HTTPException(400, "Клан с таким названием уже есть") from exc
+
+        session.add(ClanMember(clan_id=clan.id, player_id=player.id, role="owner"))
+        result = {"ok": True, "id": clan.id, "message": f"Клан «{name}» создан!", "new_usd": ledger.balance(player, "usd")}
         session.commit()
-        return {"ok": True, "message": f"Клан «{name}» создан!"}
+        return result
 
 
-def api_clan_request(tg_id: int, body: ClanRequestBody):
+def clan_join(tg_id: int, body: ClanRequestBody) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        if user.unity_id:
-            raise HTTPException(400, "Ты уже в клане")
 
-        clan = session.get(Unity, body.clan_id)
+        clan = session.get(Clan, body.clan_id, with_for_update=True)
         if not clan:
             raise HTTPException(404, "Клан не найден")
 
-        user.unity_id = body.clan_id
+        members = session.scalar(select(func.count(ClanMember.player_id)).where(ClanMember.clan_id == clan.id)) or 0
+        if members >= CLAN_MAX_MEMBERS:
+            raise HTTPException(400, f"В клане уже {CLAN_MAX_MEMBERS} участников")
+
+        session.add(ClanMember(clan_id=clan.id, player_id=player.id, role="member"))
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            # `uq_clan_members_player`: one clan per player, enforced by the schema.
+            raise HTTPException(400, "Ты уже в клане") from exc
+
+        result = {"ok": True, "message": f"Вступил в клан «{clan.name}»"}
         session.commit()
-        return {"ok": True, "message": f"Вступил в клан «{clan.name}»"}
+        return result
 
 
-def api_clan_members(tg_id: int):
+def clan_members(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        if not user.unity_id:
+        membership = session.scalars(select(ClanMember).where(ClanMember.player_id == player.id)).first()
+        if membership is None:
             raise HTTPException(400, "Ты не в клане")
 
-        season = active_season(session)
-        clan = session.get(Unity, user.unity_id)
-        members = session.query(User).filter(User.unity_id == user.unity_id).all()
+        rows = session.execute(
+            select(Player, ClanMember.role)
+            .join(ClanMember, ClanMember.player_id == Player.id)
+            .where(ClanMember.clan_id == membership.clan_id)
+            .order_by(Player.income_rub_per_min.desc())
+        ).all()
 
-        result = []
-        for m in members:
-            income = calc_pack_income(session, m.id, season.id)
-            result.append({
-                "tg_id": int(m.id_user),
-                "nickname": m.nickname or "—",
-                "role": "owner" if clan and clan.owner_id == m.id else "member",
-                "income_rub_per_min": int(income),
-            })
+        members = [
+            {
+                "tg_id": member.telegram_id,
+                "nickname": member.nickname,
+                "role": role,
+                "income_rub_per_min": member.income_rub_per_min,
+            }
+            for member, role in rows
+        ]
+        members.sort(key=lambda entry: (entry["role"] != "owner", -int(entry["income_rub_per_min"])))
+        return {"members": members}
 
-        result.sort(key=lambda x: (x["role"] != "owner", -x["income_rub_per_min"]))
-        return {"members": result}
 
-
-def api_clan_leave(tg_id: int):
+def clan_leave(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        if not user.unity_id:
+        membership = session.scalars(
+            select(ClanMember).where(ClanMember.player_id == player.id).with_for_update()
+        ).first()
+        if membership is None:
             raise HTTPException(400, "Ты не в клане")
 
-        user_id = user.id
-        unity_id = user.unity_id
-        clan = session.get(Unity, unity_id)
-        user.unity_id = None
-        if clan and clan.owner_id == user_id:
-            session.query(User).filter(User.unity_id == unity_id).update({"unity_id": None})
+        clan = session.get(Clan, membership.clan_id, with_for_update=True)
+        session.delete(membership)
+        # The owner leaving dissolves the clan; `ondelete=CASCADE` clears the memberships.
+        if clan is not None and clan.owner_id == player.id:
             session.delete(clan)
+
         session.commit()
         return {"ok": True, "message": "Покинул клан"}
 
 
-def api_referrals(tg_id: int):
+# ─── Referrals ────────────────────────────────────────────────────────────────
+
+
+def referrals(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        referred = [
-            row.nickname or "—"
-            for row in session.query(User.nickname)
-            .join(Referral, User.id == Referral.referral_id)
-            .filter(Referral.user_id == user.id)
-            .all()
-        ]
-        return {"code": str(tg_id), "total": len(referred), "reward_usd_per_ref": 1, "referred": referred}
+        referred = session.scalars(
+            select(Player.nickname).where(Player.referred_by_id == player.id).order_by(Player.registered_at.asc())
+        ).all()
+        return {
+            "code": str(tg_id),
+            "total": len(referred),
+            "signup_reward_usd": REFERRAL_SIGNUP_REWARD_USD,
+            "referred": list(referred),
+        }
 
 
-def api_transfers_create(tg_id: int, body: TransferCreateBody):
+# ─── Transfers ────────────────────────────────────────────────────────────────
+
+
+def transfers_create(tg_id: int, body: TransferCreateBody) -> dict:
+    if not (1 <= body.max_claims <= TRANSFER_MAX_CLAIMS):
+        raise HTTPException(400, f"Количество получателей: 1–{TRANSFER_MAX_CLAIMS}")
+
+    amount_per_claim = body.total_rub // body.max_claims
+    if amount_per_claim < 1:
+        raise HTTPException(400, "Слишком малая сумма")
+    # Only what can actually be claimed leaves the sender; the remainder stays put.
+    total = amount_per_claim * body.max_claims
+
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        user, _income, _expenses = sync_passive_balance(session, user)
+        sync_player_income(session, player)
 
-        total = int(body.total_rub)
-        max_claims = max(1, body.max_claims)
-        if user.rub < total:
-            raise HTTPException(400, "Недостаточно рублей")
-
-        rub_per_claim = total // max_claims
-        if rub_per_claim < 1:
-            raise HTTPException(400, "Слишком малая сумма")
-
-        key = "".join(random.choices(string.ascii_letters + string.digits, k=16))
-        from datetime import datetime, timezone
-        link = TransferLink(
-            link_key=key, creator_id=user.id, total_amount=total,
-            rub_per_claim=rub_per_claim, max_claims=max_claims,
-            created_at=datetime.now(timezone.utc),
+        transfer = Transfer(
+            code=secrets.token_urlsafe(12),
+            sender_id=player.id,
+            amount_per_claim=amount_per_claim,
+            max_claims=body.max_claims,
+            expires_at=utcnow() + timedelta(hours=TRANSFER_TTL_HOURS),
         )
-        session.add(link)
-        user.rub -= total
+        session.add(transfer)
+        session.flush()
+        ledger.spend(session, player, "rub", total, "transfer_send", ref_table="transfers", ref_id=transfer.id)
+
+        result = {"code": transfer.code, "total_rub": total, "new_rub": ledger.balance(player, "rub")}
         session.commit()
-        return {"key": key}
+        return result
 
 
-def api_my_transfers(tg_id: int):
+def transfer_claim(tg_id: int, code: str) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
-            return {"transfers": []}
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
 
-        rows = (
-            session.query(TransferLink)
-            .filter(TransferLink.creator_id == user.id)
-            .order_by(TransferLink.created_at.desc())
-            .limit(20)
-            .all()
+        transfer = session.scalars(
+            select(Transfer).where(Transfer.code == code).with_for_update()
+        ).first()
+        if not transfer:
+            raise HTTPException(404, "Ссылка не найдена")
+        if transfer.closed_at is not None or transfer.claims_used >= transfer.max_claims:
+            raise HTTPException(400, "Ссылка уже израсходована")
+        if transfer.expires_at <= utcnow():
+            raise HTTPException(400, "Срок действия ссылки истёк")
+        if transfer.sender_id == player.id:
+            raise HTTPException(400, "Нельзя получить собственный перевод")
+
+        amount = int(transfer.amount_per_claim)
+        session.add(
+            TransferClaim(transfer_id=transfer.id, player_id=player.id, amount_rub=amount)
         )
+        transfer.claims_used += 1
+        if transfer.claims_used >= transfer.max_claims:
+            transfer.closed_at = utcnow()
+        ledger.grant(session, player, "rub", amount, "transfer_claim", ref_table="transfers", ref_id=transfer.id)
+
+        new_rub = ledger.balance(player, "rub")
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            # The composite primary key on (transfer_id, player_id) blocks a second claim.
+            session.rollback()
+            raise HTTPException(400, "Ты уже получил этот перевод") from exc
+
+        return {"ok": True, "rub_received": amount, "new_rub": new_rub}
+
+
+def my_transfers(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            return {"transfers": []}
+        rows = session.scalars(
+            select(Transfer)
+            .where(Transfer.sender_id == player.id)
+            .order_by(Transfer.created_at.desc())
+            .limit(20)
+        ).all()
         return {
             "transfers": [
                 {
-                    "key": row.link_key,
-                    "total_rub": row.total_amount,
-                    "rub_per_claim": row.rub_per_claim,
+                    "code": row.code,
+                    "total_rub": row.amount_per_claim * row.max_claims,
+                    "rub_per_claim": row.amount_per_claim,
                     "max_claims": row.max_claims,
-                    "claims": row.claims,
-                    "active": bool(row.active),
-                    "created_at": row.created_at.isoformat() if hasattr(row.created_at, "isoformat") else str(row.created_at),
+                    "claims": row.claims_used,
+                    "active": row.closed_at is None and row.expires_at > utcnow(),
+                    "created_at": row.created_at.isoformat(),
+                    "expires_at": row.expires_at.isoformat(),
                 }
                 for row in rows
             ]

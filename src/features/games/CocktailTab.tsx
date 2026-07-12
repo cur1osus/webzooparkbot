@@ -3,6 +3,8 @@ import { apiCocktailGuess } from '@/api';
 
 type CocktailClueStatus = 'correct' | 'present' | 'absent';
 
+// Must stay in sync with COCKTAIL_FRUITS on the backend (catalog.py): the secret is
+// drawn from that set, so a mismatch makes the puzzle unsolvable / rejects valid picks.
 const FRUITS = ['🍓', '🫐', '🍏', '🍐', '🍇', '🍒'];
 
 export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {

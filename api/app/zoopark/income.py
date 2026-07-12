@@ -1,92 +1,247 @@
+"""Income, upkeep and the passive accrual of rubles.
+
+GDD §3:  Доход = База × М_выживаемость × М_внешность × М_размер × М_местность
+GDD §7:  animals away on an expedition earn nothing.
+
+On top of that the zoo applies, in order: the sickness penalty (halves one animal), the
+per-species item bonus, the global item bonus, and the diversity bonus. Upkeep — a share
+of income that grows with the size of the zoo — is the only ruble sink that scales.
+
+Nothing here compares against SQL `NOW()`: the database server's clock may not be UTC,
+while every stored timestamp is. Times are always bound from Python.
+"""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import math
+from datetime import datetime
 from math import trunc
 
-from sqlalchemy import func
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from api.app.db.models import Expedition, ExpeditionAnimal, Locality, PackAnimal, SickEvent, User
+from api.app.db.models import Animal, Expedition, ExpeditionMember, Locality, Player, utcnow
+from api.app.zoopark import bonuses as bonuses_module
+from api.app.zoopark import ledger
+from api.app.zoopark.bonuses import Bonuses
+from api.app.zoopark.catalog import (
+    BASE_INCOME_RUB_PER_MIN,
+    CURE_INCOME_HOURS,
+    DIVERSITY_BONUS_PERCENT_PER_SPECIES,
+    HABITAT_MATCH_BONUS,
+    RATE_START_RUB_PER_USD,
+    SICK_INCOME_MULT,
+    UPKEEP_BASE_PERCENT,
+    UPKEEP_MAX_PERCENT,
+    UPKEEP_PERCENT_PER_LOG10_ANIMALS,
+    GeneTier,
+    gene_income_mult,
+)
 
-PACK_BASE_INCOME = 5000
 
-PACK_INCOME_MULT = {
-    "survival": {"low": 0.7, "medium": 1.0, "high": 1.3},
-    "appearance": {"low": 0.6, "medium": 1.0, "high": 1.5},
-    "size_trait": {"low": 0.8, "medium": 1.0, "high": 1.4},
-}
+def alive_clause(now: datetime | None = None):
+    """An animal is alive iff it has not been removed and its clock has not run out.
+
+    There is no `is_alive` column to fall out of date, and therefore no sweeper job whose
+    absence makes `/api/me` show dead animals earning money.
+    """
+    moment = now or utcnow()
+    return and_(Animal.removed_at.is_(None), Animal.dies_at > moment)
 
 
-def pack_animal_income(animal, habitat_bonus: float = 1.0) -> int:
-    return int(
-        PACK_BASE_INCOME
-        * PACK_INCOME_MULT["survival"][animal.survival]
-        * PACK_INCOME_MULT["appearance"][animal.appearance]
-        * PACK_INCOME_MULT["size_trait"][animal.size_trait]
-        * habitat_bonus
+def on_expedition_subquery():
+    return (
+        select(ExpeditionMember.animal_id)
+        .join(Expedition, Expedition.id == ExpeditionMember.expedition_id)
+        .where(Expedition.resolved_at.is_(None))
+        .scalar_subquery()
     )
 
 
-def calc_sick_expenses(session: Session, user_id: int) -> int:
-    total = session.query(func.coalesce(func.sum(SickEvent.penalty_rub_per_min), 0)).filter(
-        SickEvent.user_id == user_id
-    ).scalar()
-    return int(total or 0)
+def animal_income_rub_per_min(
+    *,
+    survival: GeneTier,
+    appearance: GeneTier,
+    size: GeneTier,
+    habitat_matches: bool,
+    is_sick: bool = False,
+    species_multiplier: float = 1.0,
+) -> int:
+    value = BASE_INCOME_RUB_PER_MIN * gene_income_mult(survival, appearance, size)
+    if habitat_matches:
+        value *= HABITAT_MATCH_BONUS
+    if is_sick:
+        value *= SICK_INCOME_MULT
+    value *= species_multiplier
+    return int(value)
 
 
-def accrue_income(session: Session, user: User, income_rub_per_min: int, expenses_rub_per_min: int = 0) -> User:
-    now = datetime.now(timezone.utc)
-    last_income_at = getattr(user, "last_income_at", None)
-    net_rub_per_min = income_rub_per_min - expenses_rub_per_min
-
-    accrued = 0
-    if last_income_at is not None and net_rub_per_min != 0:
-        if hasattr(last_income_at, "tzinfo") and last_income_at.tzinfo is None:
-            last_income_at = last_income_at.replace(tzinfo=timezone.utc)
-        elapsed_mins = (now - last_income_at).total_seconds() / 60.0
-        accrued = trunc(elapsed_mins * net_rub_per_min)
-
-    new_rub = max(0, user.rub + accrued)
-    new_seq = int(now.timestamp() * 1000)
-
-    if new_rub != user.rub:
-        user.rub = new_rub
-    user.last_income_at = now
-    user.balance_seq = new_seq
-
-    return user
-
-
-def calc_pack_income(session: Session, user_id: int, season_id: int | None = None) -> int:
-    filters = [
-        PackAnimal.user_id == user_id,
-        PackAnimal.is_alive == 1,
-        (PackAnimal.dies_at.is_(None)) | (PackAnimal.dies_at > func.now()),
-    ]
-    if season_id is not None:
-        filters.append(PackAnimal.season_id == season_id)
-    active_expedition_animals = (
-        session.query(ExpeditionAnimal.animal_id)
-        .join(Expedition, Expedition.id == ExpeditionAnimal.expedition_id)
-        .filter(Expedition.status == "active")
-        .subquery()
+def animal_income(animal: Animal, locality_habitat: str | None, bonuses: Bonuses) -> int:
+    return animal_income_rub_per_min(
+        survival=animal.gene_survival,  # type: ignore[arg-type]
+        appearance=animal.gene_appearance,  # type: ignore[arg-type]
+        size=animal.gene_size,  # type: ignore[arg-type]
+        habitat_matches=bool(locality_habitat) and locality_habitat == animal.habitat,
+        is_sick=animal.sick_since is not None,
+        species_multiplier=bonuses.species_income_multiplier(animal.species_id),
     )
-    filters.append(PackAnimal.id.not_in(active_expedition_animals))
 
-    rows = (
-        session.query(PackAnimal, Locality.habitat)
-        .outerjoin(Locality, PackAnimal.locality_id == Locality.id)
-        .filter(*filters)
-        .all()
+
+def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses) -> int:
+    """Price of curing this animal, in dollars: CURE_INCOME_HOURS of its *healthy* income
+    (the sick penalty is excluded so the cost reflects the animal's real worth), converted
+    to USD at the reference rate. Authoritative — recompute this on cure, never trust the
+    client's number."""
+    healthy_rub_per_min = animal_income_rub_per_min(
+        survival=animal.gene_survival,  # type: ignore[arg-type]
+        appearance=animal.gene_appearance,  # type: ignore[arg-type]
+        size=animal.gene_size,  # type: ignore[arg-type]
+        habitat_matches=bool(locality_habitat) and locality_habitat == animal.habitat,
+        is_sick=False,
+        species_multiplier=bonuses.species_income_multiplier(animal.species_id),
     )
+    cost_rub = healthy_rub_per_min * 60 * CURE_INCOME_HOURS
+    return max(1, round(cost_rub / RATE_START_RUB_PER_USD))
+
+
+def effective_species_count(species_counts: list[int]) -> float:
+    """exp(Shannon entropy): an even spread over N species scores N, a monopoly scores 1.
+
+    A raw `len(species)` pays the same for "ten of each" and "ninety-one of one plus nine
+    singletons", which is why the old `diversity_bonus_per_species * species_count` was
+    not only never applied to income but also the wrong shape.
+    """
+    total = sum(species_counts)
+    if total <= 0:
+        return 0.0
+    entropy = -sum((count / total) * math.log(count / total) for count in species_counts if count > 0)
+    return math.exp(entropy)
+
+
+def diversity_multiplier(species_counts: list[int]) -> float:
+    """1 + `DIVERSITY_BONUS_PERCENT_PER_SPECIES`% per effective species."""
+    return 1 + effective_species_count(species_counts) * DIVERSITY_BONUS_PERCENT_PER_SPECIES / 100
+
+
+def upkeep_rub_per_min(income_rub_per_min: int, animal_count: int) -> int:
+    """A percentage of income that grows logarithmically with the size of the zoo."""
+    if animal_count <= 0 or income_rub_per_min <= 0:
+        return 0
+    percent = UPKEEP_BASE_PERCENT + UPKEEP_PERCENT_PER_LOG10_ANIMALS * math.log10(animal_count)
+    percent = min(percent, UPKEEP_MAX_PERCENT)
+    return int(income_rub_per_min * percent / 100)
+
+
+def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None = None) -> tuple[int, int]:
+    """(income per minute, upkeep per minute) for everything the player currently owns."""
+    active_bonuses = bonuses if bonuses is not None else bonuses_module.load(session, player_id)
+
+    rows = session.execute(
+        select(Animal, Locality.habitat)
+        .outerjoin(Locality, Animal.locality_id == Locality.id)
+        .where(
+            Animal.player_id == player_id,
+            alive_clause(),
+            Animal.id.not_in(on_expedition_subquery()),
+        )
+    ).all()
+
     total = 0
-    for pack_animal, locality_habitat in rows:
-        bonus = 1.5 if locality_habitat and locality_habitat == pack_animal.habitat else 1.0
-        total += pack_animal_income(pack_animal, bonus)
-    return total
+    counts_by_species: dict[int, int] = {}
+    for animal, locality_habitat in rows:
+        total += animal_income(animal, locality_habitat, active_bonuses)
+        counts_by_species[animal.species_id] = counts_by_species.get(animal.species_id, 0) + 1
+
+    # After the 100× denomination rebase, truncating every multiplier is too coarse for
+    # small zoos (e.g. 42 × 1.30 should become 55, not 54). Round each derived rate so
+    # percentage bonuses remain visible at the new scale.
+    total = round(total * active_bonuses.income_multiplier())
+    total = round(total * diversity_multiplier(list(counts_by_species.values())))
+
+    return total, upkeep_rub_per_min(total, len(rows))
 
 
-def sync_passive_balance(session: Session, user: User) -> tuple[User, int, int]:
-    income_rub_per_min = calc_pack_income(session, user.id)
-    expenses_rub_per_min = calc_sick_expenses(session, user.id)
-    return accrue_income(session, user, income_rub_per_min, expenses_rub_per_min), income_rub_per_min, expenses_rub_per_min
+def accrue(session: Session, player: Player) -> int:
+    """Pay out the time elapsed since the last sync, at the rate stored on the player.
+
+    Returns the net rubles moved. The clock only advances when something was actually
+    paid: a player whose net income is 3 ₽/min would otherwise lose every ruble to
+    `trunc()` if the client polled once a second.
+    """
+    now = utcnow()
+    net_per_min = int(player.income_rub_per_min) - int(player.upkeep_rub_per_min)
+    if net_per_min == 0:
+        player.income_synced_at = now
+        return 0
+
+    elapsed_minutes = (now - player.income_synced_at).total_seconds() / 60.0
+    accrued = trunc(elapsed_minutes * net_per_min)
+    if accrued == 0:
+        # Less than one ruble has been earned. Leave the clock where it is so the
+        # fraction is not silently dropped.
+        return 0
+
+    if accrued > 0:
+        ledger.grant(session, player, "rub", accrued, "income_accrual")
+    else:
+        # Upkeep may empty a balance but never overdraw it.
+        payable = min(-accrued, ledger.balance(player, "rub"))
+        accrued = -payable
+        if payable:
+            ledger.spend(session, player, "rub", payable, "upkeep")
+
+    player.income_synced_at = now
+    return accrued
+
+
+def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None = None) -> tuple[int, int]:
+    """Settle what the old rate owed, then recompute the rate.
+
+    Call after any change to the zoo, the player's items, or before any read of the
+    balance. Accruing first is what makes the order correct: the stored rate is exactly
+    the rate that applied over the elapsed period.
+    """
+    accrue(session, player)
+    income, upkeep = calc_player_income(session, player.id, bonuses)
+    player.income_rub_per_min = income
+    player.upkeep_rub_per_min = upkeep
+    return income, upkeep
+
+
+def count_alive_animals(session: Session, player_id: int, season_id: int | None = None) -> int:
+    stmt = select(Animal.id).where(Animal.player_id == player_id, alive_clause())
+    if season_id is not None:
+        stmt = stmt.where(Animal.season_id == season_id)
+    return len(session.execute(stmt).all())
+
+
+def alive_animals(session: Session, player_id: int, season_id: int) -> list[tuple[Animal, str | None]]:
+    rows = list(
+        session.execute(
+            select(Animal, Locality.habitat)
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(
+                Animal.player_id == player_id,
+                Animal.season_id == season_id,
+                alive_clause(),
+            )
+            .order_by(Animal.acquired_at.desc())
+        ).all()
+    )
+    return [(animal, habitat) for animal, habitat in rows]
+
+
+def available_animals(session: Session, player_id: int, season_id: int) -> list[Animal]:
+    """Alive and not already committed to an expedition."""
+    return list(
+        session.scalars(
+            select(Animal)
+            .where(
+                Animal.player_id == player_id,
+                Animal.season_id == season_id,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
+            )
+            .order_by(Animal.acquired_at.desc())
+        ).all()
+    )

@@ -8,8 +8,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from api.app.db.models import Base  # noqa: F401 — re-exported for alembic and bootstrap
-
 _DB_USER = os.getenv("DB_USER", "admin_zoopark")
 _DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 _DB_NAME = os.getenv("DB_NAME", "zoopark")
@@ -22,9 +20,13 @@ DATABASE_URL = os.getenv(
 )
 
 _engine: Engine | None = None
+_session_factory = sessionmaker(autocommit=False, autoflush=True)
 
 
-def _get_engine() -> Engine:
+def get_engine() -> Engine:
+    """`create_engine` opens no connection, so this is lazy enough on its own — the pool
+    dials the database on the first checkout. The previous `_LazyEngine.__getattr__`
+    proxy existed to defer a cost that was never paid."""
     global _engine
     if _engine is None:
         _engine = create_engine(
@@ -33,24 +35,16 @@ def _get_engine() -> Engine:
             pool_size=20,
             max_overflow=20,
             pool_timeout=10,
+            future=True,
         )
+        _session_factory.configure(bind=_engine)
     return _engine
-
-
-class _LazyEngine:
-    __func__ = None
-
-    def __getattr__(self, name: str):
-        return getattr(_get_engine(), name)
-
-
-engine = _LazyEngine()
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=True)
 
 
 @contextmanager
 def get_session() -> Generator[Session, None, None]:
-    session = SessionLocal()
+    get_engine()
+    session = _session_factory()
     try:
         yield session
     finally:

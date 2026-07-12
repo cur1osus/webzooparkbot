@@ -1,30 +1,52 @@
-import type { GeneTier, Habitat, PackAnimal } from './progression';
+import type { Animal, GeneTier, Habitat, SpeciesRarity } from './progression';
 
+export interface RatePoint {
+  period: number;
+  rate: number;
+}
+
+/**
+ * The bank is one-way: rubles buy dollars, and there is no way back. That is why a rate
+ * this volatile is safe to publish — see `api/app/zoopark/economy.py`.
+ */
 export interface BankInfo {
-  rub_rate: number;
-  usd_rate: number;
-  rub_discount: number;
-  usd_discount: number;
+  /** What this player pays per dollar, after their `discount_bank` items. */
+  rate_rub_per_usd: number;
+  /** The published rate, before those items. */
+  base_rate_rub_per_usd: number;
+  fee_percent: number;
+  referral_percent: number;
   min_exchange_rub: number;
-  min_exchange_usd: number;
-  next_update_in: number; // seconds until next rate update
-  vault_usd: number;
+  next_update_in: number;
+  treasury_usd: number;
+  history: RatePoint[];
 }
 
 export interface ExchangeResult {
   ok: boolean;
+  spent_rub: number;
+  received_usd: number;
+  fee_usd: number;
+  referrer_usd: number;
+  rate_rub_per_usd: number;
   new_rub: number;
   new_usd: number;
-  message?: string;
 }
 
-export interface BonusResult {
+export type BonusCurrency = 'rub' | 'usd' | 'paw';
+
+/** Generated and stored server-side, so a reroll cannot be replayed. */
+export interface BonusOffer {
+  currency: BonusCurrency;
+  amount: number;
+  claimed: boolean;
+  rerolls_left: number;
+}
+
+export interface BonusClaimResult {
   ok: boolean;
-  type: 'rub' | 'usd' | 'paw_coins' | 'aviary' | 'animal';
-  amount?: number;
-  animal_id?: string;
-  aviary_id?: string;
-  message: string;
+  currency: BonusCurrency;
+  amount: number;
   new_rub?: number;
   new_usd?: number;
   new_paw_coins?: number;
@@ -32,35 +54,36 @@ export interface BonusResult {
 
 export interface CureResponse {
   ok: boolean;
-  cost_paw_coins: number;
-  new_paw_coins: number;
-  message?: string;
+  cost_usd: number;
+  new_usd: number;
+  income_rub_per_min: number;
 }
 
-export interface MerchantAnimal {
-  slot: 1 | 2 | 3;
-  animal_id: string;
-  animal_info_id: number;
-  quantity: number;
-  original_price: number;
-  discount_pct: number;
-  final_price: number;
+export interface MerchantOffer {
+  slot: number;
+  species_code: string;
+  species_name: string;
+  species_emoji: string;
+  species_rarity: SpeciesRarity;
   survival: GeneTier;
   reproduction: GeneTier;
   appearance: GeneTier;
   size_trait: GeneTier;
   habitat: Habitat;
+  list_price: number;
+  discount_pct: number;
+  final_price: number;
   bought: boolean;
 }
 
 export interface MerchantResponse {
-  animals: MerchantAnimal[];
+  animals: MerchantOffer[];
   refreshes_at: string;
 }
 
 export interface MerchantBuyResponse {
   ok: boolean;
+  price_paid: number;
   new_rub: number;
-  animal: PackAnimal;
-  message?: string;
+  animal: Animal;
 }

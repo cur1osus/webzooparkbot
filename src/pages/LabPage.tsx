@@ -1,27 +1,11 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Animal, BreedResult, GameState, GeneTier, Habitat } from '@/types';
+import { AnimalArt } from '@/components/AnimalArt';
+import { PageHeader } from '@/components/PageHeader';
+import type { Animal, BreedResult, GameState, GeneTier } from '@/types';
 import { apiBreed, apiGetAnimals } from '@/api';
 import { fmt } from '@/utils/format';
-
-const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
-  desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },
-  mountains:  { emoji: '🦅', name: 'Горы',       color: 'var(--tg-theme-hint-color)' },
-  forest:     { emoji: '🐆', name: 'Густой лес', color: 'var(--c-green)' },
-  fields:     { emoji: '🐴', name: 'Поля',        color: 'var(--c-teal)' },
-  antarctica: { emoji: '🐧', name: 'Антарктида', color: 'var(--c-cyan)' },
-};
-
-const GENE_LABEL: Record<string, Record<GeneTier, string>> = {
-  survival:     { low: 'Слабый',       medium: 'Обычный', high: 'Долгожитель'    },
-  reproduction: { low: 'Неохотно',     medium: 'Обычно',  high: 'Активное'       },
-  appearance:   { low: 'Уродец',       medium: 'Обычный', high: 'Привлекательный'},
-  size_trait:   { low: 'Маленький',    medium: 'Обычный', high: 'Гигант'         },
-};
-
-const GENE_COLOR: Record<GeneTier, string> = {
-  low: 'var(--c-orange)', medium: 'var(--tg-theme-hint-color)', high: 'var(--c-green)',
-};
+import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
 
 // success rate table matching GDD §6
 const BREED_RATE: Record<string, number> = {
@@ -39,37 +23,47 @@ function breedRate(a: Animal | null, b: Animal | null): number | null {
 // ─── Animal mini-card for result display ─────────────────────────────────────
 
 function AnimalResultCard({ animal }: { animal: Animal }) {
-  const hab = HABITAT_INFO[animal.habitat];
-  const genes: [string, GeneTier][] = [
+  const rarity = SPECIES_RARITY_META[animal.species_rarity];
+  const genes: [keyof typeof GENE_META, GeneTier][] = [
     ['survival', animal.survival], ['reproduction', animal.reproduction],
     ['appearance', animal.appearance], ['size_trait', animal.size_trait],
   ];
   return (
     <div className="rounded-2xl p-4 flex flex-col gap-3"
-         style={{ background: `linear-gradient(135deg, ${hab.color}12, rgba(26,29,43,0.9))`, border: `1px solid ${hab.color}35` }}>
+         style={{ background: `linear-gradient(135deg, ${rarity.color}18, var(--surface-subtle))`, border: `1px solid ${rarity.color}45` }}>
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl grid place-items-center text-[26px] shrink-0"
-             style={{ background: `${hab.color}20`, border: `1px solid ${hab.color}40` }}>
-          {hab.emoji}
+        <div className="w-14 h-14 rounded-2xl grid place-items-center overflow-hidden shrink-0"
+             style={{ background: `${rarity.color}18`, border: `1px solid ${rarity.color}40` }}>
+          <AnimalArt animal={animal} size={52} />
         </div>
-        <div>
-          <p className="m-0 font-extrabold text-[15px]">{hab.name}</p>
-          <p className="m-0 text-[11px]" style={{ color: 'var(--c-green)' }}>₽{fmt(animal.income)}/мин</p>
+        <div className="min-w-0 flex-1">
+          <p className="m-0 font-extrabold text-[15px] truncate">{animal.name}</p>
+          <p className="m-0 text-[11px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>{animal.species_name}</p>
+          <div className="mt-[3px] flex items-center gap-2">
+            <span className="px-[7px] py-[1px] rounded-full text-[10px] font-extrabold"
+                  style={{ background: `${rarity.color}22`, color: rarity.color, border: `1px solid ${rarity.color}55` }}>
+              {rarity.label}
+            </span>
+            <span className="text-[11px] font-bold" style={{ color: 'var(--c-green)' }}>₽{fmt(animal.income)}/мин</span>
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-[6px]">
-        {genes.map(([key, val]) => (
-          <div key={key} className="flex items-center gap-2 px-3 py-[7px] rounded-xl"
-               style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)' }}>
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: GENE_COLOR[val] }} />
-            <span className="text-[10px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {key === 'survival' ? 'Выж' : key === 'reproduction' ? 'Разм' : key === 'appearance' ? 'Вид' : 'Размер'}
-            </span>
-            <span className="ml-auto text-[11px] font-bold" style={{ color: GENE_COLOR[val] }}>
-              {GENE_LABEL[key][val]}
-            </span>
-          </div>
-        ))}
+        {genes.map(([key, val]) => {
+          const meta = GENE_META[key][val];
+          return (
+            <div key={key} className="flex items-center gap-2 px-3 py-[7px] rounded-xl"
+                 style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)' }}>
+              <div className="w-2 h-2 rounded-full shrink-0" style={{ background: meta.color }} />
+              <span className="text-[10px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                {key === 'survival' ? 'Выж' : key === 'reproduction' ? 'Разм' : key === 'appearance' ? 'Вид' : 'Размер'}
+              </span>
+              <span className="ml-auto text-[11px] font-bold" style={{ color: meta.color }}>
+                {meta.label}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -93,17 +87,20 @@ function ParentSlot({ label, animal, onClick }: {
     );
   }
 
-  const hab = HABITAT_INFO[animal.habitat];
+  const rarity = SPECIES_RARITY_META[animal.species_rarity];
   return (
     <button onClick={onClick}
             className="flex-1 rounded-2xl border-none cursor-pointer flex flex-col gap-2 p-3 text-left"
-            style={{ background: `${hab.color}12`, border: `1px solid ${hab.color}35` }}>
+            style={{ background: `${rarity.color}12`, border: `1px solid ${rarity.color}40` }}>
       <div className="flex items-center gap-2">
-        <span className="text-[22px]">{hab.emoji}</span>
+        <div className="w-10 h-10 rounded-xl grid place-items-center overflow-hidden shrink-0"
+             style={{ background: `${rarity.color}18` }}>
+          <AnimalArt animal={animal} size={38} />
+        </div>
         <div className="flex-1 min-w-0">
-          <p className="m-0 text-[12px] font-bold truncate">{hab.name}</p>
-          <p className="m-0 text-[10px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {GENE_LABEL.reproduction[animal.reproduction]}
+          <p className="m-0 text-[12px] font-bold truncate">{animal.name}</p>
+          <p className="m-0 text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {animal.species_name}
           </p>
         </div>
       </div>
@@ -117,9 +114,11 @@ function ParentSlot({ label, animal, onClick }: {
 
 // ─── Animal picker overlay ────────────────────────────────────────────────────
 
-function AnimalPicker({ animals, exclude, onPick, onClose }: {
+function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
   animals: Animal[];
   exclude: number | null;
+  // When the other parent is already chosen, only its species can breed with it.
+  mateSpeciesCode: string | null;
   onPick: (a: Animal) => void;
   onClose: () => void;
 }) {
@@ -140,18 +139,43 @@ function AnimalPicker({ animals, exclude, onPick, onClose }: {
             Нет доступных животных<br />
             <span className="text-[11px]">Все уже скрещивались сегодня</span>
           </p>
-        ) : available.map(a => {
-          const hab = HABITAT_INFO[a.habitat];
+        ) : [...available]
+          // Compatible (same-species) animals float to the top so they're easy to find.
+          .sort((x, y) => {
+            if (!mateSpeciesCode) return 0;
+            return Number(y.species_code === mateSpeciesCode) - Number(x.species_code === mateSpeciesCode);
+          })
+          .map(a => {
+          const rarity = SPECIES_RARITY_META[a.species_rarity];
+          const repro = GENE_META.reproduction[a.reproduction];
+          const incompatible = mateSpeciesCode !== null && a.species_code !== mateSpeciesCode;
           return (
-            <button key={a.id} onClick={() => onPick(a)}
-                    className="flex items-center gap-3 px-3 py-[10px] rounded-xl border-none cursor-pointer text-left w-full"
-                    style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)', border: '1px solid transparent' }}>
-              <span className="text-[24px]">{hab.emoji}</span>
+            <button key={a.id} onClick={() => { if (!incompatible) onPick(a); }}
+                    disabled={incompatible}
+                    className="flex items-center gap-3 px-3 py-[10px] rounded-xl border-none text-left w-full disabled:cursor-not-allowed"
+                    style={{
+                      background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
+                      border: '1px solid transparent',
+                      cursor: incompatible ? 'not-allowed' : 'pointer',
+                      opacity: incompatible ? 0.4 : 1,
+                    }}>
+              <div className="w-11 h-11 rounded-xl grid place-items-center overflow-hidden shrink-0"
+                   style={{ background: `${rarity.color}18`, border: `1px solid ${rarity.color}35` }}>
+                <AnimalArt animal={a} size={40} />
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="m-0 text-[13px] font-bold">{hab.name}</p>
+                <p className="m-0 text-[13px] font-bold truncate">
+                  {a.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {a.species_name}</span>
+                </p>
                 <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  Разм: <span style={{ color: GENE_COLOR[a.reproduction] }}>{GENE_LABEL.reproduction[a.reproduction]}</span>
-                  {' · '}₽{fmt(a.income)}/мин
+                  {incompatible ? (
+                    <span style={{ color: 'var(--c-amber)' }}>Другой вид — нельзя скрестить</span>
+                  ) : (
+                    <>
+                      Разм: <span style={{ color: repro.color }}>{repro.label}</span>
+                      {' · '}₽{fmt(a.income)}/мин
+                    </>
+                  )}
                 </p>
               </div>
             </button>
@@ -218,13 +242,12 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   return (
     <div className="page-content-safe flex flex-col gap-4">
 
-      {/* Header */}
-      <div className="px-[14px] pt-4">
-        <p className="font-display m-0 mb-[2px] text-[15px]">🧪 Лаборатория</p>
-        <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Скрещивай животных — каждое животное 1 раз в день
-        </p>
-      </div>
+      <PageHeader
+        emoji="🧪"
+        title="Лаборатория"
+        subtitle="Скрещивай животных — каждое животное 1 раз в день"
+        accent="var(--c-purple-rgb)"
+      />
 
       <div className="px-[14px] flex flex-col gap-4">
 
@@ -347,6 +370,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         <AnimalPicker
           animals={animals}
           exclude={picking === 1 ? parent2?.id ?? null : parent1?.id ?? null}
+          mateSpeciesCode={picking === 1 ? parent2?.species_code ?? null : parent1?.species_code ?? null}
           onPick={a => {
             if (picking === 1) setParent1(a);
             else setParent2(a);

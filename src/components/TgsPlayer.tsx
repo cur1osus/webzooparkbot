@@ -1,4 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import pakoUrl from '../lib/tgsticker/pako-inflate.min.js?url';
+import tgstickerUrl from '../lib/tgsticker/tgsticker.js?url';
+import rlottieRuntimeUrl from '../lib/tgsticker/rlottie-wasm.js?url';
+import rlottieWasmUrl from '../lib/tgsticker/rlottie-wasm.wasm?url';
+import tgstickerWorkerUrl from '../lib/tgsticker/tgsticker-worker.js?url';
 
 declare global {
   interface Window {
@@ -6,6 +11,7 @@ declare global {
       init: (el: HTMLElement, opts?: Record<string, unknown>) => void;
       destroy: (el: HTMLElement) => void;
     };
+    RLottieWorkerUrl?: string;
   }
 }
 
@@ -20,7 +26,13 @@ function loadRLottie(): Promise<void> {
   if (!rlottiePromise) {
     rlottiePromise = new Promise<void>((resolve, reject) => {
       const script = document.createElement('script');
-      script.src = '/tgsticker/tgsticker.js';
+      const workerParams = new URLSearchParams({
+        runtime: rlottieRuntimeUrl,
+        wasm: rlottieWasmUrl,
+        pako: pakoUrl,
+      });
+      window.RLottieWorkerUrl = `${tgstickerWorkerUrl}?${workerParams}`;
+      script.src = tgstickerUrl;
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('RLottie load failed'));
       document.head.appendChild(script);
@@ -73,7 +85,7 @@ function waitForAnimationEnd(picture: HTMLPictureElement): Promise<void> {
   });
 }
 
-export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 }, ref) => {
+export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size }, ref) => {
   const pictureRef = useRef<HTMLPictureElement>(null);
   const sourceRef = useRef<HTMLSourceElement>(null);
 
@@ -119,8 +131,8 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number }>(({ size = 180 
     <picture
       ref={pictureRef}
       style={{
-        width: size,
-        height: size,
+        width: size ?? '100%',
+        height: size ?? '100%',
         display: 'block',
         position: 'relative',
         overflow: 'hidden',

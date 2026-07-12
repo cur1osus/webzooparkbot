@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiRegister } from '@/api';
+import { getTelegramStartParam } from '@/lib/tmaEnv';
 import type { GameState } from '@/types';
 
 export function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) {
@@ -13,7 +14,7 @@ export function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) 
     setLoading(true);
     setError(null);
     try {
-      const res = await apiRegister(n);
+      const res = await apiRegister(n, getTelegramStartParam());
       if (res.ok) onDone(res.game_state);
       else setError('Ошибка регистрации');
     } catch (e) {
@@ -59,7 +60,7 @@ export function RegisterScreen({ onDone }: { onDone: (gs: GameState) => void }) 
         <div className="surface-subtle mt-5 p-[14px] rounded-xl">
           <p className="m-0 mb-[6px] text-[13px] font-semibold">Как играть:</p>
           {[
-            '🏗️ Купи вольер → размести животных',
+            '🌍 Открой местность → размести животных',
             '🐾 Зарабатывай рубли каждую минуту',
             '💱 Обменивай рубли на доллары в банке',
             '🎮 Участвуй в играх и турнирах',

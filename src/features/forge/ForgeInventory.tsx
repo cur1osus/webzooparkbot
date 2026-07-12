@@ -1,29 +1,10 @@
-import type { ForgeItem, ForgeSet } from '@/types';
-
-const PROP_ICON: Record<string, string> = {
-  bank_rate: '🔄',
-  income_boost: '📈',
-  animal_income: '🐾',
-  aviary_discount: '🏗️',
-  animal_discount: '📉',
-  extra_turns: '🎲',
-  last_chance: '🍀',
-  bonus_rerolls: '🎁',
-};
-const PROP_LABEL: Record<string, string> = {
-  bank_rate: 'Курс банка',
-  income_boost: 'Общий доход',
-  animal_income: 'Доход животных',
-  aviary_discount: 'Вольеры',
-  animal_discount: 'Животные',
-  extra_turns: 'Доп. ходы',
-  last_chance: 'Последний шанс',
-  bonus_rerolls: 'Перебросы',
-};
+import type { ForgeItem, ForgeSet, PropertyKind } from '@/types';
+import { PROPERTY_ICON, PROPERTY_SHORT } from '@/data/itemProperties';
+import { fmt } from '@/utils/format';
 
 function forgeItemIcon(item: ForgeItem): string {
-  const first = item.properties?.[0]?.type;
-  return first ? (PROP_ICON[first] ?? '✨') : '✨';
+  const first = item.properties?.[0]?.kind;
+  return first ? (PROPERTY_ICON[first] ?? '✨') : '✨';
 }
 
 function itemBonusSummary(item: ForgeItem): string {
@@ -48,13 +29,14 @@ export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, 
   const activeItems = items.filter(i => i.is_active);
   const activeSet = sets.find(s => s.is_active) ?? null;
   const orderedSets = [...sets].sort((a, b) => Number(b.is_active) - Number(a.is_active));
-  const bonuses: Record<string, number> = {};
+  // Mirrors `bonuses.load()` on the server, minus the caps: this is a summary, not a rule.
+  const bonuses: Partial<Record<PropertyKind, number>> = {};
   for (const item of activeItems) {
     for (const p of item.properties ?? []) {
-      bonuses[p.type] = (bonuses[p.type] ?? 0) + p.value;
+      bonuses[p.kind] = (bonuses[p.kind] ?? 0) + p.value;
     }
   }
-  const bonusEntries = Object.entries(bonuses);
+  const bonusEntries = Object.entries(bonuses) as [PropertyKind, number][];
 
   return (
     <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
@@ -99,7 +81,7 @@ export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, 
           <div className="relative mt-3 flex flex-wrap gap-[6px]">
             {bonusEntries.map(([type, val]) => (
               <span key={type} className="px-[9px] py-[5px] rounded-full text-[12px] font-semibold" style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)' }}>
-                {PROP_ICON[type] ?? '✨'} {PROP_LABEL[type] ?? type}: {val}
+                {PROPERTY_ICON[type] ?? '✨'} {PROPERTY_SHORT[type] ?? type}: {val}
               </span>
             ))}
           </div>
@@ -314,7 +296,7 @@ export function ItemDetailPage({ item, onActivate, onSell, onBack }: {
           {(item.properties ?? []).length === 0 && <p className="m-0 text-[13px] text-tg-hint">У предмета нет свойств.</p>}
           {(item.properties ?? []).map((p, i) => (
             <div key={i} className="flex items-center justify-between gap-3 mb-2 rounded-xl px-3 py-2" style={{ background: 'var(--surface-subtle)' }}>
-              <span className="text-[13px] text-tg-hint">{PROP_ICON[p.type] ?? '✨'} {PROP_LABEL[p.type] ?? p.label.split(' ').slice(0, -1).join(' ')}</span>
+              <span className="text-[13px] text-tg-hint">{PROPERTY_ICON[p.kind] ?? '✨'} {PROPERTY_SHORT[p.kind] ?? p.label.split(' ').slice(0, -1).join(' ')}</span>
               <span className="text-[13px] text-[var(--c-green)] font-bold">{p.label.split(' ').pop()}</span>
             </div>
           ))}
@@ -324,7 +306,7 @@ export function ItemDetailPage({ item, onActivate, onSell, onBack }: {
             style={{ background: item.is_active ? 'var(--surface-subtle)' : 'rgba(var(--c-green-rgb),0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
             {item.is_active ? 'Деактивировать' : 'Активировать'}
           </button>
-          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(var(--c-orange-rgb),0.15)] text-[var(--c-orange)] font-bold text-sm">Продать $80k</button>
+          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(var(--c-orange-rgb),0.15)] text-[var(--c-orange)] font-bold text-sm">Продать ${fmt(item.sell_price_usd)}</button>
         </div>
       </div>
     </div>

@@ -54,7 +54,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const openClans = data?.clans ?? [];
   const trimmedName = newName.trim();
   // Mirrors `CLAN_CREATE_COST_USD`.
-  const CLAN_CREATE_COST_USD = 100;
+  const CLAN_CREATE_COST_USD = 1;
   const canAffordCreate = gs.usd >= CLAN_CREATE_COST_USD;
   const canCreate = trimmedName.length >= CLAN_NAME_MIN_LENGTH && trimmedName.length <= CLAN_NAME_MAX_LENGTH && canAffordCreate;
   const isOwner = gs.clan?.role === 'owner';

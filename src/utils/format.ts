@@ -22,18 +22,21 @@ const SUFFIXES = [
   { v: 1e3, s: 'K' },
 ];
 
+// Full grouped digits stay readable and fit on screen well past a million, so only
+// numbers from 100M up get the compact suffix; everything below shows exact digits.
+const COMPACT_THRESHOLD = 1e8;
+
 export function fmt(value: number | string): string {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   if (!Number.isFinite(n)) return String(value);
   const abs = Math.abs(n);
   const sign = n < 0 ? '-' : '';
-  for (const { v, s } of SUFFIXES) {
-    if (abs >= v) {
-      const divided = Math.floor(abs / v);
-      return `${sign}${divided}${s}`;
+  if (abs >= COMPACT_THRESHOLD) {
+    for (const { v, s } of SUFFIXES) {
+      if (abs >= v) return `${sign}${Math.floor(abs / v)}${s}`;
     }
   }
-  return `${sign}${Math.round(abs)}`;
+  return `${sign}${Math.round(abs).toLocaleString('ru-RU')}`;
 }
 
 /**

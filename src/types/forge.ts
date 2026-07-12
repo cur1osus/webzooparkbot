@@ -3,9 +3,9 @@ import type { ForgeItem } from './gameState';
 export interface ForgeCreateResponse {
   ok: boolean;
   item: ForgeItem;
-  cost_usd?: number;
+  cost_usd: number | null;
+  cost_paw: number | null;
   new_usd: number;
-  cost_paw_coins?: number;
   new_paw_coins: number;
 }
 

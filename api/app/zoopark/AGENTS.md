@@ -2,36 +2,63 @@
 
 ## Purpose
 
-`/home/maxggor/Desktop/webzooparkbot/api/app/zoopark` contains the migrated ZooPark domain logic that serves legacy `/api/*` contracts through the new backend architecture.
+`api/app/zoopark` holds the game. Routes call into it; it never calls back out.
 
-This directory is the extraction target for code that previously lived in `/home/maxggor/Desktop/webzooparkbot/api/main.py`.
+## Money Rules
 
-## Rules
+These are not style preferences. Every one of them was a live exploit.
 
-- Keep business logic here, not in `api/app/routes/zoopark_*.py`.
-- Preserve current `/api/*` request and response contracts unless a coordinated frontend migration is explicitly requested.
-- Prefer extracting shared helpers here instead of copying logic between domain modules.
-- Do not reintroduce `api.main` imports from these modules.
-- If a module becomes too broad, split it by subdomain rather than creating a new monolith.
+- **`ledger.grant()` is the only door.** Nothing else may assign to `player.balance_rub`,
+  `balance_usd` or `balance_paw`. `test_no_module_assigns_a_balance_directly` greps this
+  package to keep it that way, and `test_ledger_reconciles_with_every_balance` asserts
+  `SUM(delta) == balance` for each currency.
+- **Lock before you spend.** Anything that moves currency loads the player with
+  `profile.get_player(session, tg_id, for_update=True)`, and locks every other row it
+  mutates (duel, item, offer, transfer).
+- **The client never sets a balance.** Never read a currency off a request body.
+- **Integers only.** A float amount was once charged truncated and credited in full.
+- **Charge what you credit.** Compute the debit and the credit from the same quantity.
+- **No sink pays more than its source costs.** Selling < forging; the house edge stays
+  positive; the bank has no reverse conversion to arbitrage.
+  `api/tests/test_economy_invariants.py` enforces this — extend it when you add a price.
+- **Randomness that decides money uses `SystemRandom`.** The bank rate is *state*
+  (`bank_rates`), a random walk, not a function of the clock — so it needs no secret.
+- **Money from outside is idempotent.** Stars are credited once per
+  `telegram_payment_charge_id`, and `refunded_payment` takes the PawCoins back.
+- **GETs do not mutate game outcomes.** Resolving an expedition, rolling a reward — POST.
 
-## Current Domain Split
+## Feature Rules
 
-- `core.py`: profile lifecycle endpoints, save/register/config services.
-- `economy.py`: animal/aviary purchases and bank exchange services.
-- `status.py`: daily bonus and animal cure services.
-- `catalog.py`: ZooPark catalogue and economy constants.
-- `profile.py`: shared profile/state assembly helpers.
-- `income.py`: pack-animal income helpers.
-- `merchant.py`: merchant offers and purchases.
-- `forge.py`: forge inventory and crafting.
-- `social.py`: top, clans, referrals, transfer links.
-- `games.py`: multiplayer, solo, donate, cocktail.
+- **A property a player can buy must do something.** Every entry in
+  `catalog.ITEM_PROPERTIES` names the function that reads it in `applies_to`, and
+  `test_every_item_property_is_applied` fails otherwise. The forge once sold
+  "Общий доход +45%" for Telegram Stars and nothing read the number.
+- **Derived state is not stored.** An animal is alive iff
+  `removed_at IS NULL AND dies_at > now`. Do not add an `is_alive` column back.
+- **`players.income_rub_per_min` is a cache.** Anything that changes the zoo or the
+  player's items calls `income.sync_player_income` before it returns.
+
+## Domain Split
+
+- `catalog.py`: every balance constant and the species list. No database rows.
+- `ledger.py`: currency movement and the treasury.
+- `bonuses.py`: what a player's active items add up to.
+- `income.py`: income, upkeep, diversity, passive accrual.
+- `profile.py`: reads — the player row, the zoo, `build_state`.
+- `core.py`: registration and `/api/me`.
+- `economy.py`: the bank. One-way, `rub → usd`.
 - `progression.py`: packs, localities, breeding, expeditions.
+- `merchant.py`: the three daily offers.
+- `forge.py`: items, their properties, sets.
+- `games.py`: duels, solo games, cocktail, Telegram Stars.
+- `social.py`: leaderboard, clans, referrals, transfers.
+- `status.py`: the daily bonus and curing animals.
+- `season.py`: the 30-day season.
 
 ## Safe Change Pattern
 
-1. Extract or update domain logic in this directory.
-2. Keep request/response bodies in `/home/maxggor/Desktop/webzooparkbot/api/app/schemas`.
-3. Wire the corresponding `zoopark_*.py` route module to these functions.
-4. Update tests under `/home/maxggor/Desktop/webzooparkbot/api/tests`.
-5. Only then remove obsolete compatibility glue.
+1. Change the constant in `catalog.py`, not a literal at the call site.
+2. Change the domain function here.
+3. Keep request bodies in `api/app/schemas`.
+4. Wire the `zoopark_*.py` route module.
+5. Add the invariant to `api/tests`, then remove obsolete glue.

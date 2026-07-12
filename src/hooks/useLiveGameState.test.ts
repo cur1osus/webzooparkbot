@@ -1,44 +1,49 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '@/types';
-import { calculateLiveRubBalance } from './useLiveGameState';
+import { calculateLiveRubBalance, netRubPerMin } from './useLiveGameState';
 
 const baseState: GameState = {
   tg_id: 1,
   nickname: 'test',
+  nickname_color: 'ivory',
+  nickname_colors: [{ id: 'ivory', price_paw: 0, animated: false, rarity: 'standard', owned: true }],
   registered_at: '2026-01-01T00:00:00.000Z',
   profile_emoji: null,
   rub: 100,
   usd: 0,
   paw_coins: 0,
   income_rub_per_min: 30,
-  expenses_rub_per_min: 10,
+  upkeep_rub_per_min: 10,
+  income_synced_at: '2026-01-01T00:00:00.000Z',
   animals: [],
-  aviaries: [],
-  total_seats: 0,
-  free_seats: 0,
-  species_count: 0,
-  diversity_bonus_per_species: 0,
-  sick_animals: [],
-  pack_animals: [],
+  sick_animal_ids: [],
   live_animals_count: 0,
   localities_count: 0,
+  species_count: 0,
+  effective_species_count: 0,
+  diversity_bonus_percent: 0,
+  diversity_bonus_percent_per_species: 1,
   season_id: 1,
   season_started_at: '2026-12-01T00:00:00.000Z',
-  forge_items: [],
-  forge_sets: [],
+  season_ends_at: '2026-12-31T00:00:00.000Z',
+  items: [],
+  item_sets: [],
   clan: null,
-  season_end: '2026-12-31T00:00:00.000Z',
-  bonus: 0,
-  balance_seq: 1,
-  data_version: 1,
 };
+
+describe('netRubPerMin', () => {
+  it('is income minus upkeep', () => {
+    expect(netRubPerMin(baseState)).toBe(20);
+  });
+});
 
 describe('calculateLiveRubBalance', () => {
   it('adds net income for visible elapsed time', () => {
     expect(calculateLiveRubBalance(baseState, 180_000)).toBe(160);
   });
 
-  it('does not allow negative displayed balance', () => {
-    expect(calculateLiveRubBalance({ ...baseState, rub: 5, income_rub_per_min: 0, expenses_rub_per_min: 60 }, 60_000)).toBe(0);
+  it('does not allow a negative displayed balance', () => {
+    const drowning = { ...baseState, rub: 5, income_rub_per_min: 0, upkeep_rub_per_min: 60 };
+    expect(calculateLiveRubBalance(drowning, 60_000)).toBe(0);
   });
 });

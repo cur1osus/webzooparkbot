@@ -3,10 +3,10 @@ import type { GameDef } from '@/data/games';
 import { fmt } from '@/utils/format';
 import { BasketballSoloPanel } from './BasketballSoloPanel';
 
-type BetAmount = 100 | 1_000 | 10_000;
+type BetAmount = 1 | 10 | 100;
 type SoloFlowScreen = 'setup' | 'match';
 
-const BET_OPTIONS: readonly BetAmount[] = [100, 1_000, 10_000];
+const BET_OPTIONS: readonly BetAmount[] = [1, 10, 100];
 
 const GAME_ACCENTS: Record<string, { border: string; from: string; to: string; glow: string }> = {
   basketball: { border: 'rgba(var(--c-orange-rgb),0.25)', from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
@@ -43,7 +43,7 @@ function FlowHeader({ title, subtitle, onBack }: { title: string; subtitle: stri
 }
 
 export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGameFlowProps) {
-  const [bet, setBet] = useState<BetAmount>(100);
+  const [bet, setBet] = useState<BetAmount>(1);
   const [screen, setScreen] = useState<SoloFlowScreen>('setup');
 
   const accents = GAME_ACCENTS[game.id] ?? GAME_ACCENTS.dice;

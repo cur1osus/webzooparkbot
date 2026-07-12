@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { fmt } from '@/utils/format';
-import type { Animal, GameState, PackInfo } from '@/types';
+import type { Animal, GameState, GeneTier, PackInfo, PackOpenResult } from '@/types';
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
-import { GENE_META, lifeLeft } from '@/data/packs';
+import { SPECIES_RARITY_META, GENE_META, HABITAT_INFO, geneLabel, lifeLeft, type GeneKey } from '@/data/packs';
+import { AnimalArt } from '@/components/AnimalArt';
 
 // ─── Pack tiers ───────────────────────────────────────────────────────────────
 
@@ -16,7 +18,6 @@ const TIERS: Record<TierKey, {
   border: string;
   image: string;
   openVideo: string;
-  description: string;
 }> = {
   rare: {
     name: 'Редкий',
@@ -24,9 +25,8 @@ const TIERS: Record<TierKey, {
     glow: 'rgba(74,158,221,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(74,158,221,0.20) 0%, rgba(10,15,30,0.98) 72%)',
     border: 'rgba(74,158,221,0.45)',
-    image: '/packs/pack-rare.png',
+    image: '/packs/pack-rare.webp',
     openVideo: '/packs/zoopark-rare.mp4',
-    description: 'Первый пак дня — бесплатный',
   },
   epic: {
     name: 'Эпический',
@@ -34,9 +34,8 @@ const TIERS: Record<TierKey, {
     glow: 'rgba(168,85,247,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(168,85,247,0.20) 0%, rgba(12,8,30,0.98) 72%)',
     border: 'rgba(168,85,247,0.45)',
-    image: '/packs/pack-epic.png',
+    image: '/packs/pack-epic.webp',
     openVideo: '/packs/zoopark-epic.mp4',
-    description: 'Второй пак дня. Шансы генов те же, цена выше',
   },
   legendary: {
     name: 'Легендарный',
@@ -44,9 +43,8 @@ const TIERS: Record<TierKey, {
     glow: 'rgba(245,158,11,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(245,158,11,0.20) 0%, rgba(20,14,4,0.98) 72%)',
     border: 'rgba(245,158,11,0.45)',
-    image: '/packs/pack-legendary.png',
+    image: '/packs/pack-legendary.webp',
     openVideo: '/packs/zoopark-legendary.mp4',
-    description: 'Третий пак дня. Шансы генов те же, цена выше',
   },
   mythic: {
     name: 'Мифический',
@@ -54,222 +52,30 @@ const TIERS: Record<TierKey, {
     glow: 'rgba(239,68,68,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(239,68,68,0.20) 0%, rgba(20,6,6,0.98) 72%)',
     border: 'rgba(239,68,68,0.45)',
-    image: '/packs/pack-mythic.png',
+    image: '/packs/pack-mythic.webp',
     openVideo: '/packs/zoopark-mythic.mp4',
-    description: 'Четвёртый и далее. Шансы генов те же, цена выше',
   },
 };
 
 const TIER_ORDER: TierKey[] = ['rare', 'epic', 'legendary', 'mythic'];
+const RARITY_RANK: Record<Animal['species_rarity'], number> = { rare: 0, epic: 1, legendary: 2, mythic: 3 };
 
-/** The server decides which tier is next; the client used to recompute it and could drift. */
-function getCurrentTierKey(info: PackInfo): TierKey {
-  return info.tier;
-}
+// ─── Pack art (levitating still) ──────────────────────────────────────────────
 
-// ─── Habitat & quality helpers ────────────────────────────────────────────────
-
-const HABITAT_INFO: Record<string, { emoji: string; name: string; color: string }> = {
-  desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },
-  mountains:  { emoji: '🦅', name: 'Горы',       color: 'var(--tg-theme-hint-color)' },
-  forest:     { emoji: '🐆', name: 'Лес',        color: 'var(--c-green)' },
-  fields:     { emoji: '🐴', name: 'Поля',        color: 'var(--c-teal)' },
-  antarctica: { emoji: '🐧', name: 'Антарктида', color: 'var(--c-cyan)' },
-};
-
-function qualityScore(a: Animal): number {
-  const w: Record<string, number> = { low: 0, medium: 1, high: 2 };
-  return w[a.survival] + w[a.reproduction] + w[a.appearance] + w[a.size_trait];
-}
-
-type QualityTier = { text: string; glowColor: string; glowShadow: string; accentColor: string };
-
-function qualityTier(score: number): QualityTier {
-  if (score >= 7) return {
-    text: 'Идеальный',
-    accentColor: '#FBBF24',
-    glowColor: 'rgba(251,191,36,0.55)',
-    glowShadow: '0 0 36px rgba(251,191,36,0.45), 0 0 72px rgba(251,191,36,0.18), 0 12px 32px rgba(0,0,0,0.75)',
-  };
-  if (score >= 5) return {
-    text: 'Отличный',
-    accentColor: '#60A5FA',
-    glowColor: 'rgba(96,165,250,0.45)',
-    glowShadow: '0 0 28px rgba(96,165,250,0.4), 0 0 56px rgba(96,165,250,0.14), 0 12px 32px rgba(0,0,0,0.75)',
-  };
-  if (score >= 3) return {
-    text: 'Хороший',
-    accentColor: '#34D399',
-    glowColor: 'rgba(52,211,153,0.4)',
-    glowShadow: '0 0 22px rgba(52,211,153,0.35), 0 0 44px rgba(52,211,153,0.1), 0 12px 32px rgba(0,0,0,0.75)',
-  };
-  if (score >= 1) return {
-    text: 'Посредственный',
-    accentColor: '#94A3B8',
-    glowColor: 'rgba(148,163,184,0.25)',
-    glowShadow: '0 0 16px rgba(148,163,184,0.2), 0 12px 28px rgba(0,0,0,0.7)',
-  };
-  return {
-    text: 'Слабый',
-    accentColor: '#6B7280',
-    glowColor: 'rgba(107,114,128,0.15)',
-    glowShadow: '0 8px 24px rgba(0,0,0,0.65)',
-  };
-}
-
-const GENE_DOTS: Record<string, number> = { low: 1, medium: 2, high: 3 };
-const GENE_DOT_COLOR: Record<string, string> = {
-  low: 'rgba(251,146,60,0.7)',
-  medium: 'rgba(148,163,184,0.55)',
-  high: 'rgba(255,255,255,0.85)',
-};
-const GENE_LABELS: Record<string, string> = {
-  survival: 'Выживаемость',
-  reproduction: 'Размножение',
-  appearance: 'Внешность',
-  size_trait: 'Размер',
-};
-
-function GeneDots({ tier }: { tier: string }) {
-  const filled = GENE_DOTS[tier] ?? 1;
-  const color  = GENE_DOT_COLOR[tier] ?? 'rgba(148,163,184,0.55)';
-  return (
-    <span className="flex gap-[3px] items-center">
-      {[1, 2, 3].map(i => (
-        <span
-          key={i}
-          className="inline-block rounded-full"
-          style={{
-            width: 6, height: 6,
-            background: i <= filled ? color : 'rgba(255,255,255,0.1)',
-          }}
-        />
-      ))}
-    </span>
-  );
-}
-
-// ─── Animal result card ───────────────────────────────────────────────────────
-
-function AnimalCard({ animal }: { animal: Animal }) {
-  const hab   = HABITAT_INFO[animal.habitat];
-  const score = qualityScore(animal);
-  const qt    = qualityTier(score);
-  const life  = lifeLeft(animal.dies_at);
-  const genes: [string, string][] = [
-    ['survival',     animal.survival],
-    ['reproduction', animal.reproduction],
-    ['appearance',   animal.appearance],
-    ['size_trait',   animal.size_trait],
-  ];
-
-  return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: 'rgba(13,15,26,0.98)',
-        border:     `1px solid ${qt.glowColor}`,
-        boxShadow:  qt.glowShadow,
-        animation:  'scale-in 0.4s var(--spring-bounce) both',
-      }}
-    >
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 flex items-center gap-3">
-        <div
-          className="w-[52px] h-[52px] rounded-2xl grid place-items-center text-[26px] shrink-0"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          {animal.species_emoji}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <p className="m-0 font-extrabold text-[15px] leading-tight truncate">
-            {animal.species_name}
-          </p>
-          <p className="m-0 mt-[3px] text-[11px]" style={{ color: 'rgba(148,163,184,0.7)' }}>
-            {hab.emoji} {hab.name}
-          </p>
-        </div>
-
-        <div className="flex flex-col items-end gap-[4px] shrink-0">
-          <span
-            className="text-[11px] font-bold px-[9px] py-[3px] rounded-full"
-            style={{
-              background: `${qt.accentColor}18`,
-              color: qt.accentColor,
-              border: `1px solid ${qt.accentColor}40`,
-            }}
-          >
-            {qt.text}
-          </span>
-          <span className="text-[13px] font-extrabold" style={{ color: 'rgba(255,255,255,0.9)' }}>
-            ₽{fmt(animal.income)}
-            <span className="text-[10px] font-normal" style={{ color: 'rgba(148,163,184,0.6)' }}> /мин</span>
-          </span>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '0 16px' }} />
-
-      {/* Genes */}
-      <div className="px-4 py-3 flex flex-col gap-[7px]">
-        {genes.map(([key, val]) => {
-          const meta = GENE_META[key as keyof typeof GENE_META]?.[val as 'low' | 'medium' | 'high'];
-          return (
-            <div key={key} className="flex items-center justify-between">
-              <span className="text-[11px]" style={{ color: 'rgba(148,163,184,0.55)' }}>
-                {GENE_LABELS[key]}
-              </span>
-              <div className="flex items-center gap-2">
-                <GeneDots tier={val} />
-                <span className="text-[11px] font-semibold w-[88px] text-right" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                  {meta?.label}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Lifetime */}
-      {life && (
-        <>
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '0 16px' }} />
-          <div className="px-4 py-3 flex items-center justify-between">
-            <span className="text-[11px]" style={{ color: 'rgba(148,163,184,0.55)' }}>Срок жизни</span>
-            <span className="text-[12px] font-bold" style={{ color: life.color }}>{life.label}</span>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Pack art (levitating still, replaces the looped video) ──────────────────
-
-function PackArt({ tier }: { tier: (typeof TIERS)[TierKey] }) {
+function PackArt({ tier, big = false }: { tier: (typeof TIERS)[TierKey]; big?: boolean }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
-      {/* Ambient tier glow — our own light, no video glare */}
       <div
         className="absolute inset-0"
         aria-hidden
         style={{ background: `radial-gradient(ellipse 62% 44% at 50% 40%, ${tier.glow} 0%, transparent 66%)` }}
       />
-      {/* Levitating pack with a grounding shadow that breathes in counter-phase */}
       <div className="absolute inset-0 grid place-items-center">
-        <div className="relative" style={{ width: '66%', aspectRatio: '210 / 345' }}>
+        <div className="relative" style={{ height: big ? '76%' : '82%', maxWidth: big ? '80%' : '66%', aspectRatio: '210 / 345' }}>
           <div
             className="pack-shadow absolute left-1/2"
             aria-hidden
-            style={{
-              bottom: '-8%',
-              width: '74%',
-              height: '11%',
-              background: `radial-gradient(ellipse, ${tier.glow} 0%, transparent 72%)`,
-              filter: 'blur(3px)',
-            }}
+            style={{ bottom: '-8%', width: '74%', height: '11%', background: `radial-gradient(ellipse, ${tier.glow} 0%, transparent 72%)`, filter: 'blur(3px)' }}
           />
           <img
             src={tier.image}
@@ -284,141 +90,205 @@ function PackArt({ tier }: { tier: (typeof TIERS)[TierKey] }) {
   );
 }
 
-// ─── Pack tile (idle card in grid) ───────────────────────────────────────────
+// ─── Tile status ──────────────────────────────────────────────────────────────
+// Tiers are a daily unlock ladder, but an UNLOCKED tier never locks after opening — it
+// stays buyable and can be reopened all day. Only not-yet-reached tiers are locked.
 
-function PackTile({
-  tier, isCurrent, isFree, onClick,
-}: {
-  tier: (typeof TIERS)[TierKey];
-  isCurrent: boolean;
-  isFree: boolean;
+function PackTile({ tierKey, unlocked, price, onClick }: {
+  tierKey: TierKey;
+  unlocked: boolean;
+  price: number;
   onClick: () => void;
 }) {
+  const info = TIERS[tierKey];
+  const idx = TIER_ORDER.indexOf(tierKey);
+  const lockReason = idx > 0 ? `Открой ${TIERS[TIER_ORDER[idx - 1]].name.toLowerCase()}` : '';
   return (
     <button
       onClick={onClick}
+      disabled={!unlocked}
       className="relative overflow-hidden rounded-2xl border-none p-0"
       style={{
         aspectRatio: '3/4',
-        background: tier.bg,
-        border: `1.5px solid ${isCurrent ? tier.color : tier.border}`,
-        boxShadow: isCurrent
-          ? `0 0 24px ${tier.glow}, 0 6px 20px rgba(0,0,0,0.5)`
-          : `0 4px 16px rgba(0,0,0,0.4)`,
-        cursor: 'pointer',
-        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+        background: info.bg,
+        border: `1.5px solid ${unlocked ? info.color : info.border}`,
+        boxShadow: unlocked ? `0 0 22px ${info.glow}, 0 6px 20px rgba(0,0,0,0.5)` : '0 4px 16px rgba(0,0,0,0.4)',
+        cursor: unlocked ? 'pointer' : 'default',
       }}
     >
-      <PackArt tier={tier} />
-
-      {/* Tier name badge */}
-      <div
-        className="absolute bottom-[10px] left-0 right-0 flex justify-center"
-        style={{ pointerEvents: 'none' }}
-      >
-        <span
-          className="px-3 py-[4px] rounded-full text-[11px] font-extrabold tracking-wide"
-          style={{
-            background: `${tier.color}28`,
-            color: tier.color,
-            border: `1px solid ${tier.color}55`,
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-          }}
-        >
-          {tier.name}
-        </span>
+      <div style={{ opacity: unlocked ? 1 : 0.4 }}>
+        <PackArt tier={info} />
       </div>
 
-      {/* Free badge */}
-      {isFree && (
-        <div className="absolute top-[8px] right-[8px]">
-          <span
-            className="px-2 py-[3px] rounded-full text-[10px] font-extrabold"
-            style={{
-              background: 'rgba(34,197,94,0.25)',
-              color: 'var(--c-green)',
-              border: '1px solid rgba(34,197,94,0.45)',
-              backdropFilter: 'blur(6px)',
-              WebkitBackdropFilter: 'blur(6px)',
-            }}
-          >
-            FREE
+      <div className="absolute bottom-[8px] left-0 right-0 flex flex-col items-center gap-[5px]" style={{ pointerEvents: 'none' }}>
+        <span
+          className="px-3 py-[4px] rounded-full text-[11px] font-extrabold tracking-wide"
+          style={{ background: `${info.color}28`, color: info.color, border: `1px solid ${info.color}55`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
+        >
+          {info.name}
+        </span>
+        {unlocked && (
+          <span className="text-[12px] font-black tabular-nums" style={{ color: '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
+            ${fmt(price)}
           </span>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Active indicator ring */}
-      {isCurrent && (
-        <div
-          className="absolute inset-0 rounded-2xl"
-          style={{
-            border: `2px solid ${tier.color}`,
-            pointerEvents: 'none',
-          }}
-        />
+      {!unlocked && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center" style={{ background: 'rgba(7,9,17,0.55)', pointerEvents: 'none' }}>
+          <span className="text-[22px]" aria-hidden>🔒</span>
+          <span className="text-[10.5px] font-bold leading-tight" style={{ color: 'rgba(255,255,255,0.9)' }}>{lockReason}</span>
+        </div>
       )}
     </button>
   );
 }
 
-// ─── Pack modal ───────────────────────────────────────────────────────────────
+// ─── Reward reveal (Brawl-style, one at a time) ───────────────────────────────
+
+const GENE_ROW: { key: GeneKey; label: string }[] = [
+  { key: 'survival', label: 'Выживаемость' },
+  { key: 'appearance', label: 'Внешность' },
+  { key: 'size_trait', label: 'Размер' },
+  { key: 'reproduction', label: 'Размножение' },
+];
+const TIER_FILL: Record<GeneTier, number> = { low: 1, medium: 2, high: 3 };
+
+function RewardParticles({ color }: { color: string }) {
+  // A ring of particles bursting outward — the "casino" pop on each reveal.
+  return (
+    <div className="pointer-events-none absolute inset-0 grid place-items-center" aria-hidden>
+      {Array.from({ length: 14 }).map((_, i) => (
+        <span
+          key={i}
+          className="absolute block rounded-full"
+          style={{
+            width: 7, height: 7, background: color,
+            boxShadow: `0 0 8px ${color}`,
+            ['--angle' as string]: `${(360 / 14) * i}deg`,
+            animation: `reward-particle 0.9s ease-out ${0.05 + (i % 5) * 0.03}s both`,
+          } as CSSProperties}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AnimalRevealCard({ animal }: { animal: Animal }) {
+  const rarity = SPECIES_RARITY_META[animal.species_rarity];
+  const life = lifeLeft(animal.dies_at);
+  const habitat = HABITAT_INFO[animal.habitat];
+  return (
+    <div
+      className="relative mx-auto w-full max-w-[340px] rounded-3xl px-5 pt-5 pb-4"
+      style={{
+        background: `linear-gradient(160deg, ${rarity.color}26, rgba(10,12,22,0.94))`,
+        border: `1.5px solid ${rarity.color}`,
+        boxShadow: `0 0 40px ${rarity.color}55, inset 0 1px 0 rgba(255,255,255,0.08)`,
+      }}
+    >
+      <RewardParticles color={rarity.color} />
+      <div className="relative">
+        <div className="mx-auto grid h-[150px] w-[150px] place-items-center rounded-2xl" style={{ background: `radial-gradient(circle at 50% 45%, ${rarity.color}33, transparent 70%)` }}>
+          <AnimalArt animal={animal} size={140} />
+        </div>
+        <p className="m-0 mt-2 text-center text-[19px] font-black">{animal.name}</p>
+        <p className="m-0 text-center text-[12px] font-semibold" style={{ color: 'var(--tg-theme-hint-color)' }}>{animal.species_name}</p>
+        <p className="m-0 text-center text-[11px] font-extrabold uppercase tracking-wide" style={{ color: rarity.color }}>{rarity.label}</p>
+
+        {/* Genes */}
+        <div className="mt-3 rounded-2xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.28)' }}>
+          {GENE_ROW.map(g => {
+            const val = animal[g.key] as GeneTier;
+            const meta = GENE_META[g.key][val];
+            const filled = TIER_FILL[val];
+            return (
+              <div key={g.key} className="flex items-center gap-2 py-[4px]">
+                <span className="flex-1 text-left text-[11.5px] font-semibold">{g.label}</span>
+                <span className="flex gap-[3px]" aria-hidden>
+                  {[0, 1, 2].map(i => (
+                    <span key={i} className="block h-[6px] w-[14px] rounded-full" style={{ background: i < filled ? meta.color : 'rgba(255,255,255,0.14)' }} />
+                  ))}
+                </span>
+                <span className="w-[92px] text-right text-[11px] font-bold" style={{ color: meta.color }}>{geneLabel(g.key, val)}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between text-[12px]">
+          <span style={{ color: 'var(--tg-theme-hint-color)' }}>{habitat.emoji} {habitat.name}</span>
+          <span className="font-bold" style={{ color: 'var(--c-green)' }}>₽{fmt(animal.income)}/мин</span>
+          {life && <span className="font-bold tabular-nums" style={{ color: life.color }}>⏳ {life.label}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CurrencyRevealCard({ kind, amount }: { kind: 'rub' | 'usd'; amount: number }) {
+  const color = kind === 'rub' ? 'var(--c-green)' : 'var(--c-gold)';
+  const rgb = kind === 'rub' ? '99,194,104' : '243,181,63';
+  return (
+    <div
+      className="relative mx-auto w-full max-w-[300px] rounded-3xl px-6 py-8 text-center"
+      style={{ background: `radial-gradient(circle at 50% 40%, rgba(${rgb},0.22), rgba(10,12,22,0.94))`, border: `1.5px solid rgba(${rgb},0.6)`, boxShadow: `0 0 40px rgba(${rgb},0.4)` }}
+    >
+      <RewardParticles color={`rgb(${rgb})`} />
+      <div className="relative">
+        <p className="m-0 text-[52px] leading-none">{kind === 'rub' ? '💰' : '💵'}</p>
+        <p className="m-0 mt-3 text-[11px] font-bold uppercase tracking-widest" style={{ color }}>{kind === 'rub' ? 'Рубли' : 'Доллары'}</p>
+        <p className="m-0 mt-1 text-[38px] font-black tabular-nums" style={{ color }}>
+          {kind === 'rub' ? `+₽${fmt(amount)}` : `+$${fmt(amount)}`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Full-screen pack opening ─────────────────────────────────────────────────
 
 type ModalOpenState = 'idle' | 'opening';
+type RevealItem = { kind: 'animal'; animal: Animal } | { kind: 'rub' | 'usd'; amount: number };
 
-function PackModal({
-  tierKey, info, gs,
-  onClose, onSuccess,
-}: {
+function PackModal({ tierKey, isGift, onClose, onSuccess }: {
   tierKey: TierKey;
-  info: PackInfo;
-  gs: GameState;
+  isGift: boolean;
   onClose: () => void;
-  onSuccess: (updatedInfo: PackInfo, animal: Animal) => void;
+  onSuccess: (res: PackOpenResult) => void;
 }) {
-  const tier      = TIERS[tierKey];
-  const isCurrent = tierKey === getCurrentTierKey(info);
-  const isFree    = tierKey === 'rare' && info.free_available;
-  const canOpen   = isCurrent;
-
   const [openState, setOpenState] = useState<ModalOpenState>('idle');
-  const [newAnimal, setNewAnimal] = useState<Animal | null>(null);
-  const [apiDone, setApiDone]     = useState(false);
-  const [animDone, setAnimDone]   = useState(false);
-  const [error, setError]         = useState<string | null>(null);
+  const [revealedTier, setRevealedTier] = useState<TierKey | null>(null);
+  const [items, setItems] = useState<RevealItem[]>([]);
+  const [step, setStep] = useState(0);
+  const [totals, setTotals] = useState<{ rub: number; usd: number } | null>(null);
+  const [apiDone, setApiDone] = useState(false);
+  const [animDone, setAnimDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Imperatively attach 'ended' listener
+  const tier = TIERS[revealedTier ?? tierKey];
+
   useEffect(() => {
     if (openState !== 'opening') return;
     const video = videoRef.current;
-    if (!video) return;
-
+    if (!video) {
+      const t = setTimeout(() => setAnimDone(true), 50);
+      return () => clearTimeout(t);
+    }
     let fired = false;
-    const trigger = () => {
-      if (fired) return;
-      fired = true;
-      setAnimDone(true);
-    };
-
+    const trigger = () => { if (!fired) { fired = true; setAnimDone(true); } };
     if (video.ended) { trigger(); return; }
     video.addEventListener('ended', trigger, { once: true });
-
-    let fallback: ReturnType<typeof setTimeout>;
-    const scheduleFallback = () => {
-      const remaining = (video.duration - video.currentTime) * 1000;
-      fallback = setTimeout(trigger, Math.max(remaining, 0) + 400);
-    };
-    if (isFinite(video.duration) && video.duration > 0) {
-      scheduleFallback();
-    } else {
-      video.addEventListener('loadedmetadata', scheduleFallback, { once: true });
-    }
-    return () => {
-      video.removeEventListener('ended', trigger);
-      clearTimeout(fallback);
-    };
+    const fallback = setTimeout(trigger, 4200);
+    return () => { video.removeEventListener('ended', trigger); clearTimeout(fallback); };
   }, [openState]);
+
+  useEffect(() => {
+    if (!error) return;
+    const t = window.setTimeout(() => setError(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [error]);
 
   const handleOpen = async () => {
     if (openState !== 'idle') return;
@@ -427,265 +297,201 @@ function PackModal({
     setAnimDone(false);
     setError(null);
     try {
-      const res = await apiOpenPack();
-      const updatedInfo: PackInfo = {
-        ...info,
-        packs_today: res.packs_today,
-        free_available: false,
-        tier: res.next_tier,
-        next_price: res.next_price,
-      };
-      setNewAnimal(res.animal);
+      const res = await apiOpenPack(isGift ? undefined : tierKey);
+      setRevealedTier(res.tier);
+      // Reveal order builds suspense: currencies first, then animals rarest-last.
+      const animals = [...res.animals].sort((a, b) => RARITY_RANK[a.species_rarity] - RARITY_RANK[b.species_rarity]);
+      const list: RevealItem[] = [];
+      if (res.rewards.rub) list.push({ kind: 'rub', amount: res.rewards.rub });
+      if (res.rewards.usd) list.push({ kind: 'usd', amount: res.rewards.usd });
+      animals.forEach(animal => list.push({ kind: 'animal', animal }));
+      setItems(list);
+      setTotals(res.rewards);
+      setStep(0);
       setApiDone(true);
-      onSuccess(updatedInfo, res.animal);
+      onSuccess(res);
     } catch (e) {
       setError((e as Error).message);
       setOpenState('idle');
     }
   };
 
-  // Reveal is derived: the card flips once both the animation and the request are done.
-  const isRevealed = openState === 'opening' && apiDone && animDone;
-  const isOpening  = openState === 'opening' && !isRevealed;
+  // Derived phases: once the API and the unwrap animation are both done, we're revealing.
+  const revealing = openState === 'opening' && apiDone && animDone;
+  const opening = openState === 'opening' && !revealing;
+  const atSummary = step >= items.length;
+  const current = items[step];
+  const isBigDrop = (revealedTier === 'legendary' || revealedTier === 'mythic')
+    || (current?.kind === 'animal' && (current.animal.species_rarity === 'legendary' || current.animal.species_rarity === 'mythic'));
 
-  return (
-    /* Backdrop */
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}
-      onClick={isOpening ? undefined : onClose}
+  const advance = () => { if (revealing && !atSummary) setStep(s => s + 1); };
+
+  return createPortal(
+    <section
+      className="fixed inset-0 z-[200] flex min-h-0 flex-col overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      style={{
+        backgroundColor: '#0d0b16',
+        backgroundImage: `radial-gradient(circle at 50% 36%, ${tier.color}30 0%, transparent 46%), radial-gradient(circle at 50% 92%, ${tier.color}14 0%, transparent 50%)`,
+        minHeight: '100dvh',
+      }}
     >
-      {/* Sheet */}
-      <div
-        className="w-full rounded-t-3xl flex flex-col overflow-hidden"
-        style={{
-          maxHeight: '92vh',
-          background: 'linear-gradient(180deg, rgba(12,14,26,0.99) 0%, rgba(8,10,20,1) 100%)',
-          border: `1px solid ${tier.border}`,
-          borderBottom: 'none',
-          boxShadow: `0 -8px 40px ${tier.glow}`,
-          animation: 'slide-up 0.3s var(--spring-bounce) both',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 shrink-0">
-          <div className="w-10 h-1 rounded-full" style={{ background: `${tier.color}40` }} />
+      {/* Reveal drama layers */}
+      {revealing && !atSummary && (
+        <>
+          <div key={step} className="reveal-flash" />
+          {isBigDrop && <div className="reveal-rays" style={{ '--ray': `${tier.color}55` } as CSSProperties} />}
+          <div className="reveal-aura" style={{ '--aura': `${tier.color}44` } as CSSProperties} />
+        </>
+      )}
+
+      <header className="relative z-20 flex shrink-0 items-center justify-between px-4 pb-3" style={{ paddingTop: 'calc(var(--safe-top) + 12px)' }}>
+        <span className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tier.color }}>
+          {isGift ? 'Подарок' : `${tier.name} пак`}
+        </span>
+        <button onClick={onClose} className="tap-target rounded-full border-none px-4 text-[13px] font-extrabold" style={{ background: 'rgba(7,9,17,0.52)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.14)' }}>
+          Закрыть
+        </button>
+      </header>
+
+      {error && (
+        <div className="fixed left-4 right-4 z-30 rounded-2xl px-4 py-3" role="alert" style={{ top: 'calc(var(--safe-top) + 66px)', background: 'rgba(56,13,20,0.98)', border: '1px solid rgba(232,86,76,0.78)', animation: 'slide-down 0.22s var(--spring-smooth) both' }}>
+          <p className="m-0 text-[13px] leading-snug" style={{ color: 'rgba(255,255,255,0.9)' }}>{error}</p>
         </div>
+      )}
 
-        {/* Scrollable content */}
-        <div className="overflow-y-auto flex flex-col gap-4 px-4 pt-2 pb-6">
+      {/* ── IDLE: full-screen pack, tap to open ── */}
+      {openState === 'idle' && (
+        <button
+          onClick={handleOpen}
+          className="relative z-10 flex-1 border-none bg-transparent p-0"
+          aria-label={`Открыть ${tier.name.toLowerCase()} пак`}
+        >
+          <div className="absolute inset-0"><PackArt tier={tier} big /></div>
+          <span
+            className="absolute bottom-[16%] left-1/2 -translate-x-1/2 rounded-full px-6 py-3 text-[14px] font-black tracking-wide"
+            style={{ background: `${tier.color}22`, color: '#fff', border: `1.5px solid ${tier.color}`, boxShadow: `0 0 24px ${tier.color}66`, animation: 'glow-pulse 1.6s ease-in-out infinite' }}
+          >
+            ТАПНИ, ЧТОБЫ ОТКРЫТЬ
+          </span>
+        </button>
+      )}
 
-          {/* Video */}
-          {!isRevealed && (
-            <div
-              className="relative mx-auto overflow-hidden rounded-3xl shrink-0"
-              style={{
-                width: '100%',
-                maxWidth: 280,
-                aspectRatio: '3/4',
-                background: tier.bg,
-                border: `1.5px solid ${tier.border}`,
-                boxShadow: `0 0 40px ${tier.glow}, 0 10px 30px rgba(0,0,0,0.6)`,
-              }}
-            >
-              {isOpening ? (
-                <video
-                  ref={videoRef}
-                  key="opening"
-                  src={tier.openVideo}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                  style={{ display: 'block' }}
-                />
-              ) : (
-                <PackArt tier={tier} />
-              )}
-              <div className="absolute bottom-3 left-0 right-0 flex justify-center" style={{ pointerEvents: 'none' }}>
-                <span
-                  className="px-4 py-[5px] rounded-full text-[12px] font-extrabold tracking-wide"
-                  style={{
-                    background: `${tier.color}25`,
-                    color: tier.color,
-                    border: `1px solid ${tier.color}50`,
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                  }}
-                >
-                  {tier.name}
-                </span>
+      {/* ── OPENING: unwrap video ── */}
+      {opening && (
+        <div className="relative z-10 flex-1">
+          <video ref={videoRef} src={tier.openVideo} autoPlay muted playsInline className="pack-video-screen h-full w-full object-contain" />
+        </div>
+      )}
+
+      {/* ── REVEALING: one reward at a time ── */}
+      {revealing && (
+        <main className="relative z-10 flex min-h-0 flex-1 flex-col px-5 pb-4" onClick={advance}>
+          {!atSummary && current && (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+              {/* progress dots */}
+              <div className="mb-4 flex gap-[6px]">
+                {items.map((_, i) => (
+                  <span key={i} className="block h-[6px] w-[6px] rounded-full" style={{ background: i <= step ? tier.color : 'rgba(255,255,255,0.2)' }} />
+                ))}
               </div>
-            </div>
-          )}
-
-          {/* Revealed animal */}
-          {isRevealed && newAnimal && (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-center">
-                <span
-                  className="px-4 py-[6px] rounded-full text-[13px] font-extrabold tracking-wide"
-                  style={{
-                    background: `${tier.color}20`,
-                    color: tier.color,
-                    border: `1px solid ${tier.color}40`,
-                  }}
-                >
-                  ✨ {tier.name} пак
-                </span>
+              <div key={step} style={{ animation: 'reveal-pop 0.5s var(--spring-bounce) both', width: '100%' }}>
+                {current.kind === 'animal'
+                  ? <AnimalRevealCard animal={current.animal} />
+                  : <CurrencyRevealCard kind={current.kind} amount={current.amount} />}
               </div>
-              <AnimalCard animal={newAnimal} />
-            </div>
-          )}
-
-          {/* Info block */}
-          {!isRevealed && (
-            <div className="flex flex-col gap-2">
-              <p className="m-0 font-extrabold text-[16px]" style={{ color: tier.color }}>{tier.name} пак</p>
-              <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                {tier.description}
+              <p className="mt-5 text-[12px] font-semibold" style={{ color: 'var(--tg-theme-hint-color)', animation: 'glow-pulse 1.6s ease-in-out infinite' }}>
+                {step + 1 < items.length ? 'Нажми, чтобы продолжить →' : 'Нажми, чтобы завершить →'}
               </p>
-
-              {/* Price / availability */}
-              <div
-                className="flex items-center justify-between px-3 py-[10px] rounded-xl mt-1"
-                style={{ background: `${tier.color}10`, border: `1px solid ${tier.color}25` }}
-              >
-                <span className="text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Цена</span>
-                <span className="font-extrabold text-[14px]" style={{ color: isFree ? 'var(--c-green)' : tier.color }}>
-                  {/* `next_price` belongs to the tier the server says is next. Showing it on
-                      any other tile promised a price that tile does not have. */}
-                  {isFree ? '🎁 Бесплатно' : isCurrent ? `₽${fmt(info.next_price)}` : '—'}
-                </span>
-              </div>
-
-              {/* Balance */}
-              <div className="flex items-center justify-between px-3 py-[8px] rounded-xl">
-                <span className="text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Баланс</span>
-                <span className="text-[13px] font-bold" style={{ color: 'var(--c-green)' }}>₽{fmt(gs.rub)}</span>
-              </div>
             </div>
           )}
 
-          {/* Error */}
-          {error && (
-            <div
-              className="rounded-xl px-4 py-3 text-[13px]"
-              style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}
-            >
-              {error}
-            </div>
-          )}
-
-          {/* Actions */}
-          {!isRevealed && (
-            <div className="flex flex-col gap-2">
-              {canOpen ? (
-                <button
-                  onClick={handleOpen}
-                  disabled={isOpening}
-                  className="w-full py-[14px] rounded-2xl font-extrabold text-[16px] border-none"
-                  style={{
-                    background: isOpening
-                      ? `${tier.color}30`
-                      : `linear-gradient(135deg, ${tier.color}, ${tier.color}cc)`,
-                    color: isOpening ? tier.color : '#fff',
-                    boxShadow: isOpening ? 'none' : `0 6px 20px ${tier.glow}`,
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  {isOpening
-                    ? '⏳ Открываем...'
-                    : isFree
-                    ? '🎁 Открыть бесплатно'
-                    : `🔓 Открыть · ₽${fmt(info.next_price)}`}
-                </button>
-              ) : (
-                <div
-                  className="w-full py-[13px] rounded-2xl text-center text-[14px] font-bold"
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    color: 'var(--tg-theme-hint-color)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                  }}
-                >
-                  {TIER_ORDER.indexOf(tierKey) < TIER_ORDER.indexOf(getCurrentTierKey(info))
-                    ? '✅ Уже открыт сегодня'
-                    : `🔒 Откроется после ${TIER_ORDER.indexOf(tierKey)} пак${TIER_ORDER.indexOf(tierKey) === 1 ? 'а' : 'ов'}`}
+          {/* ── SUMMARY ── */}
+          {atSummary && totals && (
+            <div className="mx-auto flex min-h-0 w-full max-w-[420px] flex-1 flex-col pt-2" style={{ animation: 'scale-in 0.35s var(--spring-bounce) both' }}>
+              <div className="text-center">
+                <p className="m-0 text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: tier.color }}>
+                  {revealedTier ? `${TIERS[revealedTier].name} — ` : ''}открыто
+                </p>
+                <h2 className="m-0 mt-1 text-[26px] font-black">Твои награды</h2>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl px-4 py-3 text-left" style={{ background: 'rgba(99,194,104,0.14)', border: '1px solid rgba(99,194,104,0.45)' }}>
+                  <p className="m-0 text-[11px] font-bold uppercase" style={{ color: 'var(--c-green)' }}>Рубли</p>
+                  <p className="m-0 mt-1 text-[22px] font-black">+₽{fmt(totals.rub)}</p>
                 </div>
-              )}
-              <button
-                onClick={onClose}
-                className="w-full py-[12px] rounded-2xl font-bold text-[14px] border-none"
-                style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--tg-theme-hint-color)' }}
-              >
-                Закрыть
-              </button>
+                <div className="rounded-2xl px-4 py-3 text-left" style={{ background: 'rgba(243,181,63,0.14)', border: '1px solid rgba(243,181,63,0.45)' }}>
+                  <p className="m-0 text-[11px] font-bold uppercase" style={{ color: 'var(--c-gold)' }}>Доллары</p>
+                  <p className="m-0 mt-1 text-[22px] font-black">+${fmt(totals.usd)}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex-1 overflow-y-auto">
+                <p className="m-0 mb-2 text-left text-[12px] font-extrabold" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                  ЖИВОТНЫЕ · {items.filter(i => i.kind === 'animal').length} шт.
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {items.filter(i => i.kind === 'animal').map((it, i) => {
+                    const a = (it as { animal: Animal }).animal;
+                    const rc = SPECIES_RARITY_META[a.species_rarity].color;
+                    return (
+                      <div key={i} className="rounded-xl p-1" style={{ background: `${rc}18`, border: `1px solid ${rc}55` }}>
+                        <AnimalArt animal={a} size={56} className="mx-auto" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
+        </main>
+      )}
 
-          {isRevealed && (
-            <button
-              onClick={onClose}
-              className="w-full py-[14px] rounded-2xl font-extrabold text-[15px] border-none"
-              style={{
-                background: `${tier.color}18`,
-                color: tier.color,
-                border: `1px solid ${tier.color}35`,
-              }}
-            >
-              Готово
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+      {revealing && atSummary && (
+        <footer className="relative z-10 shrink-0 px-5 pt-3" style={{ paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
+          <button onClick={onClose} className="w-full rounded-2xl border-none py-4 text-[16px] font-extrabold" style={{ background: `${tier.color}24`, color: tier.color, border: `1px solid ${tier.color}60` }}>
+            В зоопарк
+          </button>
+        </footer>
+      )}
+    </section>,
+    document.body,
   );
 }
 
-// ─── Daily pack banner ────────────────────────────────────────────────────────
+// ─── Daily gift banner ────────────────────────────────────────────────────────
 
-function DailyPackBanner({ available, onClick }: { available: boolean; onClick: () => void }) {
+function DailyGiftBanner({ available, odds, onClick }: { available: boolean; odds?: PackInfo['gift_odds']; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
+      disabled={!available}
       className="w-full rounded-2xl border-none flex items-center gap-3 px-4 py-[14px]"
       style={{
-        background: available
-          ? 'linear-gradient(135deg, rgba(34,197,94,0.15) 0%, rgba(16,185,129,0.08) 100%)'
-          : 'rgba(255,255,255,0.04)',
-        border: available
-          ? '1px solid rgba(34,197,94,0.35)'
-          : '1px solid rgba(255,255,255,0.08)',
+        background: available ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(16,185,129,0.08))' : 'rgba(255,255,255,0.04)',
+        border: available ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(255,255,255,0.08)',
         boxShadow: available ? '0 4px 20px rgba(34,197,94,0.15)' : 'none',
-        cursor: 'pointer',
+        cursor: available ? 'pointer' : 'default',
         textAlign: 'left',
       }}
     >
-      <div
-        className="w-12 h-12 rounded-2xl grid place-items-center text-[24px] shrink-0"
-        style={{
-          background: available ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
-          border: available ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,255,255,0.08)',
-        }}
-      >
+      <div className="w-12 h-12 rounded-2xl grid place-items-center text-[24px] shrink-0" style={{ background: available ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)', border: available ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,255,255,0.08)' }}>
         🎁
       </div>
       <div className="flex-1 min-w-0">
-        <p className="m-0 font-extrabold text-[15px]">Ежедневный пак</p>
+        <p className="m-0 font-extrabold text-[15px]">Ежедневный подарок</p>
         <p className="m-0 mt-[2px] text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          {available ? 'Бесплатный пак доступен сегодня' : 'Уже получен сегодня'}
+          {available ? 'Случайная редкость — открой и узнай' : 'Уже получен сегодня'}
         </p>
+        {available && odds && odds.length > 0 && (
+          <div className="mt-[6px] flex flex-wrap gap-x-[10px] gap-y-[2px]">
+            {odds.map(o => (
+              <span key={o.tier} className="text-[10.5px] font-bold" style={{ color: TIERS[o.tier].color }}>{TIERS[o.tier].name} {o.percent}%</span>
+            ))}
+          </div>
+        )}
       </div>
-      <span
-        className="text-[12px] font-bold px-3 py-[5px] rounded-full shrink-0"
-        style={{
-          background: available ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)',
-          color: available ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
-          border: available ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(255,255,255,0.1)',
-        }}
-      >
+      <span className="text-[12px] font-bold px-3 py-[5px] rounded-full shrink-0" style={{ background: available ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)', color: available ? 'var(--c-green)' : 'var(--tg-theme-hint-color)', border: available ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(255,255,255,0.1)' }}>
         {available ? 'FREE' : '✓'}
       </span>
     </button>
@@ -695,10 +501,11 @@ function DailyPackBanner({ available, onClick }: { available: boolean; onClick: 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [info, setInfo]       = useState<PackInfo | null>(null);
+  const [info, setInfo] = useState<PackInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [modalTier, setModalTier] = useState<TierKey | null>(null);
+  // 'gift' opens the daily gift; a TierKey opens that paid tier.
+  const [modal, setModal] = useState<TierKey | 'gift' | null>(null);
 
   useEffect(() => {
     apiGetPacksInfo()
@@ -707,66 +514,52 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSuccess = (updatedInfo: PackInfo) => {
-    setInfo(updatedInfo);
+  const handleSuccess = (res: PackOpenResult) => {
+    // Reflect the new unlocks / gift state without a round trip.
+    setInfo(prev => prev && {
+      ...prev,
+      gift_available: res.gift_available,
+      tiers: prev.tiers.map(t => ({ ...t, unlocked: res.unlocked_tiers.includes(t.tier) })),
+    });
     onRefresh();
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <div className="spinner" />
-      </div>
-    );
+    return <div className="flex justify-center py-16"><div className="spinner" /></div>;
   }
-
   if (loadError || !info) {
-    return (
-      <div className="px-4 py-8 text-center">
-        <p className="text-[14px]" style={{ color: 'var(--c-red)' }}>{loadError ?? 'Ошибка загрузки'}</p>
-      </div>
-    );
+    return <div className="px-4 py-8 text-center"><p className="text-[14px]" style={{ color: 'var(--c-red)' }}>{loadError ?? 'Ошибка загрузки'}</p></div>;
   }
 
-  const currentTierKey = getCurrentTierKey(info);
+  const byTier = (t: TierKey) => info.tiers.find(x => x.tier === t)!;
 
   return (
     <div className="px-[14px] pt-4 pb-6 flex flex-col gap-4">
-
-      {/* Header */}
       <div>
         <p className="m-0 font-extrabold text-[17px]">🎁 Паки с животными</p>
         <p className="m-0 mt-[2px] text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Открывай паки и получай животных для зоопарка
+          Открой тир по лестнице — дальше открывай сколько хочешь
         </p>
       </div>
 
-      {/* Daily pack */}
-      <DailyPackBanner
-        available={info.free_available}
-        onClick={() => setModalTier('rare')}
-      />
+      <DailyGiftBanner available={info.gift_available} odds={info.gift_odds} onClick={() => setModal('gift')} />
 
-      {/* 2×2 tier grid */}
       <div className="grid grid-cols-2 gap-3">
-        {TIER_ORDER.map(tk => (
-          <PackTile
-            key={tk}
-            tier={TIERS[tk]}
-            isCurrent={tk === currentTierKey}
-            isFree={tk === 'rare' && info.free_available}
-            onClick={() => setModalTier(tk)}
-          />
-        ))}
+        {TIER_ORDER.map(tk => {
+          const t = byTier(tk);
+          return <PackTile key={tk} tierKey={tk} unlocked={t.unlocked} price={t.price} onClick={() => t.unlocked && setModal(tk)} />;
+        })}
       </div>
 
-      {/* Pack modal */}
-      {modalTier && (
+      <p className="m-0 text-center text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+        Баланс: <strong style={{ color: 'var(--c-gold)' }}>${fmt(gs.usd)}</strong> · доллары купишь в банке за рубли
+      </p>
+
+      {modal && (
         <PackModal
-          tierKey={modalTier}
-          info={info}
-          gs={gs}
-          onClose={() => setModalTier(null)}
+          tierKey={modal === 'gift' ? 'rare' : modal}
+          isGift={modal === 'gift'}
+          onClose={() => setModal(null)}
           onSuccess={handleSuccess}
         />
       )}

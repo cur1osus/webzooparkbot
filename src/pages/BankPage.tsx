@@ -17,28 +17,36 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const [countdown, setCountdown] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: bankInfo = null, error, isLoading } = useQuery({
+  const { data: bankInfo = null, error, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ['bank'],
     queryFn: apiGetBank,
     staleTime: 55_000,
     refetchInterval: 65_000,
   });
 
-  useEffect(() => {
-    if (bankInfo?.next_update_in != null) {
-      setCountdown(bankInfo.next_update_in);
-    }
-  }, [bankInfo?.next_update_in]);
+  // The rate update is global (aligned to a server-side period boundary), so the
+  // countdown must be derived from a fixed absolute deadline, not from the relative
+  // `next_update_in` snapshot. `dataUpdatedAt` is when the server value was actually
+  // observed; anchoring to it keeps the timer stable across re-mounts and cache hits.
+  const deadline =
+    bankInfo?.next_update_in != null ? dataUpdatedAt + bankInfo.next_update_in * 1000 : null;
 
   useEffect(() => {
-    if (countdown === null) return;
-    if (countdown <= 0) {
-      void queryClient.invalidateQueries({ queryKey: ['bank'] });
+    if (deadline === null) {
+      setCountdown(null);
       return;
     }
-    const timer = setTimeout(() => setCountdown(c => (c ?? 1) - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [countdown, queryClient]);
+    const tick = () => {
+      const remaining = Math.max(0, Math.round((deadline - Date.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        void queryClient.invalidateQueries({ queryKey: ['bank'] });
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [deadline, queryClient]);
 
   const handleExchange = async (all: boolean) => {
     if (!all) {

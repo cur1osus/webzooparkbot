@@ -248,6 +248,13 @@ button:active:not(:disabled) {
   outline-offset: 2px;
   border-radius: 6px;
 }
+/* WebKit draws `outline` as a rectangle even on rounded controls. Palette cards use a
+   box-shadow focus ring instead, which follows their 12px corners in Telegram's WebView. */
+button[aria-pressed]:focus-visible {
+  outline: none;
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px var(--tg-theme-button-color) !important;
+}
 /* Pointer users don't need the ring; keyboard/switch users do. */
 :focus:not(:focus-visible) { outline: none; }
 
@@ -271,6 +278,9 @@ button:active:not(:disabled) {
   button:hover:not(:disabled),
   .card-pressable:hover { transform: none !important; }
   .income-glow { animation: none !important; }
+  .nickname-color-aurora, .nickname-color-embers, .nickname-color-spectrum, .nickname-color-neon, .nickname-color-google,
+  .nickname-preview-aurora, .nickname-preview-embers, .nickname-preview-spectrum, .nickname-preview-neon, .nickname-preview-google,
+  .nickname-swatch-aurora, .nickname-swatch-embers, .nickname-swatch-spectrum, .nickname-swatch-neon, .nickname-swatch-google { animation: none !important; }
 }
 
 button:disabled {
@@ -380,6 +390,98 @@ button:disabled {
 }
 
 /* ─── Income pulse ──────────────────────────────────────────────────────────── */
+/* Premium nickname colors are deliberately visible beyond the small text itself: the
+   shop preview and swatch carry the same moving light as the leaderboard name. */
+.nickname-color-aurora,
+.nickname-color-embers,
+.nickname-color-spectrum,
+.nickname-color-neon,
+.nickname-color-google {
+  background-size: 260% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: nickname-color-flow 2.8s ease-in-out infinite alternate;
+}
+.nickname-color-aurora {
+  background-image: linear-gradient(100deg, #62e4c4, #80b9ff, #d7ff9b, #62e4c4);
+  text-shadow: 0 0 14px rgba(98, 228, 196, 0.38);
+}
+.nickname-color-embers {
+  background-image: linear-gradient(100deg, #ffcf6b, #ff7148, #ff77b4, #ffcf6b);
+  text-shadow: 0 0 14px rgba(255, 113, 72, 0.42);
+}
+.nickname-color-spectrum {
+  background-image: linear-gradient(100deg, #ff8ed8, #a48cff, #70ddff, #d6ff78, #ff8ed8);
+  text-shadow: 0 0 14px rgba(182, 140, 255, 0.42);
+}
+.nickname-color-neon {
+  /* Keep the glow attached to the glyphs. A background/box shadow paints a rectangle
+     around the text, which is especially visible in Telegram's WebView. */
+  background: transparent;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: #5dffbd;
+  color: #5dffbd !important;
+  text-shadow: 0 0 10px rgba(94, 255, 189, 0.22), 0 0 20px rgba(94, 255, 189, 0.12);
+  animation: nickname-neon-pulse 1.4s ease-in-out infinite alternate;
+}
+.nickname-color-google {
+  background-image: linear-gradient(100deg, #4285f4, #ea4335, #fbbc05, #34a853, #4285f4);
+  text-shadow: 0 0 10px rgba(66, 133, 244, 0.55), 0 0 24px rgba(234, 67, 53, 0.3);
+  animation-duration: 1.9s;
+}
+.nickname-preview-aurora,
+.nickname-preview-embers,
+.nickname-preview-spectrum,
+.nickname-preview-neon,
+.nickname-preview-google {
+  border-radius: 16px;
+  background-size: 260% 260%;
+  animation: nickname-preview-flow 3.5s ease-in-out infinite alternate;
+}
+.nickname-preview-aurora {
+  background-image: linear-gradient(125deg, rgba(83, 230, 194, 0.3), rgba(100, 146, 255, 0.22), rgba(211, 255, 131, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-embers {
+  background-image: linear-gradient(125deg, rgba(255, 205, 103, 0.3), rgba(255, 82, 56, 0.24), rgba(255, 103, 169, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-spectrum {
+  background-image: linear-gradient(125deg, rgba(255, 130, 209, 0.28), rgba(125, 117, 255, 0.22), rgba(84, 211, 255, 0.22), rgba(205, 255, 111, 0.18), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-neon {
+  background-image: linear-gradient(125deg, rgba(65, 255, 181, 0.3), rgba(71, 236, 255, 0.22), rgba(171, 105, 255, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-google {
+  background-image: linear-gradient(125deg, rgba(66, 133, 244, 0.3), rgba(234, 67, 53, 0.25), rgba(251, 188, 5, 0.22), rgba(52, 168, 83, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-swatch-aurora,
+.nickname-swatch-embers,
+.nickname-swatch-spectrum,
+.nickname-swatch-neon,
+.nickname-swatch-google {
+  border-radius: 9999px;
+  background-size: 220% auto;
+  animation: nickname-color-flow 1.4s ease-in-out infinite alternate;
+}
+.nickname-swatch-aurora { background-image: linear-gradient(90deg, #62e4c4, #80b9ff, #d7ff9b, #62e4c4); }
+.nickname-swatch-embers { background-image: linear-gradient(90deg, #ffcf6b, #ff7148, #ff77b4, #ffcf6b); }
+.nickname-swatch-spectrum { background-image: linear-gradient(90deg, #ff8ed8, #a48cff, #70ddff, #d6ff78, #ff8ed8); }
+.nickname-swatch-neon { background-image: linear-gradient(90deg, #5dffbd, #6efff5, #9f82ff, #ff6ed3, #5dffbd); }
+.nickname-swatch-google { background-image: linear-gradient(90deg, #4285f4, #ea4335, #fbbc05, #34a853, #4285f4); }
+@keyframes nickname-color-flow {
+  to { background-position: 100% center; }
+}
+@keyframes nickname-preview-flow {
+  to { background-position: 100% 100%; }
+}
+@keyframes nickname-neon-pulse {
+  /* A faint, wide halo only. Any tighter or more opaque and it fills the gaps of a short
+     bold word, reading as a lit rectangle behind the text rather than a glow. */
+  from { text-shadow: 0 0 10px rgba(94, 255, 189, 0.18); }
+  to { text-shadow: 0 0 14px rgba(94, 255, 189, 0.3), 0 0 24px rgba(126, 120, 255, 0.14); }
+}
+
 .income-glow {
   text-shadow: 0 0 12px rgba(var(--c-green-rgb),0.55);
   animation: income-pulse 3s ease-in-out infinite;
@@ -595,3 +697,78 @@ button:disabled {
 .stagger-children > *:nth-child(4) { animation-delay: 150ms; }
 .stagger-children > *:nth-child(5) { animation-delay: 200ms; }
 .stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+
+/* ─── Pack opening drama (Brawl-style reveal) ───────────────────────────────── */
+
+/* The open-pack video ships on a black background; `screen` drops the black so only the
+   glow shows, killing the black rectangle it used to sit in. */
+.pack-video-screen { mix-blend-mode: screen; }
+
+/* White flash punched at the moment of reveal */
+.reveal-flash {
+  position: absolute; inset: 0; pointer-events: none; z-index: 30;
+  background: radial-gradient(circle at 50% 42%, #fff 0%, rgba(255,255,255,0.5) 20%, transparent 60%);
+  animation: reveal-flash 0.55s ease-out both;
+}
+@keyframes reveal-flash {
+  0%   { opacity: 0; transform: scale(0.6); }
+  18%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+
+/* Rotating light rays behind a big drop; colour comes from --ray via inline style */
+.reveal-rays {
+  position: absolute; left: 50%; top: 38%; width: 150vw; height: 150vw; translate: -50% -50%;
+  pointer-events: none; z-index: 0; opacity: 0.5;
+  background: repeating-conic-gradient(from 0deg,
+    var(--ray, #fff) 0deg 6deg, transparent 6deg 20deg);
+  mask: radial-gradient(circle, #000 0%, transparent 62%);
+  -webkit-mask: radial-gradient(circle, #000 0%, transparent 62%);
+  animation: reveal-rays-spin 14s linear infinite, reveal-fade-in 0.5s ease-out both;
+  will-change: transform;
+}
+@keyframes reveal-rays-spin { to { transform: rotate(360deg); } }
+@keyframes reveal-fade-in { from { opacity: 0; } }
+
+/* Breathing aura of the tier colour */
+.reveal-aura {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(circle at 50% 40%, var(--aura, #fff) 0%, transparent 55%);
+  animation: reveal-aura-breathe 2.4s ease-in-out infinite;
+}
+@keyframes reveal-aura-breathe {
+  0%, 100% { opacity: 0.35; } 50% { opacity: 0.7; }
+}
+
+/* Reward tiles drop in with a bounce, staggered by --d */
+.reveal-pop { animation: reveal-pop 0.5s var(--spring-bounce) both; animation-delay: var(--d, 0ms); }
+@keyframes reveal-pop {
+  0%   { transform: scale(0.4) translateY(14px); opacity: 0; }
+  60%  { transform: scale(1.08) translateY(0);   opacity: 1; }
+  100% { transform: scale(1);                    opacity: 1; }
+}
+
+/* The "ПОЛУЧЕНО: N" count — glows and pulses when the drop is big */
+.reveal-count-glow {
+  animation: reveal-count-glow 1.4s ease-in-out infinite;
+}
+@keyframes reveal-count-glow {
+  0%, 100% { text-shadow: 0 0 12px var(--glow, #fff), 0 0 24px var(--glow, #fff); transform: scale(1); }
+  50%      { text-shadow: 0 0 22px var(--glow, #fff), 0 0 46px var(--glow, #fff); transform: scale(1.06); }
+}
+
+/* One-shot shake for a big drop */
+.reveal-shake { animation: reveal-shake 0.5s ease-in-out both; }
+@keyframes reveal-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px) rotate(-1deg); }
+  40% { transform: translateX(6px) rotate(1deg); }
+  60% { transform: translateX(-4px) rotate(-0.6deg); }
+  80% { transform: translateX(4px) rotate(0.6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-flash, .reveal-rays, .reveal-aura, .reveal-shake { animation: none !important; }
+  .reveal-count-glow { animation: none !important; }
+  .reveal-pop { animation: fade-in 0.2s ease both !important; }
+}

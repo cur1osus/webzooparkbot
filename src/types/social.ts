@@ -2,8 +2,8 @@ export interface TopEntry {
   rank: number;
   tg_id: number;
   nickname: string;
+  nickname_color: string;
   income_rub_per_min: number;
-  name_color: string | null;
   is_me: boolean;
 }
 
@@ -13,11 +13,10 @@ export interface TopResponse {
 }
 
 export interface ClanOut {
-  idpk: number;
+  id: number;
   name: string;
   level: number;
   member_count: number;
-  specialty: string | null;
   owner_nickname: string;
 }
 
@@ -41,16 +40,29 @@ export interface ClanMembersResponse {
 export interface ReferralResponse {
   code: string;
   total: number;
-  reward_usd_per_ref: number;
+  signup_reward_usd: number;
   referred: string[];
 }
 
 export interface TransferOut {
-  key: string;
+  code: string;
   total_rub: number;
   rub_per_claim: number;
   max_claims: number;
   claims: number;
   active: boolean;
   created_at: string;
+  expires_at: string;
+}
+
+export interface TransferCreateResponse {
+  code: string;
+  total_rub: number;
+  new_rub: number;
+}
+
+export interface TransferClaimResponse {
+  ok: boolean;
+  rub_received: number;
+  new_rub: number;
 }

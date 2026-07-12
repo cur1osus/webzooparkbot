@@ -4,6 +4,7 @@ import type { GameState, MerchantOffer } from '@/types';
 import { apiGetMerchant, apiBuyFromMerchant } from '@/api';
 import { fmt } from '@/utils/format';
 import { geneLabel, HABITAT_INFO } from '@/data/packs';
+import { AnimalArt } from '@/components/AnimalArt';
 
 export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }) {
   const [buying, setBuying] = useState<number | null>(null);
@@ -60,7 +61,7 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
             return (
               <div key={offer.slot} className="card">
                 <div className="flex items-center gap-3 mb-[10px]">
-                  <span className="text-[36px] shrink-0">{offer.species_emoji}</span>
+                  <AnimalArt animal={offer} size={44} className="shrink-0" />
                   <div className="flex-1">
                     <p className="m-0 font-bold text-sm">{offer.species_name}</p>
                     <p className="mt-[2px] mb-0 text-xs text-tg-hint">

@@ -15,6 +15,7 @@ import {
 } from '@/data/packs';
 import type { ActiveExpedition, ExpeditionInfo, ExpeditionResult, Habitat, Animal } from '@/types';
 import { formatCountdown, fmt } from '@/utils/format';
+import { AnimalArt } from '@/components/AnimalArt';
 
 function WildAnimalSummary({ habitat, result }: { habitat: Habitat; result: ExpeditionResult }) {
   // The wild animal always comes from the expedition's own habitat.
@@ -93,13 +94,13 @@ function ExpeditionAnimalCard({
       }}
     >
       <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-2xl grid place-items-center text-[24px] shrink-0"
-             style={{ background: `${habitat.color}20`, border: `1px solid ${habitat.color}35` }}>
-          {habitat.emoji}
+        <div className="w-11 h-11 rounded-2xl grid place-items-center shrink-0 overflow-hidden"
+             style={{ background: `color-mix(in srgb, ${habitat.color} 20%, transparent)`, border: `1px solid color-mix(in srgb, ${habitat.color} 35%, transparent)` }}>
+          <AnimalArt animal={animal} size={40} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="m-0 font-extrabold text-[14px]">{habitat.name}</p>
+            <p className="m-0 font-extrabold text-[14px]">{animal.name}</p>
             <span className="text-[11px] font-bold px-2 py-[2px] rounded-full"
                   style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(var(--c-cyan-rgb),0.28)' }}>
               Сила {power}
@@ -112,7 +113,7 @@ function ExpeditionAnimalCard({
             )}
           </div>
           <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            ₽{fmt(animal.income)}/мин
+            {animal.species_name} · ₽{fmt(animal.income)}/мин
             {ttl ? ` · живёт ${ttl.label}` : ''}
           </p>
         </div>
@@ -176,23 +177,23 @@ function CurrentExpeditionCard({
             {habitat.emoji}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="m-0 font-extrabold text-[15px]">Экспедиция в {habitat.name}</p>
-              <span className="text-[11px] font-bold px-2 py-[2px] rounded-full"
-                    style={{
-                      background: expedition.status === 'finished' ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(var(--c-blue-rgb),0.14)',
-                      color: expedition.status === 'finished' ? 'var(--c-green)' : 'var(--c-cyan)',
-                      border: expedition.status === 'finished'
-                        ? '1px solid rgba(var(--c-green-rgb),0.25)'
-                        : '1px solid rgba(var(--c-cyan-rgb),0.28)',
-                    }}>
-                {expedition.status === 'finished' ? 'Завершена' : isReadyToFinish ? 'Можно завершить' : 'В пути'}
-              </span>
-            </div>
+            <p className="m-0 font-extrabold text-[15px] truncate">Экспедиция в {habitat.name}</p>
             <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
               {expedition.animals.length} животных · сила отряда {partyPower}
             </p>
           </div>
+          {/* Status pill anchored to the right edge, centred against the habitat icon —
+              off the title line so it never crowds the name. */}
+          <span className="text-[11px] font-bold px-2 py-[3px] rounded-full shrink-0 whitespace-nowrap"
+                style={{
+                  background: expedition.status === 'finished' ? 'rgba(var(--c-green-rgb),0.15)' : 'rgba(var(--c-blue-rgb),0.14)',
+                  color: expedition.status === 'finished' ? 'var(--c-green)' : 'var(--c-cyan)',
+                  border: expedition.status === 'finished'
+                    ? '1px solid rgba(var(--c-green-rgb),0.25)'
+                    : '1px solid rgba(var(--c-cyan-rgb),0.28)',
+                }}>
+            {expedition.status === 'finished' ? 'Завершена' : isReadyToFinish ? 'Можно завершить' : 'В пути'}
+          </span>
         </div>
 
         <div className="grid grid-cols-2 gap-[6px]">
@@ -215,7 +216,6 @@ function CurrentExpeditionCard({
         <div className="flex flex-col gap-2">
           <p className="m-0 text-[12px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>ОТРЯД</p>
           {expedition.animals.map(animal => {
-            const animalHabitat = HABITAT_INFO[animal.habitat];
             const lost = result?.killed_animal_id === animal.id;
             return (
               <div key={animal.id} className="rounded-xl px-3 py-[10px] flex items-center gap-3"
@@ -223,9 +223,11 @@ function CurrentExpeditionCard({
                      background: lost ? 'rgba(var(--c-red-rgb),0.1)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent)',
                      border: lost ? '1px solid rgba(var(--c-red-rgb),0.25)' : '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
                    }}>
-                <span className="text-[24px]">{animalHabitat.emoji}</span>
+                <AnimalArt animal={animal} size={30} className="shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="m-0 text-[13px] font-bold">{animalHabitat.name}</p>
+                  <p className="m-0 text-[13px] font-bold truncate">
+                    {animal.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {animal.species_name}</span>
+                  </p>
                   <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
                     Сила {expeditionPower(animal)} · ₽{fmt(animal.income)}/мин
                   </p>
@@ -345,10 +347,11 @@ export function ExpeditionPage({
     const active = activeExpedition;
     if (!active || active.status !== 'active') return undefined;
     const leftMs = new Date(active.ends_at).getTime() - Date.now();
-    if (leftMs <= 0) {
-      void load();
-      return undefined;
-    }
+    // Already expired: the "Завершить" button appears via the per-second `nowMs` tick, so
+    // there's nothing to reload. Reloading here would loop — `load()` returns the same
+    // still-active-but-expired expedition, whose new object reference re-fires this effect.
+    if (leftMs <= 0) return undefined;
+    // Still running: refresh once, right after the timer runs out.
     const timeout = window.setTimeout(() => void load(), leftMs + 250);
     return () => window.clearTimeout(timeout);
   }, [activeExpedition, load]);
@@ -460,17 +463,17 @@ export function ExpeditionPage({
         ) : info ? (
           <>
             <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-2xl p-3" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}>
+              <div className="rounded-2xl p-3 flex flex-col justify-between text-center" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}>
                 <p className="m-0 text-[11px] text-tg-hint">Направления</p>
-                <p className="m-0 mt-1 text-[18px] font-extrabold">{info.localities.length}</p>
+                <p className="m-0 mt-1 text-[18px] font-extrabold leading-none">{info.localities.length}</p>
               </div>
-              <div className="rounded-2xl p-3" style={{ background: 'rgba(var(--c-green-rgb),0.08)', border: '1px solid rgba(var(--c-green-rgb),0.2)' }}>
+              <div className="rounded-2xl p-3 flex flex-col justify-between text-center" style={{ background: 'rgba(var(--c-green-rgb),0.08)', border: '1px solid rgba(var(--c-green-rgb),0.2)' }}>
                 <p className="m-0 text-[11px] text-tg-hint">Свободные животные</p>
-                <p className="m-0 mt-1 text-[18px] font-extrabold">{availableAnimals.length}</p>
+                <p className="m-0 mt-1 text-[18px] font-extrabold leading-none">{availableAnimals.length}</p>
               </div>
-              <div className="rounded-2xl p-3" style={{ background: 'rgba(var(--c-gold-rgb),0.08)', border: '1px solid rgba(var(--c-gold-rgb),0.2)' }}>
+              <div className="rounded-2xl p-3 flex flex-col justify-between text-center" style={{ background: 'rgba(var(--c-gold-rgb),0.08)', border: '1px solid rgba(var(--c-gold-rgb),0.2)' }}>
                 <p className="m-0 text-[11px] text-tg-hint">Статус</p>
-                <p className="m-0 mt-1 text-[12px] font-extrabold" style={{ color: info.active ? 'var(--c-gold)' : 'var(--c-green)' }}>
+                <p className="m-0 mt-1 text-[16px] font-extrabold leading-none" style={{ color: info.active ? 'var(--c-gold)' : 'var(--c-green)' }}>
                   {info.active ? 'Занята' : 'Свободна'}
                 </p>
               </div>
@@ -501,15 +504,16 @@ export function ExpeditionPage({
                         key={locality.id}
                         disabled={Boolean(info.active)}
                         onClick={() => setSelectedLocalityId(locality.id)}
-                        className="w-full rounded-2xl p-4 flex items-center gap-3 text-left border-none disabled:opacity-65"
+                        className="w-full rounded-2xl px-4 py-[16px] flex items-center gap-3 text-left border-none disabled:opacity-65"
                         style={{
-                          background: selected ? `${habitat.color}18` : `${habitat.color}10`,
-                          border: `1px solid ${selected ? `${habitat.color}55` : `${habitat.color}28`}`,
+                          // Horizontal gradient banner in the habitat's own colour, like localities.
+                          background: `linear-gradient(90deg, color-mix(in srgb, ${habitat.color} ${selected ? 58 : 44}%, transparent) 0%, color-mix(in srgb, ${habitat.color} ${selected ? 26 : 18}%, transparent) 55%, transparent 100%)`,
+                          border: `1px solid color-mix(in srgb, ${habitat.color} ${selected ? 55 : 32}%, transparent)`,
                           cursor: info.active ? 'default' : 'pointer',
                         }}
                       >
                         <div className="w-12 h-12 rounded-2xl grid place-items-center text-[26px] shrink-0"
-                             style={{ background: `${habitat.color}20`, border: `1px solid ${habitat.color}35` }}>
+                             style={{ background: `color-mix(in srgb, ${habitat.color} 24%, transparent)`, border: `1px solid color-mix(in srgb, ${habitat.color} 42%, transparent)` }}>
                           {habitat.emoji}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -559,30 +563,40 @@ export function ExpeditionPage({
                 )}
               </div>
 
-              <div className="rounded-2xl p-4 flex flex-col gap-3"
-                   style={{ background: 'rgba(var(--c-gold-rgb),0.08)', border: '1px solid rgba(var(--c-gold-rgb),0.2)' }}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="m-0 font-extrabold text-[14px]">Запуск экспедиции</p>
-                    <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                      {selectedLocality
-                        ? `Направление: ${HABITAT_INFO[selectedLocality.habitat].name}`
-                        : 'Сначала выбери направление'}
-                    </p>
+              {/* Sticky launch bar — stays reachable above the tab bar no matter how long
+                  the animal list gets, so you never scroll to the very bottom to send. */}
+              <div
+                className="sticky z-20 -mx-[14px] px-[14px] pt-3 pb-1"
+                style={{
+                  bottom: 'var(--app-bottom-offset)',
+                  background: 'linear-gradient(to top, var(--tg-theme-bg-color) 62%, transparent)',
+                }}
+              >
+                <div className="rounded-2xl p-4 flex flex-col gap-3"
+                     style={{ background: 'color-mix(in srgb, var(--c-gold) 10%, var(--tg-theme-bg-color))', border: '1px solid rgba(var(--c-gold-rgb),0.24)', boxShadow: '0 6px 24px rgba(0,0,0,0.4)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="m-0 font-extrabold text-[14px]">Запуск экспедиции</p>
+                      <p className="m-0 text-[12px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                        {selectedLocality
+                          ? `Направление: ${HABITAT_INFO[selectedLocality.habitat].name}`
+                          : 'Сначала выбери направление'}
+                      </p>
+                    </div>
+                    <span className="text-[12px] font-bold shrink-0" style={{ color: selectedAnimalIds.length >= 3 && selectedAnimalIds.length <= 5 ? 'var(--c-green)' : 'var(--c-gold)' }}>
+                      {selectedAnimalIds.length >= 3 && selectedAnimalIds.length <= 5 ? 'Готово' : `${selectedAnimalIds.length}/3–5`}
+                    </span>
                   </div>
-                  <span className="text-[12px] font-bold" style={{ color: selectedAnimalIds.length >= 3 && selectedAnimalIds.length <= 5 ? 'var(--c-green)' : 'var(--c-gold)' }}>
-                    {selectedAnimalIds.length >= 3 && selectedAnimalIds.length <= 5 ? 'Готово' : 'Нужно 3–5'}
-                  </span>
-                </div>
 
-                <button
-                  onClick={() => void handleStart()}
-                  disabled={!canStart || busyAction === 'start'}
-                  className="w-full py-[14px] rounded-2xl border-none font-extrabold text-[15px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
-                >
-                  {busyAction === 'start' ? 'Отправляем...' : info.active ? 'Сначала заверши текущую экспедицию' : 'Отправить в экспедицию'}
-                </button>
+                  <button
+                    onClick={() => void handleStart()}
+                    disabled={!canStart || busyAction === 'start'}
+                    className="w-full py-[14px] rounded-2xl border-none font-extrabold text-[15px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
+                  >
+                    {busyAction === 'start' ? 'Отправляем...' : info.active ? 'Сначала заверши текущую экспедицию' : 'Отправить в экспедицию'}
+                  </button>
+                </div>
               </div>
             </div>
           </>

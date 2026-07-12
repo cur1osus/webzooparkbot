@@ -1,16 +1,20 @@
-import { useEffect, useState, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type SetStateAction } from 'react';
 import { fmt, fmtMin, fmtBalance } from '@/utils/format';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-import type { GameState } from '@/types';
-import { HABITAT_INFO } from '@/data/packs';
+import { TgsPlayer, type TgsHandle } from '@/components/TgsPlayer';
+import { AnimalDetailCard } from '@/components/AnimalDetailCard';
+import { AnimalArt } from '@/components/AnimalArt';
+import type { Animal, GameState } from '@/types';
+import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
 import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet } from '@/api';
 import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ForgeTab, ItemDetailPage, ItemSelectPage } from '@/features/forge/ForgeInventory';
+import { VetTab } from '@/features/vet/VetTab';
 
-type ZooTab = 'overview' | 'forge' | 'medals';
+type ZooTab = 'overview' | 'forge' | 'vet' | 'medals';
 
 // ─── ZooPage ──────────────────────────────────────────────────────────────────
 
@@ -40,14 +44,59 @@ function routeForSubPage(subPage: SubPage): string | null {
 const ZOO_TABS: { id: ZooTab; emoji: string; label: string; badge?: (gs: GameState) => number | null }[] = [
   { id: 'overview', emoji: '🏠', label: 'Обзор' },
   { id: 'forge',    emoji: '⚒️',  label: 'Кузня',  badge: gs => gs.items.length > 0 ? gs.items.length : null },
+  { id: 'vet',      emoji: '🩺', label: 'Ветеринар', badge: gs => gs.sick_animal_ids.length > 0 ? gs.sick_animal_ids.length : null },
   { id: 'medals',   emoji: '🏅', label: 'Медали' },
 ];
+
+type AnimalSort = 'new' | 'income' | 'life' | 'rarity';
+
+const ANIMAL_SORTS: { id: AnimalSort; label: string }[] = [
+  { id: 'new',    label: 'Новые' },
+  { id: 'income', label: 'Доход' },
+  { id: 'life',   label: 'Скоро умрут' },
+  { id: 'rarity', label: 'Редкость' },
+];
+
+const RARITY_RANK: Record<Animal['species_rarity'], number> = {
+  rare: 0, epic: 1, legendary: 2, mythic: 3,
+};
+
+// Each mode returns a fully-ordered comparator; ties fall back to income so the list never
+// reshuffles arbitrarily between renders.
+function compareAnimals(mode: AnimalSort): (a: Animal, b: Animal) => number {
+  const byIncome = (a: Animal, b: Animal) => b.income - a.income;
+  switch (mode) {
+    case 'income':
+      return byIncome;
+    case 'life':
+      // Soonest death first — the animals that need attention.
+      return (a, b) => new Date(a.dies_at).getTime() - new Date(b.dies_at).getTime() || byIncome(a, b);
+    case 'rarity':
+      return (a, b) => RARITY_RANK[b.species_rarity] - RARITY_RANK[a.species_rarity] || byIncome(a, b);
+    case 'new':
+    default:
+      // Most recently acquired first — freshly bought animals surface at the top.
+      return (a, b) => new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || byIncome(a, b);
+  }
+}
 
 export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [tab, setTab] = useState<ZooTab>('overview');
   const [subPage, setSubPageState] = useState<SubPage>(() => getZooSubPageFromHash());
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [animalSort, setAnimalSort] = useState<AnimalSort>('new');
+  const tgsRef = useRef<TgsHandle>(null);
+
+  const sortedAnimals = useMemo(
+    () => [...gs.animals].sort(compareAnimals(animalSort)),
+    [gs.animals, animalSort],
+  );
+
+  useEffect(() => {
+    void tgsRef.current?.playAnimation('/nft_TopHat-3159.tgs');
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => setSubPageState(getZooSubPageFromHash());
@@ -130,9 +179,9 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       <div className="relative overflow-hidden" style={{ paddingTop: '16px' }}>
         {/* Identity row: avatar + name (left), premium currencies (right) */}
         <div className="relative px-[14px] flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full grid place-items-center text-[22px] shrink-0"
+          <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden"
             style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
-            {gs.profile_emoji ?? '🦁'}
+            <TgsPlayer ref={tgsRef} />
           </div>
           <div className="min-w-0 flex-1">
             <p className="m-0 text-[16px] font-extrabold leading-tight truncate">{gs.nickname}</p>
@@ -205,13 +254,17 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       {tab === 'overview' && (
         <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
           {gs.sick_animal_ids.length > 0 && (
-            <div className="rounded-2xl px-[14px] py-3 flex items-start gap-3"
-              style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.35)' }}>
-              <span className="text-xl">🤒</span>
-              <p className="m-0 text-[13px] font-bold text-[var(--c-red-soft)]">
-                {gs.sick_animal_ids.length} животное больно! Штраф уже действует — открой ветеринара
+            <button
+              onClick={() => setTab('vet')}
+              className="w-full rounded-2xl px-[14px] py-3 flex items-center gap-3 border-none text-left cursor-pointer"
+              style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.35)' }}
+            >
+              <span className="text-xl shrink-0">🤒</span>
+              <p className="m-0 flex-1 text-[13px] font-bold text-[var(--c-red-soft)]">
+                Больных животных: {gs.sick_animal_ids.length}. Штраф к доходу уже действует — открой ветеринара
               </p>
-            </div>
+              <span className="text-[18px] shrink-0" style={{ color: 'var(--c-red-soft)' }}>›</span>
+            </button>
           )}
 
           <div className="grid grid-cols-2 gap-2">
@@ -256,20 +309,56 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
           {gs.animals.length > 0 && (
             <div>
-              <p className="m-0 mb-2 text-[11px] font-extrabold text-tg-hint tracking-[1px] uppercase">Мои животные</p>
+              <p className="m-0 mb-2 text-[11px] font-extrabold text-tg-hint tracking-[1px] uppercase">
+                Мои животные · {gs.animals.length} · нажми для карточки
+              </p>
+              {gs.animals.length > 1 && (
+                <div className="flex flex-wrap gap-[6px] mb-2">
+                  {ANIMAL_SORTS.map(s => {
+                    const active = s.id === animalSort;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => setAnimalSort(s.id)}
+                        className="shrink-0 px-[12px] py-[6px] rounded-full text-[12px] font-bold border-none cursor-pointer whitespace-nowrap transition-colors"
+                        style={{
+                          background: active ? 'color-mix(in srgb, var(--c-gold) 18%, transparent)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 9%, transparent)',
+                          color: active ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
+                          border: `1px solid ${active ? 'color-mix(in srgb, var(--c-gold) 40%, transparent)' : 'transparent'}`,
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
-                {gs.animals.slice(0, 10).map(a => {
-                  const habitat = HABITAT_INFO[a.habitat];
+                {sortedAnimals.map(a => {
+                  const life = lifeLeft(a.dies_at);
                   return (
-                    <div key={a.id} className="card" style={{ padding: '10px 12px' }}>
+                    <button
+                      key={a.id}
+                      onClick={() => setSelectedAnimal(a)}
+                      className="card card-pressable text-left border-none w-full"
+                      style={{ padding: '10px 12px' }}
+                    >
                       <div className="flex items-center gap-[10px]">
-                        <span className="text-[24px]">{a.species_emoji}</span>
-                        <div className="min-w-0">
-                          <p className="m-0 text-[13px] font-semibold truncate">{a.species_name}</p>
-                          <p className="m-0 text-[11px] text-tg-hint">{habitat.emoji} {habitat.name} · ₽{fmt(a.income)}/мин</p>
+                        <span className="relative shrink-0 w-[38px] h-[38px] flex items-center justify-center">
+                          <AnimalArt animal={a} size={38} />
+                          {a.is_sick && <span className="absolute -top-1 -right-1 text-[11px]">🤒</span>}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="m-0 text-[13px] font-bold truncate">{a.name}</p>
+                          <p className="m-0 text-[11px] text-tg-hint truncate">{a.species_name} · ₽{fmt(a.income)}/мин</p>
                         </div>
                       </div>
-                    </div>
+                      {life && (
+                        <p className="m-0 mt-[6px] text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>
+                          ⏳ {life.label}
+                        </p>
+                      )}
+                    </button>
                   );
                 })}
               </div>
@@ -301,6 +390,10 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         />
       )}
 
+      {tab === 'vet' && (
+        <VetTab animals={gs.animals} usd={gs.usd} onRefresh={onRefresh} />
+      )}
+
       {tab === 'medals' && (
         <div className="px-[14px] pt-3 page-enter">
           <div className="card text-center py-10">
@@ -311,6 +404,10 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             </p>
           </div>
         </div>
+      )}
+
+      {selectedAnimal && (
+        <AnimalDetailCard animal={selectedAnimal} onClose={() => setSelectedAnimal(null)} />
       )}
     </div>
   );

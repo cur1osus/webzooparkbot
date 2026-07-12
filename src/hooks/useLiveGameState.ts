@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState } from '@/types';
 
+/** Net of upkeep, which is the number the player actually accrues. */
+export function netRubPerMin(gs: GameState): number {
+  return gs.income_rub_per_min - gs.upkeep_rub_per_min;
+}
+
 export function calculateLiveRubBalance(gs: GameState, elapsedMs: number): number {
-  const netPerMin = gs.income_rub_per_min - gs.expenses_rub_per_min;
-  const accrued = Math.trunc((netPerMin * elapsedMs) / 60_000);
+  const accrued = Math.trunc((netRubPerMin(gs) * elapsedMs) / 60_000);
   return Math.max(0, gs.rub + accrued);
 }
 
@@ -21,7 +25,7 @@ function useLiveRubBalance(gs: GameState | null): number | null {
         setTimer(prev => {
           const current = stateRef.current;
           if (!current) return prev;
-          const key = `${current.rub}:${current.balance_seq}:${current.income_rub_per_min}:${current.expenses_rub_per_min}`;
+          const key = liveKey(current);
           if (prev.key !== key) return { key, visibleElapsedMs: 1_000 };
           return { key, visibleElapsedMs: prev.visibleElapsedMs + 1_000 };
         });
@@ -32,10 +36,15 @@ function useLiveRubBalance(gs: GameState | null): number | null {
 
   return useMemo(() => {
     if (!gs) return null;
-    const key = `${gs.rub}:${gs.balance_seq}:${gs.income_rub_per_min}:${gs.expenses_rub_per_min}`;
+    const key = liveKey(gs);
     const visibleElapsedMs = timer.key === key ? timer.visibleElapsedMs : 0;
     return calculateLiveRubBalance(gs, visibleElapsedMs);
   }, [gs, timer]);
+}
+
+/** Restart the ticker whenever the server hands us a new balance or a new rate. */
+function liveKey(gs: GameState): string {
+  return `${gs.rub}:${gs.income_synced_at}:${gs.income_rub_per_min}:${gs.upkeep_rub_per_min}`;
 }
 
 export function useLiveGameState(gs: GameState | null): GameState | null {

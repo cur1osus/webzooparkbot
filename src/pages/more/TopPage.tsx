@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { TopEntry } from '@/types';
 import { apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
+import { nicknameColorClass, nicknameColorValue } from '@/data/nicknameColors';
 
 const CHART_H = 96; // px — max bar height
 
@@ -120,10 +121,10 @@ export function TopPage() {
           <span className="text-lg shrink-0 min-w-7 text-center">{rankEmoji(entry.rank)}</span>
           <div className="flex-1">
             <p
-              className="m-0"
+              className={`m-0 ${nicknameColorClass(entry.nickname_color)}`}
               style={{
                 fontWeight: entry.is_me ? 800 : 600,
-                color: entry.name_color ?? (entry.is_me ? 'var(--c-blue)' : 'var(--tg-theme-text-color)'),
+                color: nicknameColorValue(entry.nickname_color),
               }}
             >
               {entry.nickname}

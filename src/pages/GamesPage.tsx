@@ -12,13 +12,14 @@ import {
 } from '@/api';
 import { CocktailTab } from '@/features/games/CocktailTab';
 import { SoloGameFlow } from '@/features/games/SoloGameFlow';
+import { PageHeader } from '@/components/PageHeader';
 import { copyTmaText, shareTmaUrl } from '@/lib/tma';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail';
-type BetAmount = 100 | 1_000 | 10_000;
+type BetAmount = 1 | 10 | 100;
 type MultiScreen = 'list' | 'share';
 
-const BET_AMOUNTS: BetAmount[] = [100, 1_000, 10_000];
+const BET_AMOUNTS: BetAmount[] = [1, 10, 100];
 
 const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = {
   basketball: { from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
@@ -41,7 +42,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [selectedGame, setSelectedGame] = useState<string>('dice');
-  const [betInput, setBetInput] = useState('100');
+  const [betInput, setBetInput] = useState('1');
   const [message, setMessage] = useState<string | null>(null);
   const [screen, setScreen] = useState<MultiScreen>('list');
   const [createdGame, setCreatedGame] = useState<Duel | null>(null);
@@ -441,8 +442,7 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
             style={{
               background: `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 10%, transparent), color-mix(in srgb, ${colors.to} 6%, transparent))`,
               border: `1.5px solid color-mix(in srgb, ${colors.from} 22%, transparent)`,
-              boxShadow: `0 4px 20px ${colors.glow}`,
-              transition: 'box-shadow 200ms, border 200ms',
+              transition: 'border 200ms',
             }}
           >
             <div
@@ -450,7 +450,6 @@ function SoloTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
               style={{
                 background: `linear-gradient(135deg, color-mix(in srgb, ${colors.from} 15%, transparent), color-mix(in srgb, ${colors.to} 8%, transparent))`,
                 border: `1px solid color-mix(in srgb, ${colors.from} 19%, transparent)`,
-                boxShadow: `0 0 12px ${colors.glow}`,
               }}
             >
               {g.emoji}
@@ -490,31 +489,12 @@ export function GamesPage({ gs, onRefresh, initialTab = 'solo', inviteGameId }: 
   return (
     <div className="page-content-safe">
 
-      {/* Header */}
-      <div
-        className="relative overflow-hidden"
-        style={{ paddingTop: '16px', paddingBottom: 20 }}
-      >
-        {/* Background glow */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at 50% -20%, rgba(var(--c-blue-rgb),0.12) 0%, transparent 65%)' }}
-        />
-        <div className="relative px-[14px]">
-          <div className="flex items-center gap-3 mb-1">
-            <div
-              className="w-10 h-10 rounded-xl grid place-items-center text-[20px]"
-              style={{ background: 'rgba(var(--c-blue-rgb),0.15)', border: '1px solid rgba(var(--c-blue-rgb),0.25)' }}
-            >
-              🎮
-            </div>
-            <p className="font-display m-0 text-[20px] tracking-tight">Игры</p>
-          </div>
-          <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)', paddingLeft: 52 }}>
-            Играй против ИИ или соревнуйся с друзьями!
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        emoji="🎮"
+        title="Игры"
+        subtitle="Играй против ИИ или соревнуйся с друзьями!"
+        accent="var(--c-blue-rgb)"
+      />
 
       {/* Tabs */}
       <div

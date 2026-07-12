@@ -1,85 +1,59 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter
 
-from api.app.core.auth import auth
+from api.app.routes._auth import TelegramId
 from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
-from api.app.zoopark.social import api_clan_create, api_clan_leave, api_clan_list, api_clan_members, api_clan_request, api_my_transfers, api_referrals, api_top, api_transfers_create
+from api.app.zoopark import social as social_service
 
-
-router = APIRouter(tags=["zoopark-social"])
+router = APIRouter(tags=["social"])
 
 
 @router.get("/api/top")
-def top_page(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_top(auth(x_init_data, x_dev_user_id))
+def top(tg_id: TelegramId):
+    return social_service.top(tg_id)
 
 
-@router.get("/api/clan/list")
-def clan_list(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_clan_list(auth(x_init_data, x_dev_user_id))
+@router.get("/api/clans")
+def clan_list(tg_id: TelegramId):
+    return social_service.clan_list(tg_id)
 
 
-@router.post("/api/clan/create")
-def clan_create(
-    body: ClanCreateBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_clan_create(auth(x_init_data, x_dev_user_id), body)
+@router.post("/api/clans")
+def clan_create(body: ClanCreateBody, tg_id: TelegramId):
+    return social_service.clan_create(tg_id, body)
 
 
-@router.post("/api/clan/request")
-def clan_request(
-    body: ClanRequestBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_clan_request(auth(x_init_data, x_dev_user_id), body)
+@router.post("/api/clans/join")
+def clan_join(body: ClanRequestBody, tg_id: TelegramId):
+    return social_service.clan_join(tg_id, body)
 
 
-@router.get("/api/clan/members")
-def clan_members(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_clan_members(auth(x_init_data, x_dev_user_id))
+@router.get("/api/clans/members")
+def clan_members(tg_id: TelegramId):
+    return social_service.clan_members(tg_id)
 
 
-@router.post("/api/clan/leave")
-def clan_leave(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_clan_leave(auth(x_init_data, x_dev_user_id))
+@router.post("/api/clans/leave")
+def clan_leave(tg_id: TelegramId):
+    return social_service.clan_leave(tg_id)
 
 
 @router.get("/api/referrals")
-def referrals(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_referrals(auth(x_init_data, x_dev_user_id))
+def referrals(tg_id: TelegramId):
+    return social_service.referrals(tg_id)
 
 
-@router.post("/api/transfers/create")
-def transfers_create(
-    body: TransferCreateBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_transfers_create(auth(x_init_data, x_dev_user_id), body)
+@router.post("/api/transfers")
+def transfers_create(body: TransferCreateBody, tg_id: TelegramId):
+    return social_service.transfers_create(tg_id, body)
 
 
-@router.get("/api/my-transfers")
-def my_transfers(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_my_transfers(auth(x_init_data, x_dev_user_id))
+@router.get("/api/transfers")
+def my_transfers(tg_id: TelegramId):
+    return social_service.my_transfers(tg_id)
+
+
+@router.post("/api/transfers/{code}/claim")
+def transfer_claim(code: str, tg_id: TelegramId):
+    return social_service.transfer_claim(tg_id, code)

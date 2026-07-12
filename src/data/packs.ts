@@ -1,4 +1,4 @@
-import type { GeneTier, Habitat, PackAnimal } from '@/types';
+import type { Animal, GeneTier, Habitat } from '@/types';
 
 export type GeneKey = 'survival' | 'reproduction' | 'appearance' | 'size_trait';
 
@@ -9,41 +9,52 @@ export const HABITAT_INFO: Record<Habitat, {
   expeditionDifficulty: string;
   expeditionReward: string;
 }> = {
+  // Landscape icons (not animals) so a habitat never reads as a second creature next
+  // to the animal art.
   desert: {
-    emoji: '🐪',
+    emoji: '🏜️',
     name: 'Пустыня',
     color: 'var(--c-gold)',
     expeditionDifficulty: 'Средняя',
     expeditionReward: 'Средний',
   },
   mountains: {
-    emoji: '🦅',
+    emoji: '⛰️',
     name: 'Горы',
     color: 'var(--tg-theme-hint-color)',
     expeditionDifficulty: 'Высокая',
     expeditionReward: 'Высокий',
   },
   forest: {
-    emoji: '🐆',
+    emoji: '🌲',
     name: 'Густой лес',
     color: 'var(--c-green)',
     expeditionDifficulty: 'Средняя',
     expeditionReward: 'Средний',
   },
   fields: {
-    emoji: '🐴',
+    emoji: '🌾',
     name: 'Поля',
     color: 'var(--c-teal)',
     expeditionDifficulty: 'Низкая',
     expeditionReward: 'Низкий',
   },
   antarctica: {
-    emoji: '🐧',
+    emoji: '🏔️',
     name: 'Антарктида',
     color: 'var(--c-cyan)',
     expeditionDifficulty: 'Очень высокая',
     expeditionReward: 'Очень высокий',
   },
+};
+
+// Collection rarity is purely cosmetic (income never depends on it), so it only ever
+// styles a badge. Kept here so the pack-reward tile and the animal card read identically.
+export const SPECIES_RARITY_META: Record<Animal['species_rarity'], { label: string; color: string }> = {
+  rare: { label: 'Редкое', color: '#63C268' },
+  epic: { label: 'Эпическое', color: '#C072D8' },
+  legendary: { label: 'Легендарное', color: '#F3B53F' },
+  mythic: { label: 'Мифическое', color: '#EC7F4A' },
 };
 
 export const GENE_META: Record<GeneKey, Record<GeneTier, { label: string; color: string }>> = {
@@ -83,7 +94,7 @@ export function geneColor(key: GeneKey, value: GeneTier): string {
   return GENE_META[key][value].color;
 }
 
-export function expeditionPower(animal: Pick<PackAnimal, 'size_trait' | 'survival' | 'appearance'>): number {
+export function expeditionPower(animal: Pick<Animal, 'size_trait' | 'survival' | 'appearance'>): number {
   return (
     COMBAT_TIER_WEIGHT[animal.size_trait] * 3 +
     COMBAT_TIER_WEIGHT[animal.survival] * 2 +

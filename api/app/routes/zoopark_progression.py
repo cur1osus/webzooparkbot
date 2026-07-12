@@ -1,94 +1,64 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter
 
-from api.app.core.auth import auth
-from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, StartExpeditionBody
-from api.app.zoopark.progression import api_assign_locality, api_breed, api_buy_locality, api_dismiss_expedition, api_finish_expedition, api_get_expeditions, api_get_localities, api_packs_info, api_packs_open, api_start_expedition
+from api.app.routes._auth import TelegramId
+from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, OpenPackBody, StartExpeditionBody
+from api.app.zoopark import progression as progression_service
+
+router = APIRouter(tags=["progression"])
 
 
-router = APIRouter(tags=["zoopark-progression"])
+@router.get("/api/animals")
+def list_animals(tg_id: TelegramId):
+    return progression_service.list_available_animals(tg_id)
 
 
 @router.get("/api/packs/info")
-def packs_info(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_packs_info(auth(x_init_data, x_dev_user_id))
+def packs_info(tg_id: TelegramId):
+    return progression_service.packs_info(tg_id)
 
 
 @router.post("/api/packs/open")
-def packs_open(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_packs_open(auth(x_init_data, x_dev_user_id))
+def open_pack(tg_id: TelegramId, body: OpenPackBody = OpenPackBody()):
+    return progression_service.open_pack(tg_id, body.tier)
 
 
 @router.get("/api/localities")
-def get_localities(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_get_localities(auth(x_init_data, x_dev_user_id))
+def list_localities(tg_id: TelegramId):
+    return progression_service.list_localities(tg_id)
 
 
 @router.post("/api/localities/buy")
-def buy_locality(
-    body: BuyLocalityBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_buy_locality(auth(x_init_data, x_dev_user_id), body)
+def buy_locality(body: BuyLocalityBody, tg_id: TelegramId):
+    return progression_service.buy_locality(tg_id, body)
 
 
 @router.post("/api/localities/assign")
-def assign_locality(
-    body: AssignLocalityBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_assign_locality(auth(x_init_data, x_dev_user_id), body)
+def assign_locality(body: AssignLocalityBody, tg_id: TelegramId):
+    return progression_service.assign_locality(tg_id, body)
 
 
 @router.post("/api/breed")
-def breed(
-    body: BreedBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_breed(auth(x_init_data, x_dev_user_id), body)
+def breed(body: BreedBody, tg_id: TelegramId):
+    return progression_service.breed(tg_id, body)
 
 
 @router.get("/api/expeditions")
-def get_expeditions(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_get_expeditions(auth(x_init_data, x_dev_user_id))
+def get_expeditions(tg_id: TelegramId):
+    return progression_service.get_expeditions(tg_id)
 
 
 @router.post("/api/expeditions/start")
-def start_expedition(
-    body: StartExpeditionBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_start_expedition(auth(x_init_data, x_dev_user_id), body)
+def start_expedition(body: StartExpeditionBody, tg_id: TelegramId):
+    return progression_service.start_expedition(tg_id, body)
 
 
 @router.post("/api/expeditions/finish")
-def finish_expedition(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_finish_expedition(auth(x_init_data, x_dev_user_id))
+def finish_expedition(tg_id: TelegramId):
+    return progression_service.finish_expedition(tg_id)
 
 
 @router.post("/api/expeditions/dismiss")
-def dismiss_expedition(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return api_dismiss_expedition(auth(x_init_data, x_dev_user_id))
+def dismiss_expedition(tg_id: TelegramId):
+    return progression_service.dismiss_expedition(tg_id)

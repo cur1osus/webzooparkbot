@@ -1,27 +1,6 @@
-import type { AnimalState, AviaryState, GameState } from './gameState';
+import type { GameState } from './gameState';
 
 export type MeResponse = GameState;
-
-export interface SavePayload {
-  rub: number;
-  usd: number;
-  paw_coins: number;
-  animals: AnimalState[];
-  aviaries: AviaryState[];
-  balance_seq: number;
-  data_version: number;
-}
-
-export type SaveResponse =
-  | { ok: false }
-  | {
-      ok: true;
-      rub: number;
-      usd: number;
-      paw_coins: number;
-      balance_seq: number;
-      data_version: number;
-    };
 
 export interface RegisterResponse {
   ok: boolean;
@@ -30,4 +9,42 @@ export interface RegisterResponse {
 
 export interface AppConfig {
   bot_username: string;
+}
+
+export interface AdminPlayer {
+  id: number;
+  tg_id: number;
+  nickname: string;
+  username: string | null;
+  status: 'active' | 'banned';
+  registered_at: string;
+  last_seen_at: string | null;
+  rub: number;
+  usd: number;
+  paw: number;
+  animals_count: number;
+  income_rub_per_min: number;
+}
+
+export interface AdminOverview {
+  generated_at: string;
+  stats: {
+    players: number;
+    active_players: number;
+    banned_players: number;
+    online_players: number;
+    animals: number;
+    ledger_entries_today: number;
+  };
+  balances: { rub: number; usd: number; paw: number };
+  treasury: { rub: number; usd: number; paw: number };
+  bank_rate: number | null;
+  players_list: AdminPlayer[];
+}
+
+export interface AdminGrantResult {
+  ok: true;
+  tg_id: number;
+  currency: 'rub' | 'usd' | 'paw';
+  new_balance: number;
 }

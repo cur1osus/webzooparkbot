@@ -2,28 +2,27 @@
 
 ## Scope
 
-This directory contains the stable ZooPark entrypoint plus the canonical structured backend.
-
-Do not mix them casually.
+`api/` is the FastAPI backend. `api/main.py` assembles the app; everything else lives in
+`api/app`. See `api/app/AGENTS.md` for the layering and
+`api/app/zoopark/AGENTS.md` for the rules that keep the economy closed.
 
 ## Architecture Rules
 
-- ZooPark contracts on `/api/*` remain the source of truth for the current frontend.
-- Canonical ZooPark backend logic belongs in `/home/maxggor/Desktop/webzooparkbot/api/app`.
-- The app assembly is defined in `/home/maxggor/Desktop/webzooparkbot/api/main.py`.
-- ZooPark `/api/*` routes should live in first-class `zoopark_*.py` route modules.
+- `/api/*` contracts are the source of truth for the frontend in `src/`. Changing one means
+  changing `src/types` and `src/api` in the same commit.
+- Business logic lives in `api/app/zoopark`, never in `api/main.py` or a route module.
+- Route modules are `api/app/routes/zoopark_*.py`. They authenticate with the `TelegramId`
+  dependency, parse a schema, and call one domain function.
+- No cycles: `api/app/*` never imports `api.main`.
 
 ## When Working In `api/main.py`
 
-- Treat it as app assembly and gateway composition only.
-- Do not place product business logic here.
-- If functionality changes, implement it in `api/app/...` and wire it from `api/main.py`.
-
-## When Working In `api/app`
-
-- Keep new code layered: routes -> schemas/core/db -> zoopark service modules.
-- Avoid creating cycles between `api.main` and `api/app/routes/zoopark_*.py`.
+- App assembly only: middleware, routers, the lifespan hook.
+- The lifespan validates config and seeds reference data. It does not create tables —
+  that is Alembic's job, and running both was how the schema drifted.
 
 ## Route Safety
 
-- If changing gateway behavior, update `/home/maxggor/Desktop/webzooparkbot/api/tests/test_api_gateway.py`.
+- Handlers are `def`, not `async def`. The Telegram webhook makes a blocking HTTP call and
+  takes row locks; on the event loop it could freeze every request for every player.
+- Any new endpoint that moves currency takes a row lock and goes through `ledger.grant()`.

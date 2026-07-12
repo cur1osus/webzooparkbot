@@ -24,16 +24,18 @@ export function AnimatedNumber({
   durationMs?: number;
 }) {
   const displayRef = useRef(value);
-  const [, forceRender] = useState(0);
+  const [displayValue, setDisplayValue] = useState(value);
 
   useEffect(() => {
     const from = displayRef.current;
     const to = value;
     if (from === to) return;
     if (prefersReducedMotion()) {
-      displayRef.current = to;
-      forceRender(x => x + 1);
-      return;
+      const raf = requestAnimationFrame(() => {
+        displayRef.current = to;
+        setDisplayValue(to);
+      });
+      return () => cancelAnimationFrame(raf);
     }
     let raf = 0;
     const start = performance.now();
@@ -41,9 +43,12 @@ export function AnimatedNumber({
       const t = Math.min(1, (now - start) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
       displayRef.current = from + (to - from) * eased;
-      forceRender(x => x + 1);
+      setDisplayValue(displayRef.current);
       if (t < 1) raf = requestAnimationFrame(step);
-      else displayRef.current = to;
+      else {
+        displayRef.current = to;
+        setDisplayValue(to);
+      }
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
@@ -51,7 +56,7 @@ export function AnimatedNumber({
 
   return (
     <span className={className} style={style}>
-      {format(Math.round(displayRef.current))}
+      {format(Math.round(displayValue))}
     </span>
   );
 }

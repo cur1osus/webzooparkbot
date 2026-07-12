@@ -12,15 +12,18 @@ if __package__ in (None, ""):
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
 
-from api.app.routes.zoopark_core import router as zoopark_core_router
-from api.app.routes.zoopark_economy import router as zoopark_economy_router
-from api.app.routes.zoopark_forge import router as zoopark_forge_router
-from api.app.routes.zoopark_games import router as zoopark_games_router
-from api.app.routes.zoopark_merchant import router as zoopark_merchant_router
-from api.app.routes.zoopark_progression import router as zoopark_progression_router
-from api.app.routes.zoopark_social import router as zoopark_social_router
-from api.app.routes.zoopark_status import router as zoopark_status_router
-from api.app.db.bootstrap import init_schema
+from api.app.core.config import validate_config
+from api.app.db.seed import seed_reference_data
+from api.app.routes.telegram_webhook import router as telegram_webhook_router
+from api.app.routes.zoopark_core import router as core_router
+from api.app.routes.zoopark_admin import router as admin_router
+from api.app.routes.zoopark_economy import router as economy_router
+from api.app.routes.zoopark_forge import router as forge_router
+from api.app.routes.zoopark_games import router as games_router
+from api.app.routes.zoopark_merchant import router as merchant_router
+from api.app.routes.zoopark_progression import router as progression_router
+from api.app.routes.zoopark_social import router as social_router
+from api.app.routes.zoopark_status import router as status_router
 
 
 def _configure_common_middleware(app: FastAPI) -> None:
@@ -32,27 +35,31 @@ def _configure_common_middleware(app: FastAPI) -> None:
     )
 
 
-def _init_zoopark_schema() -> None:
-    init_schema()
-
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    _init_zoopark_schema()
+    # Refuse to serve with an insecure configuration rather than degrading silently.
+    validate_config()
+    # The schema is Alembic's job alone; this only fills the reference tables.
+    seed_reference_data()
     yield
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ZooPark API", version="3.0.0", lifespan=lifespan)
+    app = FastAPI(title="ZooPark API", version="4.0.0", lifespan=lifespan)
     _configure_common_middleware(app)
-    app.include_router(zoopark_core_router)
-    app.include_router(zoopark_economy_router)
-    app.include_router(zoopark_status_router)
-    app.include_router(zoopark_merchant_router)
-    app.include_router(zoopark_forge_router)
-    app.include_router(zoopark_social_router)
-    app.include_router(zoopark_games_router)
-    app.include_router(zoopark_progression_router)
+    for router in (
+        admin_router,
+        core_router,
+        economy_router,
+        status_router,
+        merchant_router,
+        forge_router,
+        social_router,
+        games_router,
+        progression_router,
+        telegram_webhook_router,
+    ):
+        app.include_router(router)
     return app
 
 

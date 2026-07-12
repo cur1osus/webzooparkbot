@@ -1,0 +1,119 @@
+"""Income, upkeep and accrual."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+
+import pytest
+
+from api.app.db.connection import get_session
+from api.app.db.models import Player, utcnow
+from api.app.zoopark import income, ledger
+from api.app.zoopark.catalog import BASE_INCOME_RUB_PER_MIN, HABITAT_MATCH_BONUS, gene_income_mult
+
+
+class TestFormula:
+    def test_gdd_best_and_worst_case(self):
+        """GDD §3: best 4.095x base, worst 0.336x. A ~12:1 spread."""
+        best = gene_income_mult("high", "high", "high") * HABITAT_MATCH_BONUS
+        worst = gene_income_mult("low", "low", "low")
+        assert best == pytest.approx(4.095)
+        assert worst == pytest.approx(0.336)
+        assert best / worst == pytest.approx(12.19, rel=0.01)
+
+    def test_habitat_match_multiplies_by_one_and_a_half(self):
+        plain = income.animal_income_rub_per_min(
+            survival="medium", appearance="medium", size="medium", habitat_matches=False
+        )
+        matched = income.animal_income_rub_per_min(
+            survival="medium", appearance="medium", size="medium", habitat_matches=True
+        )
+        assert plain == BASE_INCOME_RUB_PER_MIN
+        assert matched == int(BASE_INCOME_RUB_PER_MIN * HABITAT_MATCH_BONUS)
+
+    def test_a_sick_animal_earns_half(self):
+        healthy = income.animal_income_rub_per_min(
+            survival="medium", appearance="medium", size="medium", habitat_matches=False
+        )
+        sick = income.animal_income_rub_per_min(
+            survival="medium", appearance="medium", size="medium", habitat_matches=False, is_sick=True
+        )
+        assert sick == healthy // 2
+
+
+class TestDiversity:
+    def test_a_monopoly_scores_one_effective_species(self):
+        assert income.effective_species_count([100]) == pytest.approx(1.0)
+
+    def test_an_even_spread_scores_the_species_count(self):
+        assert income.effective_species_count([10, 10, 10, 10]) == pytest.approx(4.0)
+
+    def test_a_lopsided_zoo_scores_less_than_its_species_count(self):
+        """A raw `len(species)` would pay the same for both of these."""
+        even = income.effective_species_count([10, 10, 10, 10])
+        lopsided = income.effective_species_count([97, 1, 1, 1])
+        assert lopsided < 2 < even
+
+    def test_an_empty_zoo_has_no_bonus(self):
+        assert income.diversity_multiplier([]) == 1.0
+
+
+class TestUpkeep:
+    def test_it_grows_with_the_zoo(self):
+        one = income.upkeep_rub_per_min(1_000_000, 1)
+        ten = income.upkeep_rub_per_min(1_000_000, 10)
+        hundred = income.upkeep_rub_per_min(1_000_000, 100)
+        assert one < ten < hundred
+
+    def test_it_is_capped(self):
+        assert income.upkeep_rub_per_min(1_000_000, 10 ** 9) == 450_000
+
+    def test_no_animals_means_no_upkeep(self):
+        assert income.upkeep_rub_per_min(0, 0) == 0
+
+
+class TestAccrual:
+    def test_a_fraction_of_a_ruble_does_not_reset_the_clock(self, db, player):
+        """A client polling once a second used to lose every ruble to `trunc()`."""
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            row.income_rub_per_min = 3
+            row.upkeep_rub_per_min = 0
+            row.income_synced_at = utcnow()
+            session.commit()
+
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            before = row.income_synced_at
+            assert income.accrue(session, row) == 0
+            assert row.income_synced_at == before
+            session.commit()
+
+    def test_time_passing_pays_out(self, db, player):
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            row.income_rub_per_min = 600
+            row.upkeep_rub_per_min = 100
+            row.income_synced_at = utcnow() - timedelta(minutes=10)
+            session.commit()
+
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            assert income.accrue(session, row) == 5000  # (600 - 100) * 10
+            assert ledger.balance(row, "rub") == 5000
+            session.commit()
+
+    def test_upkeep_empties_a_balance_but_never_overdraws_it(self, db, player, grant):
+        grant(player, "rub", 100)
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            row.income_rub_per_min = 0
+            row.upkeep_rub_per_min = 1000
+            row.income_synced_at = utcnow() - timedelta(minutes=10)
+            session.commit()
+
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            assert income.accrue(session, row) == -100
+            assert ledger.balance(row, "rub") == 0
+            session.commit()

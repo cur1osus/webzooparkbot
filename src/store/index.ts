@@ -6,4 +6,4 @@ export const useZooStore = create<ZooStore>()((...args) => ({
   ...createCoreSlice(...args),
 }));
 
-export type { CoreSlice, PersistOptions, ZooStore } from './types';
+export type { CoreSlice, ZooStore } from './types';

@@ -12,6 +12,8 @@ import { DonatePage } from './more/DonatePage';
 import { apiConfig, apiCreateTransfer, apiGetBonus, apiGetMyTransfers } from '@/api';
 import { fmt, formatDateShort } from '@/utils/format';
 import { copyTmaText, inTma } from '@/lib/tma';
+import { PageHeader } from '@/components/PageHeader';
+import { AdminPage } from '@/pages/AdminPage';
 
 type Section =
   | 'bank' | 'bonus' | 'merchant' | 'clan' | 'top'
@@ -149,10 +151,17 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
     </MoreSectionLayer>
   );
 
-  return (
-    <div className="page-content-safe p-[14px] flex flex-col gap-[14px]">
-      <p className="font-display m-0 text-[18px]">☰ Ещё</p>
+  if (section === 'admin') return (
+    <MoreSectionLayer title="⚙️ Админ-панель" onBack={back}>
+      <AdminPage />
+    </MoreSectionLayer>
+  );
 
+  return (
+    <div className="page-content-safe">
+      <PageHeader emoji="☰" title="Ещё" accent="var(--c-gold-rgb)" />
+
+      <div className="px-[14px] pb-[14px] flex flex-col gap-[14px]">
       {MENU_GROUPS.map(group => (
         <div key={group.label}>
           <p className="m-0 mb-[8px] text-[11px] font-bold text-tg-hint tracking-[0.6px] uppercase">{group.label}</p>
@@ -188,7 +197,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
         <div
           className="card flex items-center gap-[14px] cursor-pointer"
           style={{ border: '1px solid rgba(var(--c-red-rgb),0.3)' }}
-          onClick={() => {}}
+          onClick={() => openSection('admin')}
         >
           <span className="text-[30px]">⚙️</span>
           <div className="flex-1">
@@ -198,6 +207,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           <span className="text-[18px] text-tg-hint">›</span>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -257,7 +267,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   const perPart = total && max ? Math.floor(total / max) : 0;
   const allIn = Math.floor(gs.rub);
 
-  const amountPresets = [100, 500, 1000, 5000].filter(v => v <= gs.rub);
+  const amountPresets = [1, 5, 10, 50].filter(v => v <= gs.rub);
   const partsPresets = [1, 2, 5, 10, 25, 50];
 
   const pillActive: React.CSSProperties = {

@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import type { Animal, GameState, Habitat, Locality, LocalitiesInfo } from '@/types';
 import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '@/api';
 import { fmt } from '@/utils/format';
+import { AnimalArt } from '@/components/AnimalArt';
 
 const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string }> = {
-  desert:     { emoji: '🐪', name: 'Пустыня',   color: 'var(--c-gold)' },
-  mountains:  { emoji: '🦅', name: 'Горы',       color: 'var(--tg-theme-hint-color)' },
-  forest:     { emoji: '🐆', name: 'Густой лес', color: 'var(--c-green)' },
-  fields:     { emoji: '🐴', name: 'Поля',        color: 'var(--c-teal)' },
-  antarctica: { emoji: '🐧', name: 'Антарктида', color: 'var(--c-cyan)' },
+  desert:     { emoji: '🏜️', name: 'Пустыня',   color: 'var(--c-gold)' },
+  mountains:  { emoji: '⛰️', name: 'Горы',       color: 'var(--tg-theme-hint-color)' },
+  forest:     { emoji: '🌲', name: 'Густой лес', color: 'var(--c-green)' },
+  fields:     { emoji: '🌾', name: 'Поля',        color: 'var(--c-teal)' },
+  antarctica: { emoji: '🏔️', name: 'Антарктида', color: 'var(--c-cyan)' },
 };
 
 const ALL_HABITATS: Habitat[] = ['desert', 'mountains', 'forest', 'fields', 'antarctica'];
@@ -23,22 +24,22 @@ function AnimalChip({ animal, onRemove }: { animal: Animal; onRemove: () => void
       className="flex items-center gap-2 px-3 py-[7px] rounded-xl"
       style={{ background: `${hab.color}12`, border: `1px solid ${hab.color}25` }}
     >
-      <span className="text-[18px]">{hab.emoji}</span>
+      <AnimalArt animal={animal} size={32} className="shrink-0" />
       <div className="flex-1 min-w-0">
+        <p className="m-0 text-[12px] font-bold truncate">
+          {animal.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {animal.species_name}</span>
+        </p>
+        {/* income already includes the ×1.5 habitat bonus when it applies */}
         <div className="flex items-center gap-[6px]">
-          <span className="text-[12px] font-bold" style={{ color: 'var(--c-green)' }}>
+          <span className="text-[11px] font-bold" style={{ color: 'var(--c-green)' }}>
             ₽{fmt(animal.income)}/мин
           </span>
           {animal.habitat_bonus && (
-            <span className="text-[10px] font-bold px-[5px] py-[1px] rounded-full"
-                  style={{ background: 'var(--c-gold)20', color: 'var(--c-gold)', border: '1px solid var(--c-gold)30' }}>
-              ×1.5
+            <span className="text-[10px] font-bold" style={{ color: 'var(--c-gold)' }}>
+              (бонус среды)
             </span>
           )}
         </div>
-        <span className="text-[10px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          {animal.survival === 'high' ? 'Долгожитель' : animal.survival === 'medium' ? 'Обычный' : 'Слабый'}
-        </span>
       </div>
       <button
         onClick={onRemove}
@@ -62,61 +63,67 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
   const hab = HABITAT_INFO[locality.habitat];
   const totalIncome = locality.animals.reduce((s, a) => s + a.income, 0);
 
+  const canAdd = unassignedCount > 0;
   return (
     <div
-      className="rounded-2xl p-4 flex flex-col gap-3"
+      className="rounded-2xl overflow-hidden"
       style={{
-        background: `linear-gradient(135deg, ${hab.color}10, rgba(26,29,43,0.9))`,
-        border: `1px solid ${hab.color}30`,
+        background: 'rgba(26,29,43,0.9)',
+        border: `1px solid color-mix(in srgb, ${hab.color} 30%, transparent)`,
       }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-3">
+      {/* Header — a full-width horizontal banner tinted with the habitat's own colour, and
+          the tap target for adding an animal. Colours are CSS variables, so alpha comes from
+          color-mix (a `${var}55` hex suffix would be invalid). */}
+      <button
+        onClick={canAdd ? onAdd : undefined}
+        disabled={!canAdd}
+        className="w-full flex items-center gap-3 px-4 py-[16px] border-none text-left"
+        style={{
+          background: `linear-gradient(90deg, color-mix(in srgb, ${hab.color} 48%, transparent) 0%, color-mix(in srgb, ${hab.color} 20%, transparent) 55%, transparent 100%)`,
+          cursor: canAdd ? 'pointer' : 'default',
+        }}
+      >
         <div
-          className="w-10 h-10 rounded-xl grid place-items-center text-[22px] shrink-0"
-          style={{ background: `${hab.color}20`, border: `1px solid ${hab.color}35` }}
+          className="w-11 h-11 rounded-xl grid place-items-center text-[24px] shrink-0"
+          style={{ background: `color-mix(in srgb, ${hab.color} 24%, transparent)`, border: `1px solid color-mix(in srgb, ${hab.color} 42%, transparent)` }}
         >
           {hab.emoji}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="m-0 font-extrabold text-[14px]">{hab.name}</p>
-          {totalIncome > 0 && (
+          <div className="flex items-baseline gap-[7px]">
+            <p className="m-0 font-extrabold text-[15px]">{hab.name}</p>
+            <span className="text-[13px] font-black" style={{ color: hab.color }}>{locality.animals.length}</span>
+          </div>
+          {totalIncome > 0 ? (
             <p className="m-0 text-[11px]" style={{ color: 'var(--c-green)' }}>
               ₽{fmt(totalIncome)}/мин суммарно
             </p>
+          ) : (
+            <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Пусто</p>
           )}
         </div>
-        <span
-          className="text-[11px] px-2 py-[3px] rounded-full shrink-0"
-          style={{ background: `${hab.color}15`, color: hab.color, border: `1px solid ${hab.color}30` }}
-        >
-          {locality.animals.length}
-        </span>
-      </div>
+        {canAdd && (
+          <span className="text-[13px] font-bold shrink-0 flex items-center gap-1" style={{ color: hab.color }}>
+            + добавить
+          </span>
+        )}
+      </button>
 
       {/* Animals */}
       {locality.animals.length > 0 && (
-        <div className="flex flex-col gap-[6px]">
+        <div className="flex flex-col gap-[6px] px-4 py-3">
           {locality.animals.map(a => (
             <AnimalChip key={a.id} animal={a} onRemove={() => onRemove(a.id)} />
           ))}
         </div>
       )}
 
-      {/* Add button */}
-      {unassignedCount > 0 ? (
-        <button
-          onClick={onAdd}
-          className="w-full py-[8px] rounded-xl border-none text-[12px] font-bold cursor-pointer"
-          style={{ background: `${hab.color}12`, color: hab.color, border: `1px dashed ${hab.color}40` }}
-        >
-          + Добавить животное
-        </button>
-      ) : locality.animals.length === 0 ? (
-        <p className="m-0 text-center text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+      {locality.animals.length === 0 && !canAdd && (
+        <p className="m-0 px-4 py-3 text-center text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
           Нет свободных животных
         </p>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -173,22 +180,17 @@ function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
                 border: `1px solid ${isMatch ? hab.color + '35' : 'transparent'}`,
               }}
             >
-              <span className="text-[24px]">{hab.emoji}</span>
+              <AnimalArt animal={a} size={36} className="shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-bold">{hab.name}</span>
-                  {isMatch && (
-                    <span
-                      className="text-[10px] font-bold px-[6px] py-[2px] rounded-full"
-                      style={{ background: 'var(--c-gold)25', color: 'var(--c-gold)', border: '1px solid var(--c-gold)30' }}
-                    >
-                      ×1.5 бонус
-                    </span>
-                  )}
-                </div>
+                <span className="text-[13px] font-bold truncate block">
+                  {a.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {a.species_name}</span>
+                </span>
                 <span className="text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {a.survival === 'high' ? 'Долгожитель' : a.survival === 'medium' ? 'Обычный' : 'Слабый'}
-                  {' · '}₽{fmt(a.income)}/мин
+                  {/* Base income, and where the habitat matches, the ×1.5 result too */}
+                  ₽{fmt(a.income)}/мин
+                  {isMatch && (
+                    <span style={{ color: 'var(--c-gold)' }}> → ₽{fmt(Math.round(a.income * 1.5))} с бонусом среды</span>
+                  )}
                 </span>
               </div>
             </button>
@@ -317,10 +319,11 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
                   const hab = HABITAT_INFO[a.habitat];
                   return (
                     <div key={a.id} className="flex items-center gap-2 text-[12px]">
-                      <span>{hab.emoji}</span>
-                      <span style={{ color: 'var(--tg-theme-hint-color)' }}>{hab.name}</span>
-                      <span className="ml-auto font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                        ₽{fmt(a.income)}/мин (без бонуса)
+                      <AnimalArt animal={a} size={24} className="shrink-0" />
+                      <span className="font-semibold truncate">{a.name}</span>
+                      <span className="text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>{a.species_name} {hab.emoji}</span>
+                      <span className="ml-auto font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                        ₽{fmt(a.income)}/мин
                       </span>
                     </div>
                   );

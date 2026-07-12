@@ -1,193 +1,238 @@
+"""Reading a player: the row itself, their zoo, their forge, and the state the client renders."""
+
 from __future__ import annotations
 
-import json
-import time
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import cast
 
+from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from api.app.db.models import ForgeSet, ForgeSetItem, Item, Locality, PackAnimal, SickEvent, Unity, User
-from api.app.zoopark.catalog import DIVERSITY_BONUS_PER_SPECIES
-from api.app.zoopark.income import pack_animal_income
+from api.app.db.models import Animal, Clan, ClanMember, Item, ItemSet, Locality, Player, PlayerCosmetic, Season, utcnow
+from api.app.zoopark import bonuses as bonuses_module
+from api.app.zoopark.bonuses import Bonuses
+from api.app.zoopark.catalog import (
+    DIVERSITY_BONUS_PERCENT_PER_SPECIES,
+    ITEM_PROPERTIES,
+    NICKNAME_COLORS,
+    SPECIES_BY_ID,
+    PropertyKind,
+    item_sell_price_usd,
+)
+from api.app.zoopark.income import (
+    alive_animals,
+    animal_income,
+    cure_cost_usd,
+    diversity_multiplier,
+    effective_species_count,
+)
 from api.app.zoopark.season import ensure_player_season
 
 
-def get_user(session: Session, tg_id: int) -> User | None:
-    return session.query(User).filter(User.id_user == tg_id).first()
+def get_player(session: Session, telegram_id: int, *, for_update: bool = False) -> Player | None:
+    """`for_update=True` takes a row lock — mandatory for anything that moves currency."""
+    stmt = select(Player).where(Player.telegram_id == telegram_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    player = session.scalars(stmt).first()
+    if player is not None and player.status == "banned":
+        raise HTTPException(403, "Аккаунт заблокирован")
+    return player
 
 
-def bump_data_version(session: Session, user_id: int) -> int:
-    ts = int(time.time() * 1000)
-    user = session.get(User, user_id)
-    if user:
-        user.data_version = ts
-    return ts
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
 
 
-def get_sick(session: Session, user_id: int) -> list[dict]:
-    rows = session.query(SickEvent).filter(SickEvent.user_id == user_id).all()
+def _property_payload(item: Item) -> list[dict]:
+    payload = []
+    for prop in sorted(item.properties, key=lambda p: (p.kind, p.species_id or 0)):
+        spec = ITEM_PROPERTIES.get(cast(PropertyKind, prop.kind))
+        species = SPECIES_BY_ID.get(prop.species_id) if prop.species_id else None
+        payload.append(
+            {
+                "kind": prop.kind,
+                "value": prop.value,
+                "species_code": species["code"] if species else None,
+                "label": property_label(prop.kind, prop.value, species["name"] if species else None),
+                "unit": spec["unit"] if spec else "flat",
+            }
+        )
+    return payload
+
+
+def property_label(kind: str, value: int, species_name: str | None = None) -> str:
+    spec = ITEM_PROPERTIES.get(cast(PropertyKind, kind))
+    if spec is None:
+        return f"{kind} {value}"
+    label = spec["label"]
+    if spec["per_species"] and species_name:
+        label = f"{label}: {species_name}"
+    if spec["unit"] == "percent_bonus":
+        return f"{label} +{value}%"
+    if spec["unit"] == "percent_discount":
+        return f"{label} −{value}%"
+    return f"{label} +{value}"
+
+
+def item_payload(item: Item) -> dict:
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "icon": item.emoji,
+        "rarity": item.rarity,
+        "level": item.level,
+        "is_active": bool(item.is_active),
+        "sell_price_usd": item_sell_price_usd(item.rarity, item.level),  # type: ignore[arg-type]
+        "properties": _property_payload(item),
+    }
+
+
+def list_items(session: Session, player_id: int) -> list[dict]:
+    items = session.scalars(
+        select(Item).where(Item.player_id == player_id).order_by(Item.created_at.asc(), Item.id.asc())
+    ).all()
+    return [item_payload(item) for item in items]
+
+
+def list_item_sets(session: Session, player_id: int) -> list[dict]:
+    sets = session.scalars(
+        select(ItemSet).where(ItemSet.player_id == player_id).order_by(ItemSet.created_at.asc(), ItemSet.id.asc())
+    ).all()
+    active_ids = {
+        str(row) for row in session.scalars(
+            select(Item.id).where(Item.player_id == player_id, Item.is_active.is_(True))
+        ).all()
+    }
+
+    payload = []
+    for item_set in sets:
+        member_ids = [str(m.item_id) for m in sorted(item_set.members, key=lambda m: m.position)]
+        payload.append(
+            {
+                "id": str(item_set.id),
+                "name": item_set.name,
+                "icon": item_set.emoji,
+                "item_ids": member_ids,
+                "is_active": bool(member_ids) and set(member_ids) == active_ids,
+            }
+        )
+    return payload
+
+
+def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, today=None) -> dict:
+    species = SPECIES_BY_ID[animal.species_id]
+    day = today or utcnow().date()
+    matches = bool(locality_habitat) and locality_habitat == animal.habitat
+    return {
+        "id": animal.id,
+        "name": animal.name or species["name"],
+        "species_code": species["code"],
+        "species_name": species["name"],
+        "species_emoji": species["emoji"],
+        "species_rarity": species["rarity"],
+        "survival": animal.gene_survival,
+        "reproduction": animal.gene_reproduction,
+        "appearance": animal.gene_appearance,
+        "size_trait": animal.gene_size,
+        "habitat": animal.habitat,
+        "origin": animal.origin,
+        "acquired_at": _iso(animal.acquired_at),
+        "dies_at": _iso(animal.dies_at),
+        "locality_id": animal.locality_id,
+        "is_sick": animal.sick_since is not None,
+        "can_breed": animal.last_bred_on != day,
+        "income": animal_income(animal, locality_habitat, bonuses),
+        "cure_cost_usd": cure_cost_usd(animal, locality_habitat, bonuses),
+        "habitat_bonus": matches,
+        "parent_a_id": animal.parent_a_id,
+        "parent_b_id": animal.parent_b_id,
+    }
+
+
+def get_clan(session: Session, player_id: int) -> dict | None:
+    membership = session.scalars(select(ClanMember).where(ClanMember.player_id == player_id)).first()
+    if membership is None:
+        return None
+    clan = session.get(Clan, membership.clan_id)
+    if clan is None:
+        return None
+    member_count = len(session.scalars(select(ClanMember.player_id).where(ClanMember.clan_id == clan.id)).all())
+    return {
+        "id": clan.id,
+        "name": clan.name,
+        "level": clan.level,
+        "member_count": member_count,
+        "role": membership.role,
+    }
+
+
+def nickname_colors_payload(session: Session, player_id: int) -> list[dict]:
+    owned = set(session.scalars(
+        select(PlayerCosmetic.cosmetic_id).where(PlayerCosmetic.player_id == player_id)
+    ).all())
     return [
         {
-            "animal_id": str(row.animal_id),
-            "penalty_rub_per_min": row.penalty_rub_per_min,
-            "since": row.since.isoformat() if hasattr(row.since, "isoformat") else str(row.since),
+            "id": color_id,
+            "price_paw": spec["price_paw"],
+            "animated": spec["animated"],
+            "rarity": spec["rarity"],
+            "owned": color_id == "ivory" or color_id in owned,
         }
-        for row in rows
+        for color_id, spec in NICKNAME_COLORS.items()
     ]
 
 
-def get_forge_items(session: Session, user_id: int) -> list[dict]:
-    rows = session.query(Item).filter(Item.user_id == user_id).all()
-    result: list[dict] = []
-    for row in rows:
-        try:
-            raw = json.loads(row.properties) if row.properties else []
-        except Exception:
-            raw = []
-        if isinstance(raw, dict):
-            props: list[dict] = [{
-                "type": raw.get("item_type", "income_boost"),
-                "value": raw.get("effect_value", 0),
-                "label": raw.get("effect_label", ""),
-            }]
-        else:
-            props = raw if isinstance(raw, list) else []
-        result.append({
-            "id": str(row.id),
-            "name": row.name,
-            "icon": row.emoji,
-            "rarity": row.rarity,
-            "level": row.lvl,
-            "properties": props,
-            "is_active": bool(row.is_active),
-        })
-    return result
+def build_state(session: Session, player: Player) -> dict:
+    season: Season = ensure_player_season(session, player)
+    bonuses = bonuses_module.load(session, player.id)
 
+    rows = alive_animals(session, player.id, season.id)
+    today = utcnow().date()
+    animals = [animal_payload(animal, habitat, bonuses, today) for animal, habitat in rows]
 
-def get_forge_sets(session: Session, user_id: int, items: list[dict] | None = None) -> list[dict]:
-    owned_ids = {str(item["id"]) for item in items} if items is not None else None
-    active_ids = {str(item["id"]) for item in items or [] if item.get("is_active")}
-    sets = (
-        session.query(ForgeSet)
-        .filter(ForgeSet.user_id == user_id)
-        .order_by(ForgeSet.created_at.asc(), ForgeSet.id.asc())
-        .all()
+    counts_by_species: dict[int, int] = {}
+    for animal, _habitat in rows:
+        counts_by_species[animal.species_id] = counts_by_species.get(animal.species_id, 0) + 1
+
+    localities_count = len(
+        session.scalars(
+            select(Locality.id).where(Locality.player_id == player.id, Locality.season_id == season.id)
+        ).all()
     )
 
-    result: list[dict] = []
-    for item_set in sets:
-        links = (
-            session.query(ForgeSetItem)
-            .filter(ForgeSetItem.set_id == item_set.id)
-            .order_by(ForgeSetItem.position.asc())
-            .all()
-        )
-        item_ids: list[str] = []
-        for link in links:
-            item_id = str(link.item_id)
-            if owned_ids is not None and item_id not in owned_ids:
-                continue
-            item_ids.append(item_id)
-
-        result.append({
-            "id": item_set.set_key,
-            "name": item_set.name,
-            "icon": item_set.icon,
-            "item_ids": item_ids,
-            "is_active": bool(item_ids) and set(item_ids) == active_ids,
-        })
-    return result
-
-
-def get_clan(session: Session, user_id: int, unity_id) -> dict | None:
-    if not unity_id:
-        return None
-    clan = session.get(Unity, unity_id)
-    if not clan:
-        return None
-    count = session.query(User).filter(User.unity_id == unity_id).count()
-    return {
-        "id": clan.idpk,
-        "name": clan.name,
-        "level": clan.level,
-        "member_count": count,
-        "specialty": None,
-        "role": "owner" if clan.owner_id == user_id else "member",
-    }
-
-
-def _pack_animal_state(animal: PackAnimal, locality_habitat: str | None = None) -> dict:
-    habitat_bonus = 1.5 if locality_habitat and locality_habitat == animal.habitat else 1.0
-    return {
-        "id": animal.id,
-        "animal_info_id": animal.animal_info_id,
-        "survival": animal.survival,
-        "reproduction": animal.reproduction,
-        "appearance": animal.appearance,
-        "size_trait": animal.size_trait,
-        "habitat": animal.habitat,
-        "source": animal.source,
-        "acquired_at": animal.acquired_at.isoformat() if hasattr(animal.acquired_at, "isoformat") else str(animal.acquired_at),
-        "dies_at": animal.dies_at.isoformat() if animal.dies_at and hasattr(animal.dies_at, "isoformat") else (str(animal.dies_at) if animal.dies_at else None),
-        "locality_id": animal.locality_id,
-        "can_breed": animal.last_bred_date != datetime.now(timezone.utc).date(),
-        "income": pack_animal_income(animal, habitat_bonus),
-        "habitat_bonus": habitat_bonus > 1.0,
-    }
-
-
-def get_live_pack_animals(session: Session, user_id: int, season_id: int) -> list[dict]:
-    rows = (
-        session.query(PackAnimal, Locality.habitat)
-        .outerjoin(Locality, PackAnimal.locality_id == Locality.id)
-        .filter(
-            PackAnimal.user_id == user_id,
-            PackAnimal.season_id == season_id,
-            PackAnimal.is_alive == 1,
-        )
-        .order_by(PackAnimal.acquired_at.desc())
-        .all()
-    )
-    return [_pack_animal_state(animal, habitat) for animal, habitat in rows]
-
-
-def build_state(session: Session, user: User, income_rub_per_min: int) -> dict:
-    uid = user.id
-    season = ensure_player_season(session, user)
-    sick = get_sick(session, uid)
-    forge = get_forge_items(session, uid)
-    forge_sets = get_forge_sets(session, uid, forge)
-    clan = get_clan(session, uid, user.unity_id)
-    pack_animals = get_live_pack_animals(session, uid, season.id)
-    localities_count = session.query(Locality).filter(Locality.user_id == uid, Locality.season_id == season.id).count()
+    items = list_items(session, player.id)
+    counts = list(counts_by_species.values())
+    diversity = diversity_multiplier(counts)
 
     return {
-        "tg_id": user.id_user,
-        "nickname": user.nickname or "",
-        "registered_at": user.date_reg.isoformat() if hasattr(user.date_reg, "isoformat") else str(user.date_reg),
-        "profile_emoji": user.profile_emoji,
-        "rub": user.rub,
-        "usd": user.usd,
-        "paw_coins": user.paw_coins,
-        "income_rub_per_min": income_rub_per_min,
-        "expenses_rub_per_min": sum(item["penalty_rub_per_min"] for item in sick),
-        "pack_animals": pack_animals,
-        "animals": [],
-        "aviaries": [],
-        "total_seats": 0,
-        "free_seats": 0,
-        "species_count": len({animal["animal_info_id"] for animal in pack_animals}),
-        "live_animals_count": len(pack_animals),
+        "tg_id": player.telegram_id,
+        "nickname": player.nickname,
+        "nickname_color": player.nickname_color,
+        "nickname_colors": nickname_colors_payload(session, player.id),
+        "registered_at": _iso(player.registered_at),
+        "profile_emoji": player.profile_emoji,
+        "rub": player.balance_rub,
+        "usd": player.balance_usd,
+        "paw_coins": player.balance_paw,
+        "income_rub_per_min": player.income_rub_per_min,
+        "upkeep_rub_per_min": player.upkeep_rub_per_min,
+        "income_synced_at": _iso(player.income_synced_at),
+        "animals": animals,
+        "sick_animal_ids": [a["id"] for a in animals if a["is_sick"]],
+        "species_count": len(counts_by_species),
+        # What the diversity bonus is actually computed from, so the client can stop
+        # rendering a percentage the server never applied.
+        "effective_species_count": round(effective_species_count(counts), 2),
+        "diversity_bonus_percent": round((diversity - 1) * 100, 2),
+        "live_animals_count": len(animals),
         "localities_count": localities_count,
         "season_id": season.id,
-        "season_started_at": season.starts_at.isoformat() if hasattr(season.starts_at, "isoformat") else str(season.starts_at),
-        "season_end": season.ends_at.isoformat() if hasattr(season.ends_at, "isoformat") else str(season.ends_at),
-        "sick_animals": sick,
-        "forge_items": forge,
-        "forge_sets": forge_sets,
-        "clan": clan,
-        "bonus": user.bonus,
-        "balance_seq": user.balance_seq or 0,
-        "data_version": user.data_version or 0,
-        "diversity_bonus_per_species": DIVERSITY_BONUS_PER_SPECIES,
+        "season_started_at": _iso(season.starts_at),
+        "season_ends_at": _iso(season.ends_at),
+        "items": items,
+        "item_sets": list_item_sets(session, player.id),
+        "clan": get_clan(session, player.id),
+        "diversity_bonus_percent_per_species": DIVERSITY_BONUS_PERCENT_PER_SPECIES,
     }

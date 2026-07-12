@@ -1,27 +1,29 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter
 
-from api.app.core.auth import auth
+from api.app.routes._auth import TelegramId
 from api.app.schemas.status import CureBody
 from api.app.zoopark import status as status_service
 
-
-router = APIRouter(tags=["zoopark-status"])
-
-
-@router.post("/api/claim_bonus")
-def claim_bonus(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return status_service.claim_bonus(auth(x_init_data, x_dev_user_id))
+router = APIRouter(tags=["status"])
 
 
-@router.post("/api/cure_animal")
-def cure_animal(
-    body: CureBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return status_service.cure_animal(auth(x_init_data, x_dev_user_id), body)
+@router.get("/api/bonus")
+def bonus(tg_id: TelegramId):
+    return status_service.daily_bonus(tg_id)
+
+
+@router.post("/api/bonus/reroll")
+def bonus_reroll(tg_id: TelegramId):
+    return status_service.reroll_daily_bonus(tg_id)
+
+
+@router.post("/api/bonus/claim")
+def bonus_claim(tg_id: TelegramId):
+    return status_service.claim_bonus(tg_id)
+
+
+@router.post("/api/animals/cure")
+def cure_animal(body: CureBody, tg_id: TelegramId):
+    return status_service.cure_animal(tg_id, body)

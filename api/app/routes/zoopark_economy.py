@@ -1,46 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter
 
-from api.app.core.auth import auth
-from api.app.schemas.economy import BankExchangeBody, BuyAnimalBody, BuyAviaryBody
+from api.app.routes._auth import TelegramId
+from api.app.schemas.economy import BankExchangeBody
 from api.app.zoopark import economy as economy_service
 
-
-router = APIRouter(tags=["zoopark-economy"])
-
-
-@router.post("/api/buy_animal")
-def buy_animal(
-    body: BuyAnimalBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return economy_service.buy_animal(auth(x_init_data, x_dev_user_id), body)
-
-
-@router.post("/api/buy_aviary")
-def buy_aviary(
-    body: BuyAviaryBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return economy_service.buy_aviary(auth(x_init_data, x_dev_user_id), body)
+router = APIRouter(tags=["economy"])
 
 
 @router.get("/api/bank")
-def bank(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    auth(x_init_data, x_dev_user_id)
-    return economy_service.bank()
+def bank(tg_id: TelegramId):
+    return economy_service.bank(tg_id)
 
 
 @router.post("/api/bank/exchange")
-def bank_exchange(
-    body: BankExchangeBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return economy_service.bank_exchange(auth(x_init_data, x_dev_user_id), body)
+def bank_exchange(body: BankExchangeBody, tg_id: TelegramId):
+    """Rubles to dollars. There is no reverse direction."""
+    return economy_service.exchange(tg_id, body)

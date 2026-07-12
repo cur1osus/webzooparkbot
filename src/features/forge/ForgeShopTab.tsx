@@ -3,6 +3,7 @@ import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/
 import { tmaConfirm } from '@/lib/tma';
 import type { ForgeItem, GameState } from '@/types';
 import { fmt } from '@/utils/format';
+import { FORGE_CREATE_PAW, forgeCreateCostUsd, PROPERTY_ICON } from '@/data/itemProperties';
 
 const RARITY_COLOR: Record<string, string> = {
   common: 'var(--tg-theme-hint-color)', rare: 'var(--c-green)', epic: 'var(--c-purple)', mythical: 'var(--c-orange)', legendary: 'var(--c-gold)',
@@ -10,20 +11,9 @@ const RARITY_COLOR: Record<string, string> = {
 const RARITY_LABEL: Record<string, string> = {
   common: 'Обычный', rare: 'Редкий', epic: 'Эпический', mythical: 'Мифический', legendary: 'Легендарный',
 };
-const PROP_ICON: Record<string, string> = {
-  bank_rate: '🔄',
-  income_boost: '📈',
-  animal_income: '🐾',
-  aviary_discount: '🏗️',
-  animal_discount: '📉',
-  extra_turns: '🎲',
-  last_chance: '🍀',
-  bonus_rerolls: '🎁',
-};
-
 function forgeItemIcon(item: ForgeItem): string {
-  const first = item.properties?.[0]?.type;
-  return first ? (PROP_ICON[first] ?? '✨') : '✨';
+  const first = item.properties?.[0]?.kind;
+  return first ? (PROPERTY_ICON[first] ?? '✨') : '✨';
 }
 
 export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
@@ -32,11 +22,12 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
   const [mergeFirst, setMergeFirst] = useState<string | null>(null);
   const [pendingItem, setPendingItem] = useState<ForgeItem | null>(null);
 
-  const allItems = gs.forge_items;
+  const allItems = gs.items;
   const items = pendingItem ? allItems.filter(i => i.id !== pendingItem.id) : allItems;
   const itemCount = allItems.length;
-  const usdCost = Math.round(1 * Math.pow(1.15, itemCount));
-  const pawCost = 350;
+  // The preview used to read `1 * 1.15^n`, promising a $1 artefact.
+  const usdCost = forgeCreateCostUsd(itemCount);
+  const pawCost = FORGE_CREATE_PAW;
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -61,10 +52,10 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
     if (!pendingItem || busy) return;
     setBusy(true);
     try {
-      await apiForgeSell(pendingItem.id);
+      const r = await apiForgeSell(pendingItem.id);
       setPendingItem(null);
       onRefresh();
-      showToast('Продано за $80 000');
+      showToast(`Продано за $${fmt(r.earned_usd)}`);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Ошибка', false);
     } finally {
@@ -79,7 +70,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
   async function handleUpgrade(item: ForgeItem) {
     if (busy) return;
     const level = item.level;
-    const cost = 30_000 * (level + 1);
+    const cost = 300 * (level + 1);
     const successPct = Math.max(0, 100 - 8 * level);
     if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}\nШанс успеха: ${successPct}%`, `Улучшить ${item.name}?`))) return;
     setBusy(true);
@@ -107,7 +98,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
     const item1 = items.find(i => i.id === mergeFirst)!;
     const n1 = item1.properties?.length ?? 0;
     const n2 = item.properties?.length ?? 0;
-    const cost = 100_000 * (n1 + n2 + Math.max(item1.level + item.level, 1));
+    const cost = 1_000 * (n1 + n2 + Math.max(item1.level + item.level, 1));
     if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}`, `Слить «${item1.name}» + «${item.name}»?`))) {
       setMergeFirst(null);
       return;
@@ -184,7 +175,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
                 <div className="mt-[4px] flex flex-col gap-[2px]">
                   {(pendingItem.properties ?? []).map((p, i) => (
                     <span key={i} className="text-[12px] text-tg-hint">
-                      {PROP_ICON[p.type] ?? '✨'} {p.label}
+                      {PROPERTY_ICON[p.kind] ?? '✨'} {p.label}
                     </span>
                   ))}
                 </div>
@@ -197,7 +188,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
                 className="flex-1 py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
                 style={{ background: 'rgba(var(--c-red-rgb),0.15)', color: 'var(--c-red)' }}
               >
-                Продать $80k
+                Продать ${fmt(pendingItem.sell_price_usd)}
               </button>
               <button
                 onClick={handlePendingKeep}
@@ -228,7 +219,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
         items.map(item => {
           const rarityColor = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
           const level = item.level;
-          const upgradeCost = 30_000 * (level + 1);
+          const upgradeCost = 300 * (level + 1);
           const successPct = Math.max(0, 100 - 8 * level);
           const isLegendary = item.rarity === 'legendary';
           const isSelected = mergeFirst === item.id;
@@ -267,7 +258,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
                 {(item.properties ?? []).map((p, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <span className="text-[12px] text-tg-hint">
-                      {PROP_ICON[p.type] ?? '✨'} {p.label.split(' ').slice(0, -1).join(' ')}
+                      {PROPERTY_ICON[p.kind] ?? '✨'} {p.label.split(' ').slice(0, -1).join(' ')}
                     </span>
                     <span className="text-[12px] font-bold" style={{ color: rarityColor }}>
                       {p.label.split(' ').pop()}

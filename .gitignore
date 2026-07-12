@@ -24,6 +24,11 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Secrets
+.env
+.env.*
+!.env.example
+
 # Virtual environments
 .venv/
 venv/

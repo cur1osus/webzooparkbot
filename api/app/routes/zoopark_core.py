@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter
 
-from api.app.core.auth import auth
-from api.app.schemas.core import RegisterBody, SavePayload, SaveResult
+from api.app.routes._auth import TelegramId
+from api.app.schemas.core import NicknameColorBody, RegisterBody
 from api.app.zoopark import core as core_service
 
-
-router = APIRouter(tags=["zoopark-core"])
+router = APIRouter(tags=["core"])
 
 
 @router.get("/api/health")
@@ -15,32 +14,26 @@ def health():
     return core_service.health()
 
 
-@router.get("/api/me")
-def me(
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return core_service.me(auth(x_init_data, x_dev_user_id))
-
-
-@router.post("/api/save", response_model=SaveResult)
-def save(
-    body: SavePayload,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return core_service.save(auth(x_init_data, x_dev_user_id), body)
-
-
-@router.post("/api/register")
-def register(
-    body: RegisterBody,
-    x_init_data: str = Header(default=""),
-    x_dev_user_id: str = Header(default=""),
-):
-    return core_service.register(auth(x_init_data, x_dev_user_id), body)
-
-
 @router.get("/api/config")
 def config():
     return core_service.config()
+
+
+@router.get("/api/me")
+def me(tg_id: TelegramId):
+    return core_service.me(tg_id)
+
+
+@router.post("/api/profile/nickname-color")
+def set_nickname_color(body: NicknameColorBody, tg_id: TelegramId):
+    return core_service.set_nickname_color(tg_id, body)
+
+
+@router.post("/api/profile/nickname-colors/{color}")
+def buy_nickname_color(color: str, tg_id: TelegramId):
+    return core_service.buy_nickname_color(tg_id, color)
+
+
+@router.post("/api/register")
+def register(body: RegisterBody, tg_id: TelegramId):
+    return core_service.register(tg_id, body)

@@ -194,12 +194,9 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefres
         ? `${animLabel}...`
         : 'Бросок';
 
-  const resultTitle = session?.is_draw ? 'Ничья' : session?.won ? 'Победа' : 'Поражение';
-  const resultColor = session?.is_draw
-    ? 'var(--c-blue)'
-    : session?.won
-      ? 'var(--c-green)'
-      : 'var(--c-orange)';
+  const resultTitle = session?.won ? 'Победа' : 'Поражение';
+  // The server never returns a draw: it reruns the match until someone wins.
+  const resultColor = session?.won ? 'var(--c-green)' : 'var(--c-orange)';
   const displayBet = sessionBet ?? bet;
   const lastPlayer = lastRound ? getRollResult(gameId, lastRound.player_roll) : null;
   const lastAi = lastRound ? getRollResult(gameId, lastRound.ai_roll) : null;
@@ -249,7 +246,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefres
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               {finished ? (
                 <span style={{ fontSize: 64 }}>
-                  {session?.is_draw ? '🤝' : session?.won ? '🎉' : '😢'}
+                  {session?.won ? '🎉' : '😢'}
                 </span>
               ) : (
                 <span style={{ fontSize: 72 }}>{gameEmoji}</span>

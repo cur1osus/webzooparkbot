@@ -10,9 +10,7 @@ import { getTelegramStartParam } from '@/lib/tmaEnv';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
 import { RegisterScreen } from '@/pages/RegisterScreen';
-import type { GameState } from '@/types';
 
-const AUTOSAVE_MS = 15_000;
 const HIDDEN_RELOAD_MS = 30_000;
 
 function getInviteGameId(): number | null {
@@ -42,21 +40,11 @@ function PageFallback() {
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { state, loading, error, errorStatus, loadFromServer, persistStateSilently, setGameState, patchState } = useZooStore();
+  const { state, loading, error, errorStatus, loadFromServer, setGameState, patchState } = useZooStore();
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useHashTab();
   const [inviteGameId] = useState<number | null>(() => getInviteGameId());
-  const displayStateRef = useRef<GameState | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
-  const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    displayStateRef.current = displayState;
-  }, [displayState]);
-
-  const persistDisplayedStateSilently = useCallback((keepalive = false) => {
-    void persistStateSilently({ keepalive, snapshot: displayStateRef.current ?? undefined });
-  }, [persistStateSilently]);
 
   const reloadFromServer = useCallback(() => {
     void loadFromServer();
@@ -74,20 +62,9 @@ export default function App() {
     readyTma();
   }, []);
 
-  // Autosave every 15s
-  useEffect(() => {
-    autosaveRef.current = setInterval(() => {
-      persistDisplayedStateSilently();
-    }, AUTOSAVE_MS);
-    return () => { if (autosaveRef.current) clearInterval(autosaveRef.current); };
-  }, [persistDisplayedStateSilently]);
-
-  // Flush on page hide
-  useEffect(() => {
-    const onHide = () => { persistDisplayedStateSilently(true); };
-    window.addEventListener('pagehide', onHide);
-    return () => window.removeEventListener('pagehide', onHide);
-  }, [persistDisplayedStateSilently]);
+  // Nothing to autosave: currencies are server-authoritative and every endpoint that
+  // moves them returns the new balance. `/api/save` used to run every 15 seconds to POST
+  // a `data_version` nobody read.
 
   // Reload if hidden > 30s
   useEffect(() => {

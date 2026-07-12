@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ClanCreateBody(BaseModel):
-    name: str
-    spec: str | None = None
+    name: str = Field(min_length=1, max_length=32)
 
 
 class ClanRequestBody(BaseModel):
-    clan_id: int
+    clan_id: int = Field(gt=0)
 
 
 class TransferCreateBody(BaseModel):
-    total_rub: float
-    max_claims: int
+    total_rub: int = Field(ge=1)
+    max_claims: int = Field(ge=1, le=100)

@@ -1,156 +1,199 @@
+"""The travelling merchant: three visible animals a day, priced by what they will earn.
+
+Not a GDD feature. An offer is one concrete animal with its genes on display, so its
+price comes from `merchant_price_rub(genes)` — a fixed share of that animal's own lifetime
+earnings. The old code took the price from a dead `animals_info.price` column, where a
+rabbit cost 1 100 ₽ and a narwhal 268 000 000 000 ₽ for animals whose income was identical.
+"""
+
 from __future__ import annotations
 
-import random
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import Merchant, PackAnimal
-from api.app.zoopark.catalog import ANIMALS, ANIMAL_BY_DB_ID, ANIMAL_STRING_TO_DB
-from api.app.zoopark.income import sync_passive_balance
-from api.app.zoopark.profile import bump_data_version, get_user
-from api.app.zoopark.progression import HABITATS, PACK_PROPERTIES, PACK_SURVIVAL_DAYS, format_pack_animal
+from api.app.db.models import MerchantOffer, utcnow
+from api.app.zoopark import bonuses as bonuses_module
+from api.app.zoopark import ledger
+from api.app.zoopark.bonuses import Bonuses
+from api.app.zoopark.catalog import (
+    MERCHANT_DISCOUNTS,
+    MERCHANT_REFRESH_HOURS,
+    MERCHANT_SLOTS,
+    SPECIES_BY_ID,
+    merchant_price_rub,
+)
+from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.profile import animal_payload, get_player
+from api.app.zoopark.progression import create_animal, random, roll_genes, roll_habitat, roll_species_id
 from api.app.zoopark.season import ensure_player_season
 
 
-def _roll_offer_traits() -> dict[str, str]:
+def offer_price_rub(offer: MerchantOffer, bonuses: Bonuses) -> int:
+    """List price minus the merchant's own per-offer discount. (Item discounts now apply to
+    packs, not the merchant — see the `discount_packs` property.)"""
+    del bonuses  # kept for call-site compatibility; the merchant has no item discount now
+    return max(1, int(offer.list_price_rub * (100 - offer.discount_pct) / 100))
+
+
+def _fresh_offer(player_id: int, season_id: int, slot: int, expires_at) -> MerchantOffer:
+    genes = roll_genes()
+    return MerchantOffer(
+        player_id=player_id,
+        season_id=season_id,
+        slot=slot,
+        species_id=roll_species_id(),
+        habitat=roll_habitat(),
+        discount_pct=random.choice(MERCHANT_DISCOUNTS),
+        list_price_rub=merchant_price_rub(
+            genes["gene_survival"], genes["gene_appearance"], genes["gene_size"]
+        ),
+        expires_at=expires_at,
+        **genes,
+    )
+
+
+def ensure_offers(session: Session, player_id: int, season_id: int) -> list[MerchantOffer]:
+    """Exactly `MERCHANT_SLOTS` rows, refreshed when they expire.
+
+    `uq_merchant_offers_slot` is what makes this safe: two concurrent reads cannot end up
+    with six offers, because the second insert into a taken slot loses.
+    """
+    now = utcnow()
+    existing = list(
+        session.scalars(
+            select(MerchantOffer)
+            .where(MerchantOffer.player_id == player_id, MerchantOffer.season_id == season_id)
+            .order_by(MerchantOffer.slot.asc())
+        ).all()
+    )
+    by_slot = {offer.slot: offer for offer in existing}
+    expires_at = now + timedelta(hours=MERCHANT_REFRESH_HOURS)
+
+    for slot in range(1, MERCHANT_SLOTS + 1):
+        offer = by_slot.get(slot)
+        if offer is None:
+            try:
+                with session.begin_nested():
+                    session.add(_fresh_offer(player_id, season_id, slot, expires_at))
+            except IntegrityError:
+                pass
+        elif offer.expires_at <= now:
+            genes = roll_genes()
+            offer.species_id = roll_species_id()
+            offer.habitat = roll_habitat()
+            offer.discount_pct = random.choice(MERCHANT_DISCOUNTS)
+            offer.list_price_rub = merchant_price_rub(
+                genes["gene_survival"], genes["gene_appearance"], genes["gene_size"]
+            )
+            offer.purchased_at = None
+            offer.created_at = now
+            offer.expires_at = expires_at
+            for key, value in genes.items():
+                setattr(offer, key, value)
+
+    session.flush()
+    return list(
+        session.scalars(
+            select(MerchantOffer)
+            .where(MerchantOffer.player_id == player_id, MerchantOffer.season_id == season_id)
+            .order_by(MerchantOffer.slot.asc())
+        ).all()
+    )
+
+
+def _offer_payload(offer: MerchantOffer, bonuses: Bonuses) -> dict:
+    species = SPECIES_BY_ID[offer.species_id]
     return {
-        "survival": random.choice(PACK_PROPERTIES),
-        "reproduction": random.choice(PACK_PROPERTIES),
-        "appearance": random.choice(PACK_PROPERTIES),
-        "size_trait": random.choice(PACK_PROPERTIES),
-        "habitat": random.choice(HABITATS),
+        "slot": offer.slot,
+        "species_code": species["code"],
+        "species_name": species["name"],
+        "species_emoji": species["emoji"],
+        "species_rarity": species["rarity"],
+        "survival": offer.gene_survival,
+        "reproduction": offer.gene_reproduction,
+        "appearance": offer.gene_appearance,
+        "size_trait": offer.gene_size,
+        "habitat": offer.habitat,
+        "list_price": offer.list_price_rub,
+        "discount_pct": offer.discount_pct,
+        "final_price": offer_price_rub(offer, bonuses),
+        "bought": offer.purchased_at is not None,
     }
 
 
-def ensure_merchant(session: Session, user_id: int, season_id: int) -> list[Merchant]:
-    now = datetime.now(timezone.utc)
-    existing = (
-        session.query(Merchant)
-        .filter(Merchant.user_id == user_id, Merchant.season_id == season_id, Merchant.expires_at > now)
-        .order_by(Merchant.id.asc())
-        .all()
-    )
-    if existing:
-        return existing
-
-    session.query(Merchant).filter(Merchant.user_id == user_id, Merchant.season_id == season_id).delete()
-    picks = random.sample(ANIMALS, min(3, len(ANIMALS)))
-    expires_at = now + timedelta(hours=24)
-    for pick in picks:
-        discount = random.choice([5, 10, 15, 20, 25, 30])
-        discounted = int(pick["price"] * (1 - discount / 100))
-        session.add(Merchant(
-            user_id=user_id,
-            season_id=season_id,
-            animal_info_id=ANIMAL_STRING_TO_DB[pick["id"]],
-            **_roll_offer_traits(),
-            discount=discount,
-            price=pick["price"],
-            price_with_discount=discounted,
-            bought=0,
-            created_at=now,
-            expires_at=expires_at,
-        ))
-    session.flush()
-    return (
-        session.query(Merchant)
-        .filter(Merchant.user_id == user_id, Merchant.season_id == season_id, Merchant.expires_at > now)
-        .order_by(Merchant.id.asc())
-        .all()
-    )
-
-
-def do_merchant_buy(tg_id: int, slot: int) -> dict:
+def merchant_animals(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        user, _income, _expenses = sync_passive_balance(session, user)
-        season = ensure_player_season(session, user)
+        season = ensure_player_season(session, player)
+        offers = ensure_offers(session, player.id, season.id)
+        bonuses = bonuses_module.load(session, player.id)
+        payload = [_offer_payload(offer, bonuses) for offer in offers]
+        refreshes_at = min(offer.expires_at for offer in offers) if offers else utcnow()
+        session.commit()
+        return {"animals": payload, "refreshes_at": refreshes_at.isoformat()}
 
-        offers = ensure_merchant(session, user.id, season.id)
-        if slot < 1 or slot > len(offers):
+
+def buy_offer(tg_id: int, slot: int) -> dict:
+    if not (1 <= slot <= MERCHANT_SLOTS):
+        raise HTTPException(400, "Неверный слот")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        sync_player_income(session, player)
+        season = ensure_player_season(session, player)
+        ensure_offers(session, player.id, season.id)
+
+        offer = session.scalars(
+            select(MerchantOffer)
+            .where(
+                MerchantOffer.player_id == player.id,
+                MerchantOffer.season_id == season.id,
+                MerchantOffer.slot == slot,
+            )
+            .with_for_update()
+        ).first()
+        if offer is None:
             raise HTTPException(400, "Неверный слот")
-
-        offer = offers[slot - 1]
-        if offer.bought:
+        if offer.purchased_at is not None:
             raise HTTPException(400, "Уже куплено")
+        if offer.expires_at <= utcnow():
+            raise HTTPException(400, "Предложение истекло")
 
-        animal_def = ANIMAL_BY_DB_ID.get(offer.animal_info_id)
-        if not animal_def:
-            raise HTTPException(400, "Животное не найдено")
+        bonuses = bonuses_module.load(session, player.id)
+        price = offer_price_rub(offer, bonuses)
+        ledger.spend(session, player, "rub", price, "merchant_buy", ref_table="merchant_offers", ref_id=offer.id)
 
-        cost = offer.price_with_discount or animal_def["price"]
-        if user.rub < cost:
-            raise HTTPException(400, "Недостаточно рублей")
-
-        now = datetime.now(timezone.utc)
-        new_animal = PackAnimal(
-            user_id=user.id,
+        animal = create_animal(
+            session,
+            player_id=player.id,
             season_id=season.id,
-            animal_info_id=offer.animal_info_id,
-            survival=offer.survival,
-            reproduction=offer.reproduction,
-            appearance=offer.appearance,
-            size_trait=offer.size_trait,
-            habitat=offer.habitat,
-            source="merchant",
-            dies_at=now + timedelta(days=PACK_SURVIVAL_DAYS[offer.survival]),
-            acquired_at=now,
+            origin="merchant",
+            genes={
+                "gene_survival": offer.gene_survival,  # type: ignore[dict-item]
+                "gene_reproduction": offer.gene_reproduction,  # type: ignore[dict-item]
+                "gene_appearance": offer.gene_appearance,  # type: ignore[dict-item]
+                "gene_size": offer.gene_size,  # type: ignore[dict-item]
+            },
+            habitat=offer.habitat,  # type: ignore[arg-type]
+            species_id=offer.species_id,
         )
-        session.add(new_animal)
-        session.flush()
+        offer.purchased_at = utcnow()
 
-        user.rub -= cost
-        offer.bought = 1
-        bump_data_version(session, user.id)
-        animal_payload = format_pack_animal(new_animal)
-        session.commit()
-        return {"ok": True, "new_rub": user.rub, "animal": animal_payload}
-
-
-def get_merchant_animals(tg_id: int):
-    with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
-            raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
-        offers = ensure_merchant(session, user.id, season.id)
-        session.commit()
-
-        animals: list[dict] = []
-        refreshes_at = None
-        for index, offer in enumerate(offers[:3]):
-            animal_def = ANIMAL_BY_DB_ID.get(offer.animal_info_id)
-            if not animal_def:
-                continue
-            refreshes_at = offer.expires_at
-            animals.append({
-                "slot": index + 1,
-                "animal_id": animal_def["id"],
-                "animal_info_id": offer.animal_info_id,
-                "quantity": 1,
-                "original_price": offer.price or animal_def["price"],
-                "discount_pct": offer.discount or 0,
-                "final_price": offer.price_with_discount or animal_def["price"],
-                "survival": offer.survival,
-                "reproduction": offer.reproduction,
-                "appearance": offer.appearance,
-                "size_trait": offer.size_trait,
-                "habitat": offer.habitat,
-                "bought": bool(offer.bought),
-            })
-
-        if refreshes_at is None:
-            refreshes_at = datetime.now(timezone.utc) + timedelta(hours=24)
-        return {
-            "animals": animals,
-            "refreshes_at": refreshes_at.isoformat() if hasattr(refreshes_at, "isoformat") else str(refreshes_at),
+        sync_player_income(session, player, bonuses)
+        result = {
+            "ok": True,
+            "price_paid": price,
+            "new_rub": ledger.balance(player, "rub"),
+            "animal": animal_payload(animal, None, bonuses),
         }
-
-
-def buy_merchant_offer(tg_id: int, slot: int):
-    return do_merchant_buy(tg_id, slot)
+        session.commit()
+        return result

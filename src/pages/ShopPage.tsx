@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { fmt } from '@/utils/format';
-import type { GameState } from '@/types';
+import type { GameState, NicknameColor } from '@/types';
+import { apiBuyNicknameColor, apiSetNicknameColor } from '@/api';
+import { NICKNAME_COLORS } from '@/data/nicknameColors';
 import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
+import { PageHeader } from '@/components/PageHeader';
+
+const RARITY_LABEL = { standard: null, rare: 'Редкий', legendary: 'Легендарный' } as const;
 
 type ShopTab = 'packs' | 'localities' | 'forge' | 'cosmetics';
 
@@ -11,8 +16,132 @@ const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
   { id: 'packs',      emoji: '📦', label: 'Паки' },
   { id: 'localities', emoji: '🌍', label: 'Местности' },
   { id: 'forge',      emoji: '🔨', label: 'Кузница' },
-  { id: 'cosmetics',  emoji: '🎨', label: 'Мета' },
+  { id: 'cosmetics',  emoji: '🎨', label: 'Стиль' },
 ];
+
+function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const [selectedColor, setSelectedColor] = useState<NicknameColor>(gs.nickname_color);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Cached state from the previous app build may briefly lack this new field on startup.
+  const colorStates = gs.nickname_colors ?? [];
+
+  const setColor = async (color: NicknameColor) => {
+    if (saving || color === gs.nickname_color) return;
+    setSelectedColor(color);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSetNicknameColor(color);
+      onRefresh();
+    } catch (cause) {
+      setSelectedColor(gs.nickname_color);
+      setError(cause instanceof Error ? cause.message : 'Не удалось сохранить цвет');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buyColor = async (color: NicknameColor) => {
+    if (saving) return;
+    setSelectedColor(color);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiBuyNicknameColor(color);
+      onRefresh();
+    } catch (cause) {
+      setSelectedColor(gs.nickname_color);
+      setError(cause instanceof Error ? cause.message : 'Не удалось купить цвет');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const active = NICKNAME_COLORS.find(option => option.id === selectedColor) ?? NICKNAME_COLORS[0];
+  const activeState = colorStates.find(color => color.id === selectedColor);
+  const activeOwned = activeState?.owned ?? selectedColor === 'ivory';
+  const activePrice = activeState?.price_paw ?? 0;
+  const isCurrentColor = selectedColor === gs.nickname_color;
+
+  return (
+    <div className="px-[14px] pt-3 flex flex-col gap-3">
+      <div
+        className={`relative rounded-2xl px-4 py-5 ${active.animated ? `nickname-preview-${active.id}` : ''}`}
+        style={{ background: active.animated ? undefined : `linear-gradient(135deg, ${active.glow}, transparent 68%), var(--tg-theme-secondary-bg-color)`, border: `1px solid ${active.value}52` }}
+      >
+        <div className="absolute -right-3 -top-8 text-[100px] opacity-[0.07] leading-none pointer-events-none">✦</div>
+        <div className="relative">
+          <p className="m-0 text-[11px] font-extrabold tracking-[0.7px] uppercase text-tg-hint">Подпись владельца</p>
+          <p className={`m-0 mt-2 text-[25px] leading-none font-extrabold ${active.animated ? `nickname-color-${active.id}` : ''}`} style={{ color: active.value, textShadow: `0 0 18px ${active.glow}` }}>
+            {gs.nickname}
+          </p>
+          <p className="m-0 mt-3 max-w-[270px] text-[13px] leading-[1.35] text-tg-hint">
+            Цвет имени будет виден в таблице лидеров. Открытые оттенки остаются навсегда.
+          </p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <p className="m-0 font-extrabold text-[15px]">Палитра имени</p>
+          {saving && <span className="text-[11px] font-bold text-tg-hint">Сохраняем...</span>}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {NICKNAME_COLORS.map(option => {
+            const isSelected = option.id === selectedColor;
+            const state = colorStates.find(color => color.id === option.id);
+            const owned = state?.owned ?? option.id === 'ivory';
+            const price = state?.price_paw ?? 0;
+            const rarity = state?.rarity ?? 'standard';
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setSelectedColor(option.id)}
+                aria-pressed={isSelected}
+                className="min-h-[58px] rounded-xl px-3 text-left"
+                style={{
+                  background: isSelected ? option.glow : 'var(--surface-subtle)',
+                  border: `1px solid ${isSelected ? option.value : 'var(--surface-overlay-border)'}`,
+                  borderRadius: '12px',
+                  boxShadow: isSelected ? `inset 0 0 0 1px ${option.value}30` : 'none',
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className={`w-4 h-4 rounded-full shrink-0 ${option.animated ? `nickname-swatch-${option.id}` : ''}`}
+                    style={option.animated ? { boxShadow: `0 0 12px ${option.glow}` } : { background: option.value, boxShadow: `0 0 10px ${option.glow}` }}
+                  />
+                  <span className="min-w-0">
+                    <span className={`block text-[13px] font-extrabold truncate ${option.animated ? `nickname-color-${option.id}` : ''}`} style={{ color: option.value }}>{option.label}</span>
+                    <span className="block mt-[1px] text-[10px] text-tg-hint">
+                      {isSelected ? 'Выбрано' : owned ? 'Надеть' : `${price} 🐾`}{RARITY_LABEL[rarity] ? ` · ${RARITY_LABEL[rarity]}` : ''}
+                    </span>
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => void (activeOwned ? setColor(selectedColor) : buyColor(selectedColor))}
+          disabled={saving || isCurrentColor}
+          className="w-full mt-3 min-h-[46px] rounded-xl border-none font-extrabold text-[14px] disabled:opacity-55"
+          style={{
+            background: activeOwned ? 'var(--c-blue)' : 'var(--c-purple)',
+            color: 'var(--tg-theme-button-text-color)',
+            boxShadow: activeOwned ? 'none' : `0 0 20px ${active.glow}`,
+          }}
+        >
+          {saving ? 'Сохраняем...' : isCurrentColor ? 'Сейчас используется' : activeOwned ? `Надеть «${active.label}»` : `Купить за ${activePrice} 🐾`}
+        </button>
+        {error && <p className="m-0 mt-3 text-[12px] text-[var(--c-red-soft)]">{error}</p>}
+      </div>
+    </div>
+  );
+}
 
 // ─── ShopPage ─────────────────────────────────────────────────────────────────
 
@@ -27,12 +156,11 @@ export function ShopPage({
 
   return (
     <div className="page-content-safe">
-      {/* Header */}
-      <div className="px-[14px] pt-[14px]">
-        <p className="font-display m-0 mb-[10px] text-[20px]">🛒 Зоомаркет</p>
+      <PageHeader emoji="🛒" title="Зоомаркет" accent="var(--c-green-rgb)" />
 
-        {/* Balance + seats */}
-        <div className="flex gap-[6px] mb-[10px] overflow-x-auto">
+      {/* Balance + seats */}
+      <div className="px-[14px] pb-[10px]">
+        <div className="flex gap-[6px] overflow-x-auto">
           {[
             { label: `₽ ${fmt(gs.rub)}`,    color: 'var(--c-green)' },
             { label: `$ ${fmt(gs.usd)}`,    color: 'var(--c-gold)' },
@@ -85,33 +213,7 @@ export function ShopPage({
       {tab === 'forge' && <ForgeShopTab gs={gs} onRefresh={onRefresh} />}
 
       {/* COSMETICS */}
-      {tab === 'cosmetics' && (
-        <div className="px-[14px] pt-3 flex flex-col gap-[10px]">
-          <div className="card">
-            <p className="m-0 mb-[6px] text-base font-bold">🎨 Цвет ника в топе</p>
-            <p className="m-0 mb-3 text-[13px] text-tg-hint">
-              Твой ник в таблице лидеров будет выделен выбранным цветом. Покупка — навсегда.
-            </p>
-
-            <div className="flex gap-2 mb-3">
-              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)]">
-                Дешевле
-              </button>
-              <button className="px-[14px] py-[6px] rounded-[20px] border-none cursor-pointer text-[13px] font-semibold text-tg-hint" style={{ background: 'var(--surface-subtle)' }}>
-                Дороже
-              </button>
-            </div>
-
-            <div className="card flex justify-between items-center" style={{ background: 'var(--tg-theme-bg-color)' }}>
-              <span className="font-bold">{gs.nickname}</span>
-              <span className="text-tg-hint text-[13px]">По умолчанию</span>
-              <button className="px-[14px] py-[6px] rounded-lg border-none cursor-pointer bg-[rgba(var(--c-blue-rgb),0.15)] text-[var(--c-blue)] font-semibold text-[13px]">
-                Выбрать
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {tab === 'cosmetics' && <StyleTab gs={gs} onRefresh={onRefresh} />}
     </div>
   );
 }

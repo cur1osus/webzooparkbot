@@ -1,257 +1,221 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE="${REMOTE:-root@REDACTED-OLD-HOST}"
-REMOTE_DIR="${REMOTE_DIR:-/root/webzooparkbot}"
-DOMAIN="89-22-224-52.sslip.io"
-API_UPSTREAM="${API_UPSTREAM:-127.0.0.1:8001}"
+# Deploys ZooPark to the live "zomserv" host (REDACTED-HOST). This host runs many
+# other bots, so this script is deliberately narrow: it writes ONLY into ZooPark's own
+# paths and never rewrites the shared /etc/caddy/Caddyfile. ZooPark's Caddy config lives
+# in the isolated fragment /etc/caddy/sites/zoopark.caddy, which the main Caddyfile
+# already imports via `import /etc/caddy/sites/*.caddy` — so a code deploy touches no
+# Caddy config at all.
+#
+# History: an earlier deploy.sh targeted the decommissioned "servam" host
+# (REDACTED-OLD-HOST, dead since 2026-06-20) and rewrote the whole Caddyfile. Do not restore
+# that behaviour — on this shared host it would clobber every other bot's routes.
+#
+# Usage:
+#   ./deploy.sh                 # frontend + backend (deps, DB backup, migrations, restart, webhook)
+#   ./deploy.sh --frontend-only # rebuild + upload static site only (UI-only changes)
+#   ./deploy.sh --backend-only  # API code + migrations + restart + webhook, skip the frontend
+
+REMOTE="${REMOTE:-root@REDACTED-HOST}"
+WWW_DIR="${WWW_DIR:-/var/www/zoopark}"
+APP_DIR="${APP_DIR:-/opt/webzooparkbot}"
+API_DIR="${API_DIR:-${APP_DIR}/api}"
+APP_USER="${APP_USER:-zoopark}"
+ENV_FILE="${ENV_FILE:-/etc/webzooparkbot.env}"
+SERVICE="${SERVICE:-webzooparkbot-api}"
+API_UPSTREAM="${API_UPSTREAM:-127.0.0.1:8900}"
+DOMAIN="${DOMAIN:-REDACTED-DOMAIN}"
+PUBLIC_URL="https://${DOMAIN}"
+
+DO_FRONTEND=1
+DO_BACKEND=1
+case "${1:-}" in
+  --frontend-only) DO_BACKEND=0 ;;
+  --backend-only)  DO_FRONTEND=0 ;;
+  "" ) ;;
+  *) echo "Unknown option: $1" >&2; exit 2 ;;
+esac
 
 remote_bash() {
   ssh "$REMOTE" bash -s -- "$@"
 }
 
-echo "[1/8] Build frontend"
-npm run build
+if [ "$DO_FRONTEND" -eq 1 ]; then
+  echo "[frontend 1/2] Build"
+  npm run build
 
-echo "[2/8] Upload frontend + API"
-ssh "$REMOTE" "mkdir -p '${REMOTE_DIR}/dist' '${REMOTE_DIR}/api' '/var/www/webzooparkbot'"
-rsync -az --delete ./dist/ "${REMOTE}:${REMOTE_DIR}/dist/"
-rsync -az --delete --exclude '__pycache__' --exclude '.venv' ./api/ "${REMOTE}:${REMOTE_DIR}/api/"
-ssh "$REMOTE" "rsync -a --delete '${REMOTE_DIR}/dist/' /var/www/webzooparkbot/ && chown -R caddy:caddy /var/www/webzooparkbot"
+  echo "[frontend 2/2] Upload to ${WWW_DIR}"
+  # Vite copies public/ into dist/, so dist/ is self-contained and --delete is safe.
+  ssh "$REMOTE" "mkdir -p '${WWW_DIR}'"
+  rsync -az --delete ./dist/ "${REMOTE}:${WWW_DIR}/"
+  ssh "$REMOTE" "chown -R caddy:caddy '${WWW_DIR}'"
+fi
 
-echo "[3/8] Install Python deps + run DB migrations"
-remote_bash "$REMOTE_DIR" << 'ENDSSH'
+if [ "$DO_BACKEND" -eq 1 ]; then
+  echo "[backend 1/4] Upload API to ${API_DIR}"
+  # --exclude also protects these paths from --delete, so the server-side virtualenv and
+  # byte-cache survive. Files land owned by the pushing uid; chown restores the app user.
+  ssh "$REMOTE" "mkdir -p '${API_DIR}'"
+  rsync -az --delete \
+    --exclude '.venv' --exclude '__pycache__' --exclude '*.pyc' \
+    ./api/ "${REMOTE}:${API_DIR}/"
+  ssh "$REMOTE" "chown -R ${APP_USER}:${APP_USER} '${API_DIR}'"
+
+  echo "[backend 2/4] Install deps, back up DB, run migrations"
+  remote_bash "$API_DIR" "$APP_USER" "$ENV_FILE" "$APP_DIR" << 'ENDSSH'
 set -euo pipefail
-REMOTE_DIR="$1"
+API_DIR="$1"; APP_USER="$2"; ENV_FILE="$3"; APP_DIR="$4"
 
-load_service_env() {
-    local service="$1"
-    local env_line
-    env_line="$(systemctl show "$service" --property=Environment --value 2>/dev/null || true)"
-    if [ -z "$env_line" ]; then
-        return 0
-    fi
+# The env file is root:zoopark 640; we are root here, so we can read it to drive the
+# DB backup and to hand a populated environment to the app user's tools.
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
 
-    python3 - "$env_line" <<'PY'
-import shlex
-import sys
-
-for item in shlex.split(sys.argv[1]):
-    if "=" not in item:
-        continue
-    key, value = item.split("=", 1)
-    if key.startswith(("DB_", "BOT_", "APP_")):
-        print(f"export {key}={shlex.quote(value)}")
-PY
-}
-
-load_service_env_files() {
-    local service="$1"
-    local env_files
-    env_files="$(systemctl show "$service" --property=EnvironmentFiles --value 2>/dev/null || true)"
-    while read -r file _; do
-        case "$file" in
-            /*)
-                if [ -r "$file" ]; then
-                    set -a
-                    # shellcheck disable=SC1090
-                    . "$file"
-                    set +a
-                fi
-                ;;
-        esac
-    done <<< "$env_files"
-}
-
-load_service_env_files webzooparkbot-api
-eval "$(load_service_env webzooparkbot-api)"
-
-: "${DB_USER:?DB_USER is not configured in webzooparkbot-api systemd environment}"
-: "${DB_NAME:?DB_NAME is not configured in webzooparkbot-api systemd environment}"
-
+: "${DB_NAME:?DB_NAME missing from ${ENV_FILE}}"
+: "${DB_USER:?DB_USER missing from ${ENV_FILE}}"
+: "${BOT_TOKEN:?BOT_TOKEN missing from ${ENV_FILE}}"
+: "${TELEGRAM_WEBHOOK_SECRET:?TELEGRAM_WEBHOOK_SECRET missing: Stars payments cannot be verified}"
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
 DB_PASSWORD="${DB_PASSWORD:-}"
 
-mysqldump_cmd() {
-    mysqldump \
-      --host="$DB_HOST" \
-      --port="$DB_PORT" \
-      --user="$DB_USER" \
-      --password="$DB_PASSWORD" \
-      --single-transaction \
-      --no-tablespaces \
-      --routines \
-      --triggers \
-      --hex-blob \
-      --default-character-set=utf8mb4 \
-      "$@"
-}
+echo "[deps] pip install (as ${APP_USER})"
+runuser -u "$APP_USER" -- "${API_DIR}/.venv/bin/pip" install -q -r "${API_DIR}/requirements.txt"
 
-cd "$REMOTE_DIR/api"
-[ -x .venv/bin/python ] || python3.12 -m venv .venv
-.venv/bin/pip install -q -r requirements.txt
+# Passing --password on the command line would expose it to every user via `ps`.
+MYSQL_DEFAULTS_FILE="$(mktemp)"
+chmod 600 "$MYSQL_DEFAULTS_FILE"
+trap 'rm -f "$MYSQL_DEFAULTS_FILE"' EXIT
+cat > "$MYSQL_DEFAULTS_FILE" <<EOF
+[client]
+host=$DB_HOST
+port=$DB_PORT
+user=$DB_USER
+password=$DB_PASSWORD
+EOF
 
-echo "[migration] Checking Alembic revision graph"
-.venv/bin/alembic heads
-.venv/bin/alembic current || true
-
-echo "[db-backup] Creating MySQL backup before Alembic upgrade"
-backup_dir="$REMOTE_DIR/backups"
+echo "[db-backup] Dumping ${DB_NAME} before migrations"
+backup_dir="${APP_DIR}/backups"
 mkdir -p "$backup_dir"
 backup_file="$backup_dir/${DB_NAME}_$(date +%Y%m%d_%H%M%S).sql.gz"
-mysqldump_cmd "$DB_NAME" | gzip -c > "$backup_file"
+mysqldump --defaults-extra-file="$MYSQL_DEFAULTS_FILE" \
+  --single-transaction --no-tablespaces --routines --triggers --hex-blob \
+  --default-character-set=utf8mb4 "$DB_NAME" | gzip -c > "$backup_file"
 chmod 600 "$backup_file"
 echo "[db-backup] Saved $backup_file"
 
-echo "[migration] Running alembic upgrade head"
-.venv/bin/alembic upgrade head
+echo "[migration] alembic upgrade head (as ${APP_USER})"
+cd "$API_DIR"
+runuser -u "$APP_USER" -- "${API_DIR}/.venv/bin/alembic" upgrade head
 
-echo "[migration] Verifying database is at Alembic head"
-.venv/bin/python - <<'PY'
+echo "[migration] Verifying database is at head"
+runuser -u "$APP_USER" -- "${API_DIR}/.venv/bin/python" - <<'PY'
 import subprocess
 
-
-def revisions(*args: str) -> set[str]:
-    output = subprocess.check_output([".venv/bin/alembic", *args], text=True)
-    return {line.split()[0] for line in output.splitlines() if line.strip()}
-
+def revisions(*args):
+    out = subprocess.check_output([".venv/bin/alembic", *args], text=True)
+    return {line.split()[0] for line in out.splitlines() if line.strip() and "INFO" not in line}
 
 heads = revisions("heads")
 current = revisions("current")
 if current != heads:
     raise SystemExit(f"database revision mismatch: current={sorted(current)} heads={sorted(heads)}")
-
 print(f"[migration] Current revision: {', '.join(sorted(current))}")
 PY
 ENDSSH
 
-echo "[4/8] Verify backend startup entrypoints"
-remote_bash "$REMOTE_DIR" << 'ENDSSH'
+  echo "[backend 3/4] Verify import + restart service"
+  remote_bash "$API_DIR" "$APP_USER" "$ENV_FILE" "$APP_DIR" "$SERVICE" "$API_UPSTREAM" << 'ENDSSH'
 set -euo pipefail
-REMOTE_DIR="$1"
-cd "$REMOTE_DIR"
-api/.venv/bin/python -c "import api.main"
-ENDSSH
+API_DIR="$1"; APP_USER="$2"; ENV_FILE="$3"; APP_DIR="$4"; SERVICE="$5"; API_UPSTREAM="$6"
 
-echo "[5/8] Align API service entrypoint"
-remote_bash "$REMOTE_DIR" << 'ENDSSH'
-set -euo pipefail
-REMOTE_DIR="$1"
-mkdir -p /etc/systemd/system/webzooparkbot-api.service.d
-cat > /etc/systemd/system/webzooparkbot-api.service.d/entrypoint.conf <<'EOF'
-[Service]
-WorkingDirectory=REMOTE_DIR_PLACEHOLDER
-ExecStart=
-ExecStart=REMOTE_DIR_PLACEHOLDER/api/.venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8001
-EOF
-python3 - "$REMOTE_DIR" <<'PY'
-from pathlib import Path
-import sys
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
 
-path = Path("/etc/systemd/system/webzooparkbot-api.service.d/entrypoint.conf")
-path.write_text(path.read_text().replace("REMOTE_DIR_PLACEHOLDER", sys.argv[1]))
-PY
-systemctl daemon-reload
-ENDSSH
+# config.py refuses to import without BOT_TOKEN etc., so this doubles as a config check.
+( cd "$APP_DIR" && runuser -u "$APP_USER" --preserve-environment -- \
+    "${API_DIR}/.venv/bin/python" -c "import api.main" )
 
-echo "[6/8] Restart API service"
-remote_bash << 'ENDSSH'
-set -euo pipefail
-systemctl restart webzooparkbot-api
+systemctl restart "$SERVICE"
 for _ in $(seq 1 20); do
-    state="$(systemctl is-active webzooparkbot-api || true)"
-    if [ "$state" = "active" ]; then
-        break
-    fi
+    state="$(systemctl is-active "$SERVICE" || true)"
+    [ "$state" = "active" ] && break
     if [ "$state" = "failed" ]; then
-        systemctl status webzooparkbot-api --no-pager -l || true
+        systemctl status "$SERVICE" --no-pager -l || true
         exit 1
     fi
     sleep 1
 done
 for _ in $(seq 1 20); do
-    if curl -fsS http://127.0.0.1:8001/api/health >/dev/null 2>&1; then
+    if curl -fsS "http://${API_UPSTREAM}/api/health" >/dev/null 2>&1; then
         exit 0
     fi
     sleep 1
 done
-systemctl status webzooparkbot-api --no-pager -l || true
-journalctl -u webzooparkbot-api -n 80 --no-pager || true
+systemctl status "$SERVICE" --no-pager -l || true
+journalctl -u "$SERVICE" -n 80 --no-pager || true
 exit 1
 ENDSSH
 
-echo "[7/8] Align Caddy routes"
-remote_bash "$DOMAIN" "$API_UPSTREAM" << 'ENDSSH'
+  echo "[backend 4/4] Register Telegram webhook"
+  remote_bash "$ENV_FILE" "${PUBLIC_URL}/api/telegram/webhook" << 'ENDSSH'
 set -euo pipefail
-DOMAIN="$1"
-API_UPSTREAM="$2"
+ENV_FILE="$1"; WEBHOOK_URL="$2"
 
-cat > /etc/caddy/Caddyfile <<'EOF'
-{
-	https_port 8443
-	http_port 80
-	auto_https off
-}
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+: "${BOT_TOKEN:?BOT_TOKEN missing}"
+: "${TELEGRAM_WEBHOOK_SECRET:?TELEGRAM_WEBHOOK_SECRET missing}"
 
-http://DOMAIN_PLACEHOLDER {
-	redir https://{host}:8443{uri} permanent
-}
+# Without this the bot never delivers successful_payment and paying players get nothing.
+response="$(curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
+  -H 'Content-Type: application/json' \
+  -d "$(python3 -c '
+import json, sys
+print(json.dumps({
+    "url": sys.argv[1],
+    "secret_token": sys.argv[2],
+    "allowed_updates": ["message", "pre_checkout_query"],
+}))' "$WEBHOOK_URL" "$TELEGRAM_WEBHOOK_SECRET")")"
 
-DOMAIN_PLACEHOLDER:8443 {
-	tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
-
-	handle /api/* {
-		reverse_proxy API_UPSTREAM_PLACEHOLDER
-	}
-
-	handle {
-		root * /var/www/webzooparkbot
-
-		@hashedAssets path_regexp assets/.*\.(js|css)$
-		header @hashedAssets Cache-Control "public, max-age=31536000, immutable"
-
-		@rlottie path /tgsticker/*
-		header @rlottie Cache-Control "public, max-age=604800"
-
-		@tgs path_regexp \.tgs$
-		header @tgs Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
-
-		@staticOther path_regexp \.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2)$
-		header @staticOther Cache-Control "public, max-age=604800"
-
-		file_server
-		try_files {path} /index.html
-	}
-}
-EOF
-
-python3 - "$DOMAIN" "$API_UPSTREAM" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path("/etc/caddy/Caddyfile")
-contents = path.read_text()
-contents = contents.replace("DOMAIN_PLACEHOLDER", sys.argv[1])
-contents = contents.replace("API_UPSTREAM_PLACEHOLDER", sys.argv[2])
-path.write_text(contents)
-PY
-systemctl reload caddy
-systemctl is-active caddy
-ENDSSH
-
-echo "[8/8] Verify public routes"
-response="$(curl -kfsS "https://${DOMAIN}:8443/api/health")"
 python3 - "$response" <<'PY'
-import json
-import sys
+import json, sys
+payload = json.loads(sys.argv[1])
+if not payload.get("ok"):
+    raise SystemExit(f"setWebhook failed: {payload!r}")
+print("[webhook] registered")
+PY
+ENDSSH
+fi
 
+echo "[verify] Public routes"
+# zomserv's Caddy serves a real Let's Encrypt cert for the sslip.io domain, so no -k.
+health="$(curl -fsS "${PUBLIC_URL}/api/health")"
+python3 - "$health" <<'PY'
+import json, sys
 payload = json.loads(sys.argv[1])
 if payload != {"ok": True}:
     raise SystemExit(f"unexpected public health payload: {payload!r}")
+print("[verify] /api/health ok")
 PY
+
+if [ "$DO_FRONTEND" -eq 1 ]; then
+  served="$(curl -fsS "${PUBLIC_URL}/" | grep -o 'assets/index-[^"]*\.js' | head -1 || true)"
+  built="$(grep -o 'assets/index-[^"]*\.js' dist/index.html | head -1 || true)"
+  echo "[verify] served bundle: ${served:-none} | built: ${built:-none}"
+  if [ -n "$built" ] && [ "$served" != "$built" ]; then
+    echo "[verify] WARNING: served bundle does not match the build just uploaded" >&2
+  fi
+fi
 
 echo ""
 echo "Done!"
-echo "  App:  https://${DOMAIN}:8443"
-echo "  API:  https://${DOMAIN}:8443/api/health"
+echo "  App:  ${PUBLIC_URL}"
+echo "  API:  ${PUBLIC_URL}/api/health"

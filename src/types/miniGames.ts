@@ -1,15 +1,32 @@
-export interface MpGame {
+export type GameKind = 'basketball' | 'darts' | 'bowling' | 'dice' | 'football';
+
+/** Player versus player, zero-sum. `duel_moves` and `duel_bonus` items apply here. */
+export interface Duel {
   id: number;
-  game_type: string;
-  bet_rub: number;
+  kind: GameKind | string;
+  stake_rub: number;
   creator_nickname: string;
   created_at: string;
-  status: 'open' | 'playing' | 'finished';
+  status: 'open' | 'finished' | 'cancelled';
+  creator_score: number | null;
+  opponent_score: number | null;
   winner_nickname: string | null;
 }
 
-export interface MpGameResponse {
-  games: MpGame[];
+export interface DuelsResponse {
+  games: Duel[];
+}
+
+export interface DuelActionResponse {
+  ok: boolean;
+  game: Duel;
+  new_rub: number;
+}
+
+export interface DuelCancelResponse {
+  ok: boolean;
+  refunded_rub: number;
+  new_rub: number;
 }
 
 export interface DonateInfo {
@@ -20,8 +37,8 @@ export interface SoloStats {
   games_played: number;
   wins: number;
   losses: number;
-  total_won_rub: number;
-  total_lost_rub: number;
+  won_rub: number;
+  lost_rub: number;
 }
 
 export interface SoloThrowRound {
@@ -30,19 +47,16 @@ export interface SoloThrowRound {
   ai_roll: number;
 }
 
-export type SoloBasketballThrow = SoloThrowRound;
-
+/** Against the house, which keeps a 4% edge. No item touches it. */
 export interface SoloGameResult {
   ok: boolean;
-  result: string;
-  score: number;
   won: boolean;
   rub_delta: number;
   new_rub: number;
-  is_draw?: boolean;
-  player_score?: number;
-  ai_score?: number;
-  history?: SoloThrowRound[];
+  player_score: number;
+  ai_score: number;
+  history: SoloThrowRound[];
+  result: string;
 }
 
 export interface CocktailGuessResult {

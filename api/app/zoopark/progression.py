@@ -1,723 +1,861 @@
+"""Packs, localities, breeding and expeditions — the GDD's core loop."""
+
 from __future__ import annotations
 
 import json
-import random
 from datetime import datetime, timedelta, timezone
+from random import SystemRandom
+from typing import cast
 
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import BreedingEvent, Expedition, ExpeditionAnimal, Locality, PackAnimal, PackOpening, User
+from api.app.db.models import (
+    Animal,
+    BreedingAttempt,
+    Expedition,
+    ExpeditionMember,
+    Locality,
+    PackOpening,
+    Player,
+    utcnow,
+)
 from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, StartExpeditionBody
-from api.app.zoopark.catalog import ANIMALS
-from api.app.zoopark.income import pack_animal_income, sync_passive_balance
-from api.app.zoopark.profile import get_user
+from api.app.zoopark import bonuses as bonuses_module
+from api.app.zoopark import ledger
+from api.app.zoopark.catalog import (
+    EXPEDITION_SICK_CHANCE,
+    EXPEDITION_SQUAD_MAX,
+    EXPEDITION_SQUAD_MIN,
+    EXPEDITION_WILD_SCALE,
+    EXPEDITIONS,
+    GENE_ROLL_WEIGHTS,
+    GENE_TIERS,
+    HABITATS,
+    LIFESPAN_DAYS,
+    LOCALITY_BASE_PRICE_RUB,
+    LOCALITY_PRICE_GROWTH,
+    MAX_LOCALITIES,
+    PackTier,
+    SPECIES_IDS_BY_RARITY,
+    SPECIES_RARITY_WEIGHTS,
+    BREED_WORSE_GENE_CHANCE,
+    BREED_TIER_INDEX,
+    GeneTier,
+    Habitat,
+    ANIMAL_NAME_POOL,
+    breed_success_rate,
+    combat_power,
+    DAILY_GIFT_TIER_WEIGHTS,
+    PACK_TIER_ORDER,
+    pack_price_usd_for_tier,
+    pack_reward_range,
+)
+from api.app.zoopark.income import (
+    alive_clause,
+    available_animals,
+    on_expedition_subquery,
+    sync_player_income,
+)
+from api.app.zoopark.profile import animal_payload, get_player
 from api.app.zoopark.season import ensure_player_season
 
-
-PACK_PROPERTIES = ["low", "low", "low", "low", "medium", "medium", "medium", "medium", "high", "high"]
-HABITATS = ["desert", "mountains", "forest", "fields", "antarctica"]
-PACK_BASE_PRICE = 2000
-PACK_MULTIPLIER = 2.0
-PACK_SURVIVAL_DAYS = {"low": 4, "medium": 8, "high": 15}
-LOCALITY_BASE_PRICE = 50_000
-BREED_RATES: dict[tuple[str, str], float] = {
-    ("low", "low"): 0.30,
-    ("low", "medium"): 0.45,
-    ("medium", "low"): 0.45,
-    ("medium", "medium"): 0.60,
-    ("medium", "high"): 0.75,
-    ("high", "medium"): 0.75,
-    ("high", "high"): 0.90,
-}
-TRAIT_TIERS = {"low": 0, "medium": 1, "high": 2}
-COMBAT_TIERS: dict[str, int] = {"low": 1, "medium": 2, "high": 3}
-EXPEDITION_PARAMS: dict[str, dict] = {
-    "fields": {"minutes": 60, "chances": [0.25, 0.45, 0.30]},
-    "desert": {"minutes": 120, "chances": [0.20, 0.45, 0.35]},
-    "forest": {"minutes": 150, "chances": [0.20, 0.45, 0.35]},
-    "mountains": {"minutes": 180, "chances": [0.15, 0.45, 0.40]},
-    "antarctica": {"minutes": 240, "chances": [0.10, 0.45, 0.45]},
-}
+random = SystemRandom()
 
 
-def locality_next_price(count_owned: int) -> int:
-    if count_owned == 0:
-        return 0
-    return int(LOCALITY_BASE_PRICE * (1.5 ** (count_owned - 1)))
+# ─── Rolling an animal ────────────────────────────────────────────────────────
 
 
-def breed_trait(trait1: str, trait2: str) -> str:
-    if trait1 == trait2:
-        return trait1
-    worse = trait1 if TRAIT_TIERS[trait1] < TRAIT_TIERS[trait2] else trait2
-    better = trait2 if TRAIT_TIERS[trait1] < TRAIT_TIERS[trait2] else trait1
-    return worse if random.random() < 0.6 else better
+def roll_gene(weights: tuple[float, float, float] = GENE_ROLL_WEIGHTS) -> GeneTier:
+    return random.choices(GENE_TIERS, weights=weights)[0]
 
 
-def ensure_first_locality(session: Session, user_id: int, season_id: int) -> None:
-    count = session.query(Locality).filter(Locality.user_id == user_id, Locality.season_id == season_id).count()
-    if count == 0:
-        session.add(Locality(
-            user_id=user_id, season_id=season_id, habitat=random.choice(HABITATS),
-            created_at=datetime.now(timezone.utc),
-        ))
-        session.flush()
-
-
-def pack_next_price(packs_today: int) -> int:
-    if packs_today == 0:
-        return 0
-    return int(PACK_BASE_PRICE * (PACK_MULTIPLIER ** (packs_today - 1)))
-
-
-def roll_pack_animal() -> dict:
+def roll_genes(weights: tuple[float, float, float] = GENE_ROLL_WEIGHTS) -> dict[str, GeneTier]:
     return {
-        "survival": random.choice(PACK_PROPERTIES),
-        "reproduction": random.choice(PACK_PROPERTIES),
-        "appearance": random.choice(PACK_PROPERTIES),
-        "size_trait": random.choice(PACK_PROPERTIES),
-        "habitat": random.choice(HABITATS),
+        "gene_survival": roll_gene(weights),
+        "gene_reproduction": roll_gene(weights),
+        "gene_appearance": roll_gene(weights),
+        "gene_size": roll_gene(weights),
     }
 
 
-def get_pack_state(session: Session, user_id: int, season_id: int) -> tuple[int, bool]:
-    today = datetime.now(timezone.utc).date()
-    start = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
-    end = start + timedelta(days=1)
-    count = session.query(PackOpening).filter(
-        PackOpening.user_id == user_id,
-        PackOpening.season_id == season_id,
-        PackOpening.opened_at >= start,
-        PackOpening.opened_at < end,
-    ).count()
-    return count, count > 0
+def roll_habitat() -> Habitat:
+    return random.choice(HABITATS)
 
 
-def random_animal_info_id() -> int:
-    return random.randint(1, len(ANIMALS))
+def roll_animal_name() -> str:
+    return random.choice(ANIMAL_NAME_POOL)
 
 
-def active_expedition_animal_ids(session: Session):
-    return (
-        session.query(ExpeditionAnimal.animal_id)
-        .join(Expedition, Expedition.id == ExpeditionAnimal.expedition_id)
-        .filter(Expedition.status == "active")
-        .subquery()
+def roll_daily_gift_tier() -> str:
+    """The free daily gift's tier: usually rare, rarely legendary/mythic."""
+    tiers = list(DAILY_GIFT_TIER_WEIGHTS)
+    return random.choices(tiers, weights=[DAILY_GIFT_TIER_WEIGHTS[t] for t in tiers])[0]
+
+
+def daily_gift_odds() -> list[dict]:
+    """Per-tier drop chance of the free gift, as whole-percent ints for display."""
+    total = sum(DAILY_GIFT_TIER_WEIGHTS.values())
+    return [
+        {"tier": tier, "percent": round(weight / total * 100)}
+        for tier, weight in DAILY_GIFT_TIER_WEIGHTS.items()
+    ]
+
+
+def roll_species_id() -> int:
+    """Cosmetic. GDD §3 keeps species out of the income formula, so the rarity weights
+    below decide which skin you get and nothing else."""
+    rarity = random.choices(list(SPECIES_RARITY_WEIGHTS), weights=list(SPECIES_RARITY_WEIGHTS.values()))[0]
+    return random.choice(SPECIES_IDS_BY_RARITY[rarity])
+
+
+def dies_at_for(survival: GeneTier, now: datetime | None = None) -> datetime:
+    return (now or utcnow()) + timedelta(days=LIFESPAN_DAYS[survival])
+
+
+def create_animal(
+    session: Session,
+    *,
+    player_id: int,
+    season_id: int,
+    origin: str,
+    genes: dict[str, GeneTier],
+    habitat: Habitat,
+    species_id: int | None = None,
+    parent_a_id: int | None = None,
+    parent_b_id: int | None = None,
+) -> Animal:
+    now = utcnow()
+    animal = Animal(
+        player_id=player_id,
+        season_id=season_id,
+        species_id=species_id or roll_species_id(),
+        name=roll_animal_name(),
+        habitat=habitat,
+        origin=origin,
+        acquired_at=now,
+        dies_at=dies_at_for(genes["gene_survival"], now),
+        parent_a_id=parent_a_id,
+        parent_b_id=parent_b_id,
+        **genes,
     )
+    session.add(animal)
+    session.flush()
+    return animal
 
 
-def expire_dead_pack_animals(session: Session, user_id: int) -> None:
-    now = datetime.now(timezone.utc)
-    session.query(PackAnimal).filter(
-        PackAnimal.user_id == user_id,
-        PackAnimal.is_alive == 1,
-        PackAnimal.dies_at.isnot(None),
-        PackAnimal.dies_at <= now,
-    ).update({"is_alive": 0})
+# ─── Packs ────────────────────────────────────────────────────────────────────
 
 
-def format_pack_animal(animal: PackAnimal, locality_habitat: str | None = None) -> dict:
-    habitat_bonus = 1.5 if locality_habitat and locality_habitat == animal.habitat else 1.0
-    return {
-        "id": animal.id,
-        "animal_info_id": getattr(animal, "animal_info_id", None),
-        "survival": animal.survival,
-        "reproduction": animal.reproduction,
-        "appearance": animal.appearance,
-        "size_trait": animal.size_trait,
-        "habitat": animal.habitat,
-        "source": getattr(animal, "source", "pack"),
-        "acquired_at": animal.acquired_at.isoformat() if hasattr(animal.acquired_at, "isoformat") else str(animal.acquired_at),
-        "dies_at": animal.dies_at.isoformat() if animal.dies_at and hasattr(animal.dies_at, "isoformat") else (str(animal.dies_at) if animal.dies_at else None),
-        "locality_id": animal.locality_id,
-        "can_breed": animal.last_bred_date != datetime.now(timezone.utc).date(),
-        "income": pack_animal_income(animal, habitat_bonus),
-        "habitat_bonus": habitat_bonus > 1.0,
-    }
+def _utc_day_bounds(now: datetime) -> tuple[datetime, datetime]:
+    start = now.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    return start, start + timedelta(days=1)
 
 
-def animal_combat_power(animal: PackAnimal) -> int:
-    return COMBAT_TIERS[animal.size_trait] * 3 + COMBAT_TIERS[animal.survival] * 2 + COMBAT_TIERS[animal.appearance]
-
-
-def roll_trait_weighted(chances: list[float]) -> str:
-    roll = random.random()
-    if roll < chances[0]:
-        return "low"
-    if roll < chances[0] + chances[1]:
-        return "medium"
-    return "high"
-
-
-def resolve_expedition(session: Session, expedition_id: int, habitat: str, user_id: int, season_id: int) -> dict:
-    squad = (
-        session.query(PackAnimal)
-        .join(ExpeditionAnimal, ExpeditionAnimal.animal_id == PackAnimal.id)
-        .filter(ExpeditionAnimal.expedition_id == expedition_id)
-        .all()
-    )
-    squad_power = sum(animal_combat_power(animal) for animal in squad)
-
-    chances = EXPEDITION_PARAMS[habitat]["chances"]
-    wild_props = {
-        "survival": roll_trait_weighted(chances),
-        "reproduction": roll_trait_weighted(chances),
-        "appearance": roll_trait_weighted(chances),
-        "size_trait": roll_trait_weighted(chances),
-        "habitat": habitat,
-    }
-    wild_power = COMBAT_TIERS[wild_props["size_trait"]] * 3 + COMBAT_TIERS[wild_props["survival"]] * 2 + COMBAT_TIERS[wild_props["appearance"]]
-    result: dict[str, object] = {"squad_power": squad_power, "wild_power": wild_power, "wild": wild_props}
-
-    if squad_power >= wild_power:
-        dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[wild_props["survival"]])
-        new_animal = PackAnimal(
-            user_id=user_id,
-            season_id=season_id,
-            animal_info_id=random_animal_info_id(),
-            survival=wild_props["survival"],
-            reproduction=wild_props["reproduction"],
-            appearance=wild_props["appearance"],
-            size_trait=wild_props["size_trait"],
-            habitat=wild_props["habitat"],
-            source="expedition",
-            dies_at=dies_at,
-            acquired_at=datetime.now(timezone.utc),
+def _openings_today(session: Session, player_id: int, season_id: int) -> list[PackOpening]:
+    start, end = _utc_day_bounds(utcnow())
+    return list(session.scalars(
+        select(PackOpening).where(
+            PackOpening.player_id == player_id,
+            PackOpening.season_id == season_id,
+            PackOpening.opened_at >= start,
+            PackOpening.opened_at < end,
         )
-        session.add(new_animal)
-        session.flush()
-        result["outcome"] = "victory"
-        result["reward_animal_id"] = new_animal.id
-    else:
-        alive_squad = [animal for animal in squad if animal.is_alive]
-        killed_id = None
-        if alive_squad:
-            victim = random.choice(alive_squad)
-            victim.is_alive = 0
-            killed_id = victim.id
-        result["outcome"] = "defeat"
-        result["killed_id"] = killed_id
-
-    expedition = session.get(Expedition, expedition_id)
-    if expedition:
-        expedition.status = "finished"
-        expedition.result_json = json.dumps(result)
-    return result
+    ).all())
 
 
-def format_expedition_dt(value) -> str:
-    if value is None:
-        return ""
-    if hasattr(value, "isoformat"):
-        result = value.isoformat()
-        if "+" not in result and "Z" not in result and not result.endswith("+00:00"):
-            result += "+00:00"
-        return result
-    return str(value)
+def _paid_tiers_today(openings: list[PackOpening]) -> set[str]:
+    """Tiers the player has bought (price > 0) today — these unlock the next tier."""
+    return {o.tier for o in openings if int(o.price_paid_rub) > 0}
 
 
-def api_packs_info(tg_id: int):
+def _gift_claimed_today(openings: list[PackOpening]) -> bool:
+    """The free daily gift is recorded as a price-0 opening."""
+    return any(int(o.price_paid_rub) == 0 for o in openings)
+
+
+def tier_unlocked(tier: str, paid_tiers: set[str]) -> bool:
+    """Rare is always open; every higher tier unlocks once the one below it is bought."""
+    idx = PACK_TIER_ORDER.index(tier)
+    if idx == 0:
+        return True
+    return PACK_TIER_ORDER[idx - 1] in paid_tiers
+
+
+def list_available_animals(tg_id: int) -> dict:
+    """Alive, and not already committed to an expedition.
+
+    Breeding used to read this out of `GET /api/packs/info`, which had no business
+    knowing about it.
+    """
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id)
+        if not player:
             raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        animals = available_animals(session, player.id, season.id)
+        session.commit()
+        return {"animals": [animal_payload(a, None, bonuses) for a in animals]}
 
-        season = ensure_player_season(session, user)
-        packs_today, _ = get_pack_state(session, user.id, season.id)
-        expire_dead_pack_animals(session, user.id)
-        active_ids = active_expedition_animal_ids(session)
-        animals = (
-            session.query(PackAnimal)
-            .filter(
-                PackAnimal.user_id == user.id,
-                PackAnimal.season_id == season.id,
-                PackAnimal.is_alive == 1,
-                PackAnimal.id.not_in(active_ids),
-            )
-            .order_by(PackAnimal.acquired_at.desc())
-            .all()
-        )
+
+def packs_info(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        openings = _openings_today(session, player.id, season.id)
+        paid_tiers = _paid_tiers_today(openings)
+        pack_discount = bonuses_module.load(session, player.id).pack_discount_multiplier()
+        session.commit()
+        tiers = [
+            {
+                "tier": tier,
+                "price": pack_price_usd_for_tier(tier, pack_discount),
+                "unlocked": tier_unlocked(tier, paid_tiers),
+                "reward_range": pack_reward_range(tier),
+            }
+            for tier in PACK_TIER_ORDER
+        ]
         return {
-            "packs_today": packs_today,
-            "free_available": packs_today == 0,
-            "next_price": pack_next_price(packs_today),
-            "animals": [format_pack_animal(a) for a in animals],
+            "gift_available": not _gift_claimed_today(openings),
+            "gift_odds": daily_gift_odds(),
+            "tiers": tiers,
         }
 
 
-def api_packs_open(tg_id: int):
+def open_pack(tg_id: int, tier: str | None = None) -> dict:
+    """Open a pack. `tier=None` opens the free daily gift (random tier, once a day); a tier
+    name buys that tier — allowed only if it is unlocked, and repeatable at a fixed price."""
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        # The row lock serialises opening so the daily-gift / unlock checks can't race.
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        user, _income, _expenses = sync_passive_balance(session, user)
-        season = ensure_player_season(session, user)
+        sync_player_income(session, player)
+        season = ensure_player_season(session, player)
 
-        rub = user.rub
-        packs_today, _date_is_today = get_pack_state(session, user.id, season.id)
-        price = pack_next_price(packs_today)
-        if price > 0 and rub < price:
-            raise HTTPException(400, f"Недостаточно ₽ (нужно {price})")
+        openings = _openings_today(session, player.id, season.id)
+        bonuses = bonuses_module.load(session, player.id)
+        if tier is None:
+            # The free daily gift: one per day, random tier weighted toward rare.
+            if _gift_claimed_today(openings):
+                raise HTTPException(400, "Ежедневный подарок уже получен сегодня")
+            tier = roll_daily_gift_tier()
+            price = 0
+        else:
+            if tier not in PACK_TIER_ORDER:
+                raise HTTPException(400, "Неизвестный тир пака")
+            if not tier_unlocked(tier, _paid_tiers_today(openings)):
+                raise HTTPException(400, "Этот тир ещё не открыт — сначала открой предыдущий")
+            price = pack_price_usd_for_tier(tier, bonuses.pack_discount_multiplier())
+        tier = cast(PackTier, tier)
+        rewards = pack_reward_range(tier)
 
         if price > 0:
-            user.rub -= price
+            ledger.spend(session, player, "usd", price, "pack_open")
 
-        props = roll_pack_animal()
-        dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[props["survival"]])
-        now = datetime.now(timezone.utc)
-        new_animal = PackAnimal(
-            user_id=user.id,
-            season_id=season.id,
-            animal_info_id=random_animal_info_id(),
-            survival=props["survival"],
-            reproduction=props["reproduction"],
-            appearance=props["appearance"],
-            size_trait=props["size_trait"],
-            habitat=props["habitat"],
-            source="pack",
-            dies_at=dies_at,
-            acquired_at=now,
-        )
-        session.add(new_animal)
-        session.flush()
-        animal_id = new_animal.id
-
-        new_count = packs_today + 1
-        session.add(PackOpening(
-            user_id=user.id,
-            season_id=season.id,
-            animal_id=animal_id,
-            opened_at=now,
-            price_paid=price,
-            is_free=price == 0,
-        ))
-
-        session.commit()
-        return {
-            "ok": True,
-            "price_paid": price,
-            "new_rub": user.rub,
-            "packs_today": new_count,
-            "next_price": pack_next_price(new_count),
-            "animal": {
-                "id": animal_id,
-                **props,
-                "acquired_at": now.isoformat(),
-                "dies_at": dies_at.isoformat(),
-                "locality_id": None,
-                "can_breed": True,
-                "income": pack_animal_income(new_animal),
-            },
-        }
-
-
-def api_get_localities(tg_id: int):
-    with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
-            raise HTTPException(404, "Нет игрока")
-
-        season = ensure_player_season(session, user)
-        ensure_first_locality(session, user.id, season.id)
-        localities_raw = (
-            session.query(Locality)
-            .filter(Locality.user_id == user.id, Locality.season_id == season.id)
-            .order_by(Locality.created_at)
-            .all()
-        )
-        expire_dead_pack_animals(session, user.id)
-        active_ids = active_expedition_animal_ids(session)
-        animals_raw = (
-            session.query(PackAnimal)
-            .filter(
-                PackAnimal.user_id == user.id,
-                PackAnimal.season_id == season.id,
-                PackAnimal.is_alive == 1,
-                PackAnimal.id.not_in(active_ids),
+        # Genes always roll 40/40/20 and habitats stay uniform. Higher pack tiers add
+        # reward quantity, while each animal keeps the same independent genetics roll.
+        animals = [
+            create_animal(
+                session,
+                player_id=player.id,
+                season_id=season.id,
+                origin="pack",
+                genes=roll_genes(),
+                habitat=roll_habitat(),
             )
-            .order_by(PackAnimal.acquired_at.desc())
-            .all()
+            for _ in range(random.randint(*rewards["animals"]))
+        ]
+        opening = PackOpening(
+            player_id=player.id,
+            season_id=season.id,
+            animal_id=animals[0].id,
+            tier=tier,
+            # Packs are now paid in dollars; this write-only audit column keeps its legacy
+            # name but records the dollar price paid.
+            price_paid_rub=price,
         )
+        session.add(opening)
+        session.flush()
+        rub_reward = random.randint(*rewards["rub"])
+        usd_reward = random.randint(*rewards["usd"])
+        ledger.grant(session, player, "rub", rub_reward, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
+        ledger.grant(session, player, "usd", usd_reward, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
+
+        sync_player_income(session, player, bonuses)
+        animal_payloads = [animal_payload(animal, None, bonuses) for animal in animals]
+        # Recompute today's state so the client can refresh unlocks/gift without a round trip.
+        openings_after = _openings_today(session, player.id, season.id)
+        paid_after = _paid_tiers_today(openings_after)
+        was_gift = price == 0
+        result = {
+            "ok": True,
+            "tier": tier,
+            "is_gift": was_gift,
+            "price_paid": price,
+            "new_rub": ledger.balance(player, "rub"),
+            "new_usd": ledger.balance(player, "usd"),
+            "gift_available": not _gift_claimed_today(openings_after),
+            "unlocked_tiers": [t for t in PACK_TIER_ORDER if tier_unlocked(t, paid_after)],
+            "rewards": {"rub": rub_reward, "usd": usd_reward},
+            "animals": animal_payloads,
+            # Kept until all deployed clients use the bundle response.
+            "animal": animal_payloads[0],
+        }
+        session.commit()
+        return result
+
+
+# ─── Localities ───────────────────────────────────────────────────────────────
+
+
+def locality_price_rub(owned_count: int, discount_multiplier: float = 1.0) -> int:
+    """GDD §5: the first is free, then Базовая цена × 1.5^(кол-во купленных)."""
+    if owned_count == 0:
+        return 0
+    base = LOCALITY_BASE_PRICE_RUB * (LOCALITY_PRICE_GROWTH ** (owned_count - 1))
+    return int(base * discount_multiplier)
+
+
+def ensure_first_locality(session: Session, player_id: int, season_id: int) -> None:
+    """GDD §5: the first locality is free and random. Granted at registration; this stays
+    idempotent so a player who registered before it existed still gets one."""
+    existing = session.scalars(
+        select(Locality.id).where(Locality.player_id == player_id, Locality.season_id == season_id)
+    ).all()
+    if existing:
+        return
+    try:
+        with session.begin_nested():
+            session.add(
+                Locality(
+                    player_id=player_id,
+                    season_id=season_id,
+                    habitat=roll_habitat(),
+                    price_paid_rub=0,
+                )
+            )
+    except IntegrityError:
+        pass
+
+
+def list_localities(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        ensure_first_locality(session, player.id, season.id)
+
+        localities = session.scalars(
+            select(Locality)
+            .where(Locality.player_id == player.id, Locality.season_id == season.id)
+            .order_by(Locality.purchased_at.asc(), Locality.id.asc())
+        ).all()
+        bonuses = bonuses_module.load(session, player.id)
+        animals = available_animals(session, player.id, season.id)
         session.commit()
 
-        buckets: dict[int | None, list[PackAnimal]] = {loc.id: [] for loc in localities_raw}
+        by_id = {loc.id: loc for loc in localities}
+        buckets: dict[int | None, list[Animal]] = {loc.id: [] for loc in localities}
         buckets[None] = []
-        for animal in animals_raw:
-            key = animal.locality_id if animal.locality_id in buckets else None
-            buckets[key].append(animal)
+        for animal in animals:
+            buckets[animal.locality_id if animal.locality_id in by_id else None].append(animal)
 
+        owned = len(localities)
         return {
             "localities": [
                 {
                     "id": loc.id,
                     "habitat": loc.habitat,
-                    "animals": [format_pack_animal(a, loc.habitat) for a in buckets[loc.id]],
+                    "animals": [animal_payload(a, loc.habitat, bonuses) for a in buckets[loc.id]],
                 }
-                for loc in localities_raw
+                for loc in localities
             ],
-            "unassigned": [format_pack_animal(a) for a in buckets[None]],
-            "next_price": locality_next_price(len(localities_raw)) if len(localities_raw) < 5 else None,
-            "habitats_taken": [loc.habitat for loc in localities_raw],
+            "unassigned": [animal_payload(a, None, bonuses) for a in buckets[None]],
+            "next_price": locality_price_rub(owned, bonuses.locality_discount_multiplier()) if owned < MAX_LOCALITIES else None,
+            "habitats_taken": [loc.habitat for loc in localities],
+            "max_localities": MAX_LOCALITIES,
         }
 
 
-def api_buy_locality(tg_id: int, body: BuyLocalityBody):
+def buy_locality(tg_id: int, body: BuyLocalityBody) -> dict:
     if body.habitat not in HABITATS:
         raise HTTPException(400, "Неверная среда обитания")
 
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        user, _income, _expenses = sync_passive_balance(session, user)
-        season = ensure_player_season(session, user)
+        sync_player_income(session, player)
+        season = ensure_player_season(session, player)
 
-        localities = session.query(Locality).filter(Locality.user_id == user.id, Locality.season_id == season.id).all()
-        count = len(localities)
-        taken = [loc.habitat for loc in localities]
-
-        if count >= 5:
-            raise HTTPException(400, "Достигнут максимум местностей (5)")
-        if body.habitat in taken:
+        localities = session.scalars(
+            select(Locality).where(Locality.player_id == player.id, Locality.season_id == season.id)
+        ).all()
+        if len(localities) >= MAX_LOCALITIES:
+            raise HTTPException(400, f"Достигнут максимум местностей ({MAX_LOCALITIES})")
+        if any(loc.habitat == body.habitat for loc in localities):
             raise HTTPException(400, "Эта местность уже открыта")
 
-        price = locality_next_price(count)
-        if price > 0 and user.rub < price:
-            raise HTTPException(400, f"Недостаточно ₽ (нужно {price:,})")
-
+        bonuses = bonuses_module.load(session, player.id)
+        price = locality_price_rub(len(localities), bonuses.locality_discount_multiplier())
         if price > 0:
-            user.rub -= price
+            ledger.spend(session, player, "rub", price, "locality_buy")
 
-        new_loc = Locality(user_id=user.id, season_id=season.id, habitat=body.habitat, created_at=datetime.now(timezone.utc))
-        session.add(new_loc)
-        session.flush()
-        locality_id = new_loc.id
+        locality = Locality(
+            player_id=player.id,
+            season_id=season.id,
+            habitat=body.habitat,
+            price_paid_rub=price,
+        )
+        session.add(locality)
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            raise HTTPException(400, "Эта местность уже открыта") from exc
+
+        result = {
+            "ok": True,
+            "id": locality.id,
+            "habitat": locality.habitat,
+            "price_paid": price,
+            "new_rub": ledger.balance(player, "rub"),
+        }
         session.commit()
-        return {"ok": True, "id": locality_id, "habitat": body.habitat, "price_paid": price, "new_rub": user.rub}
+        return result
 
 
-def api_assign_locality(tg_id: int, body: AssignLocalityBody):
+def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
+        season = ensure_player_season(session, player)
 
-        animal = session.query(PackAnimal).filter(
-            PackAnimal.id == body.animal_id,
-            PackAnimal.user_id == user.id,
-            PackAnimal.season_id == season.id,
-            PackAnimal.is_alive == 1,
+        animal = session.scalars(
+            select(Animal).where(
+                Animal.id == body.animal_id,
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+            )
         ).first()
         if not animal:
             raise HTTPException(404, "Животное не найдено")
 
         if body.locality_id is not None:
-            loc = session.query(Locality).filter(
-                Locality.id == body.locality_id, Locality.user_id == user.id, Locality.season_id == season.id
+            locality = session.scalars(
+                select(Locality).where(
+                    Locality.id == body.locality_id,
+                    Locality.player_id == player.id,
+                    Locality.season_id == season.id,
+                )
             ).first()
-            if not loc:
+            if not locality:
                 raise HTTPException(404, "Местность не найдена")
 
         animal.locality_id = body.locality_id
+        # Moving an animal into (or out of) its habitat changes income by 50%.
+        sync_player_income(session, player)
+        result = {"ok": True, "income_rub_per_min": player.income_rub_per_min}
         session.commit()
-        return {"ok": True}
+        return result
 
 
-def api_breed(tg_id: int, body: BreedBody):
+# ─── Breeding ─────────────────────────────────────────────────────────────────
+
+
+def inherit_gene(a: GeneTier, b: GeneTier) -> GeneTier:
+    """GDD §6: identical genes pass through; otherwise the worse one wins 60% of the time."""
+    if a == b:
+        return a
+    worse, better = (a, b) if BREED_TIER_INDEX[a] < BREED_TIER_INDEX[b] else (b, a)
+    return worse if random.random() < BREED_WORSE_GENE_CHANCE else better
+
+
+def breed(tg_id: int, body: BreedBody) -> dict:
     if body.animal_id_1 == body.animal_id_2:
         raise HTTPException(400, "Нельзя скрещивать животное с самим собой")
 
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        # Lock the player so two parallel calls cannot both pass the `last_bred_on` check.
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
+        season = ensure_player_season(session, player)
 
-        today = datetime.now(timezone.utc).date()
-        active_ids = active_expedition_animal_ids(session)
-        animals = (
-            session.query(PackAnimal)
-            .filter(
-                PackAnimal.id.in_([body.animal_id_1, body.animal_id_2]),
-                PackAnimal.user_id == user.id,
-                PackAnimal.season_id == season.id,
-                PackAnimal.is_alive == 1,
-                PackAnimal.id.not_in(active_ids),
+        today = utcnow().date()
+        parents = session.scalars(
+            select(Animal)
+            .where(
+                Animal.id.in_([body.animal_id_1, body.animal_id_2]),
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
             )
-            .all()
-        )
-        by_id = {a.id: a for a in animals}
+            .with_for_update()
+        ).all()
+        by_id = {a.id: a for a in parents}
         if len(by_id) != 2:
-            raise HTTPException(404, "Одно или оба животных не найдены")
+            raise HTTPException(404, "Одно или оба животных недоступны")
 
-        parent1 = by_id[body.animal_id_1]
-        parent2 = by_id[body.animal_id_2]
-        for parent in (parent1, parent2):
-            if parent.last_bred_date == today:
+        parent_a, parent_b = by_id[body.animal_id_1], by_id[body.animal_id_2]
+        if parent_a.species_id != parent_b.species_id:
+            raise HTTPException(400, "Скрещивать можно только животных одного вида")
+        for parent in (parent_a, parent_b):
+            if parent.last_bred_on == today:
                 raise HTTPException(400, "Одно из животных уже скрещивалось сегодня")
 
-        rate = BREED_RATES.get(
-            (parent1.reproduction, parent2.reproduction),
-            BREED_RATES.get((parent2.reproduction, parent1.reproduction), 0.60),
-        )
-        success = random.random() < rate
-        parent1.last_bred_date = today
-        parent2.last_bred_date = today
+        rate = breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction)  # type: ignore[arg-type]
+        succeeded = random.random() < rate
+        parent_a.last_bred_on = today
+        parent_b.last_bred_on = today
 
-        offspring = None
-        if success:
-            props = {
-                "survival": breed_trait(parent1.survival, parent2.survival),
-                "reproduction": breed_trait(parent1.reproduction, parent2.reproduction),
-                "appearance": breed_trait(parent1.appearance, parent2.appearance),
-                "size_trait": breed_trait(parent1.size_trait, parent2.size_trait),
-                "habitat": random.choice([parent1.habitat, parent2.habitat]),
+        child = None
+        if succeeded:
+            genes = {
+                "gene_survival": inherit_gene(parent_a.gene_survival, parent_b.gene_survival),  # type: ignore[arg-type]
+                "gene_reproduction": inherit_gene(parent_a.gene_reproduction, parent_b.gene_reproduction),  # type: ignore[arg-type]
+                "gene_appearance": inherit_gene(parent_a.gene_appearance, parent_b.gene_appearance),  # type: ignore[arg-type]
+                "gene_size": inherit_gene(parent_a.gene_size, parent_b.gene_size),  # type: ignore[arg-type]
             }
-            dies_at = datetime.now(timezone.utc) + timedelta(days=PACK_SURVIVAL_DAYS[props["survival"]])
-            now = datetime.now(timezone.utc)
-            new_animal = PackAnimal(
-                user_id=user.id,
+            child = create_animal(
+                session,
+                player_id=player.id,
                 season_id=season.id,
-                animal_info_id=random.choice([parent1.animal_info_id, parent2.animal_info_id]),
-                survival=props["survival"],
-                reproduction=props["reproduction"],
-                appearance=props["appearance"],
-                size_trait=props["size_trait"],
-                habitat=props["habitat"],
-                source="breeding",
-                parent_1_id=parent1.id,
-                parent_2_id=parent2.id,
-                dies_at=dies_at,
-                acquired_at=now,
+                origin="breeding",
+                genes=genes,
+                # GDD §6: the child's habitat comes from one parent, 50/50.
+                habitat=cast(Habitat, random.choice([parent_a.habitat, parent_b.habitat])),
+                species_id=random.choice([parent_a.species_id, parent_b.species_id]),
+                parent_a_id=parent_a.id,
+                parent_b_id=parent_b.id,
             )
-            session.add(new_animal)
-            session.flush()
-            offspring = {
-                "id": new_animal.id,
-                **props,
-                "acquired_at": now.isoformat(),
-                "dies_at": dies_at.isoformat(),
-                "locality_id": None,
-                "can_breed": False,
-                "habitat_bonus": False,
-                "income": pack_animal_income(new_animal),
-            }
-        session.add(BreedingEvent(
-            user_id=user.id,
-            season_id=season.id,
-            parent_1_id=parent1.id,
-            parent_2_id=parent2.id,
-            child_id=new_animal.id if success and offspring else None,
-            success_rate=int(rate * 100),
-            success=1 if success else 0,
-            created_at=datetime.now(timezone.utc),
-        ))
+
+        session.add(
+            BreedingAttempt(
+                player_id=player.id,
+                season_id=season.id,
+                parent_a_id=parent_a.id,
+                parent_b_id=parent_b.id,
+                child_id=child.id if child else None,
+                success_rate_pct=int(rate * 100),
+                succeeded=succeeded,
+            )
+        )
+
+        bonuses = bonuses_module.load(session, player.id)
+        sync_player_income(session, player, bonuses)
+        result = {
+            "ok": True,
+            "success": succeeded,
+            "rate": rate,
+            "animal": animal_payload(child, None, bonuses) if child else None,
+        }
         session.commit()
-        return {"ok": True, "success": success, "rate": rate, "animal": offspring}
+        return result
 
 
-def api_get_expeditions(tg_id: int):
+# ─── Expeditions ──────────────────────────────────────────────────────────────
+
+
+def roll_wild_gene(weights: tuple[float, float, float]) -> GeneTier:
+    return random.choices(GENE_TIERS, weights=weights)[0]
+
+
+def wild_encounter(habitat: Habitat) -> tuple[dict[str, GeneTier], int]:
+    """The beast the squad meets. Its genes follow the habitat's Плохое/Обычное/Хорошее
+    split (GDD §7) and become the captured animal's genes on victory."""
+    weights = EXPEDITIONS[habitat]["gene_weights"]
+    genes = {
+        "gene_survival": roll_wild_gene(weights),
+        "gene_reproduction": roll_wild_gene(weights),
+        "gene_appearance": roll_wild_gene(weights),
+        "gene_size": roll_wild_gene(weights),
+    }
+    raw = combat_power(genes["gene_survival"], genes["gene_appearance"], genes["gene_size"])
+    return genes, int(raw * EXPEDITION_WILD_SCALE)
+
+
+def squad_power(animals: list[Animal]) -> int:
+    return sum(
+        combat_power(
+            cast(GeneTier, a.gene_survival),
+            cast(GeneTier, a.gene_appearance),
+            cast(GeneTier, a.gene_size),
+        )
+        for a in animals
+    )
+
+
+def _resolve(session: Session, expedition: Expedition, player: Player, season_id: int) -> dict:
+    squad = list(
+        session.scalars(
+            select(Animal)
+            .join(ExpeditionMember, ExpeditionMember.animal_id == Animal.id)
+            .where(ExpeditionMember.expedition_id == expedition.id)
+        ).all()
+    )
+    habitat: Habitat = expedition.locality.habitat  # type: ignore[assignment]
+    genes, wild_power = wild_encounter(habitat)
+    power = squad_power(squad)
+
+    now = utcnow()
+    # The client names the size gene `size_trait` everywhere else; keep it one name.
+    wild_payload = {key.removeprefix("gene_"): value for key, value in genes.items()}
+    wild_payload["size_trait"] = wild_payload.pop("size")
+    result: dict = {
+        "squad_power": power,
+        "wild_power": wild_power,
+        "wild": wild_payload,
+        "habitat": habitat,
+    }
+
+    # GDD §7: "Сила отряда ≥ сила дикого → Захват!". The beast is scaled by
+    # EXPEDITION_WILD_SCALE so that the comparison can actually go either way.
+    if power >= wild_power:
+        captured = create_animal(
+            session,
+            player_id=player.id,
+            season_id=season_id,
+            origin="expedition",
+            genes=genes,
+            habitat=habitat,
+        )
+        expedition.outcome = "victory"
+        result["outcome"] = "victory"
+        result["captured_animal_id"] = captured.id
+    else:
+        expedition.outcome = "defeat"
+        result["outcome"] = "defeat"
+        alive = [a for a in squad if a.removed_at is None]
+        victim = random.choice(alive) if alive else None
+        if victim is not None:
+            victim.removed_at = now
+            victim.removal_reason = "expedition_loss"
+            victim.sick_since = None
+        result["killed_animal_id"] = victim.id if victim else None
+        result["sick_animal_ids"] = _wound_survivors(alive, victim, now)
+
+    expedition.resolved_at = now
+    expedition.result_json = json.dumps(result, ensure_ascii=False)
+    return result
+
+
+def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime) -> list[int]:
+    wounded: list[int] = []
+    for animal in squad:
+        if (victim is not None and animal.id == victim.id) or animal.sick_since is not None:
+            continue
+        if random.random() >= EXPEDITION_SICK_CHANCE:
+            continue
+        animal.sick_since = now
+        wounded.append(animal.id)
+    return wounded
+
+
+def _open_expedition(session: Session, player_id: int, season_id: int) -> Expedition | None:
+    return session.scalars(
+        select(Expedition)
+        .where(
+            Expedition.player_id == player_id,
+            Expedition.season_id == season_id,
+            (Expedition.resolved_at.is_(None)) | (Expedition.acknowledged_at.is_(None)),
+        )
+        .order_by(Expedition.started_at.desc())
+        .limit(1)
+    ).first()
+
+
+def get_expeditions(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
 
-        localities = (
-            session.query(Locality)
-            .filter(Locality.user_id == user.id, Locality.season_id == season.id)
-            .order_by(Locality.created_at)
-            .all()
-        )
-        localities_out = [{"id": loc.id, "habitat": loc.habitat} for loc in localities]
+        localities = session.scalars(
+            select(Locality)
+            .where(Locality.player_id == player.id, Locality.season_id == season.id)
+            .order_by(Locality.purchased_at.asc())
+        ).all()
 
-        expedition = (
-            session.query(Expedition)
-            .filter(
-                Expedition.user_id == user.id,
-                Expedition.season_id == season.id,
-                (Expedition.status == "active") | ((Expedition.status == "finished") & (Expedition.result_seen == 0)),
-            )
-            .order_by(Expedition.started_at.desc())
-            .first()
-        )
+        expedition = _open_expedition(session, player.id, season.id)
         active = None
-
-        if expedition:
-            expedition_id = expedition.id
-            expedition_habitat = expedition.locality.habitat
-            if expedition.status == "active":
-                ends_at = expedition.ends_at
-                if hasattr(ends_at, "tzinfo") and ends_at.tzinfo is None:
-                    ends_at = ends_at.replace(tzinfo=timezone.utc)
-                if datetime.now(timezone.utc) >= ends_at:
-                    resolve_expedition(session, expedition_id, expedition_habitat, user.id, season.id)
-                    session.flush()
-                    session.refresh(expedition)
-
-            squad = (
-                session.query(PackAnimal)
-                .join(ExpeditionAnimal, ExpeditionAnimal.animal_id == PackAnimal.id)
-                .filter(ExpeditionAnimal.expedition_id == expedition_id)
-                .all()
-            )
-
-            result_data = None
-            if expedition.status == "finished" and expedition.result_json:
-                result_data = json.loads(expedition.result_json)
-                if result_data.get("outcome") == "victory" and result_data.get("reward_animal_id"):
-                    reward = session.get(PackAnimal, result_data["reward_animal_id"])
-                    if reward:
-                        result_data["captured_animal"] = format_pack_animal(reward)
-
+        if expedition is not None:
+            # Reading never resolves: two concurrent GETs used to roll the outcome twice
+            # and hand out two reward animals.
+            squad = session.scalars(
+                select(Animal)
+                .join(ExpeditionMember, ExpeditionMember.animal_id == Animal.id)
+                .where(ExpeditionMember.expedition_id == expedition.id)
+            ).all()
+            result = json.loads(expedition.result_json) if expedition.result_json else None
+            if result and result.get("captured_animal_id"):
+                captured = session.get(Animal, result["captured_animal_id"])
+                if captured:
+                    result["captured_animal"] = animal_payload(captured, None, bonuses)
             active = {
-                "id": expedition_id,
-                "habitat": expedition_habitat,
-                "started_at": format_expedition_dt(expedition.started_at),
-                "ends_at": format_expedition_dt(expedition.ends_at),
-                "status": expedition.status,
-                "animals": [format_pack_animal(a) for a in squad],
-                "result": result_data,
+                "id": expedition.id,
+                "habitat": expedition.locality.habitat,
+                "started_at": expedition.started_at.isoformat(),
+                "ends_at": expedition.ends_at.isoformat(),
+                "status": "active" if expedition.resolved_at is None else "finished",
+                "animals": [animal_payload(a, None, bonuses) for a in squad],
+                "result": result,
             }
 
-        expire_dead_pack_animals(session, user.id)
-        active_ids = active_expedition_animal_ids(session)
-        available_animals = (
-            session.query(PackAnimal)
-            .filter(
-                PackAnimal.user_id == user.id,
-                PackAnimal.season_id == season.id,
-                PackAnimal.is_alive == 1,
-                PackAnimal.id.not_in(active_ids),
-            )
-            .order_by(PackAnimal.acquired_at.desc())
-            .all()
-        )
+        squad_pool = available_animals(session, player.id, season.id)
         session.commit()
         return {
             "active": active,
-            "localities": localities_out,
-            "available_animals": [format_pack_animal(a) for a in available_animals],
-            "expedition_minutes": {habitat: params["minutes"] for habitat, params in EXPEDITION_PARAMS.items()},
+            "localities": [{"id": loc.id, "habitat": loc.habitat} for loc in localities],
+            "available_animals": [animal_payload(a, None, bonuses) for a in squad_pool],
+            "expedition_minutes": {habitat: spec["minutes"] for habitat, spec in EXPEDITIONS.items()},
+            "squad_min": EXPEDITION_SQUAD_MIN,
+            "squad_max": EXPEDITION_SQUAD_MAX,
         }
 
 
-def api_start_expedition(tg_id: int, body: StartExpeditionBody):
-    if not (3 <= len(body.animal_ids) <= 5):
-        raise HTTPException(400, "Отряд: 3–5 животных")
+def start_expedition(tg_id: int, body: StartExpeditionBody) -> dict:
+    animal_ids = list(dict.fromkeys(body.animal_ids))
+    if len(animal_ids) != len(body.animal_ids):
+        raise HTTPException(400, "Животное указано дважды")
+    if not (EXPEDITION_SQUAD_MIN <= len(animal_ids) <= EXPEDITION_SQUAD_MAX):
+        raise HTTPException(400, f"Отряд: {EXPEDITION_SQUAD_MIN}–{EXPEDITION_SQUAD_MAX} животных")
 
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
+        season = ensure_player_season(session, player)
 
-        existing = session.query(Expedition).filter(
-            Expedition.user_id == user.id,
-            Expedition.season_id == season.id,
-            (Expedition.status == "active") | ((Expedition.status == "finished") & (Expedition.result_seen == 0)),
-        ).first()
-        if existing:
+        if _open_expedition(session, player.id, season.id) is not None:
             raise HTTPException(400, "Уже есть активная или незавершённая экспедиция")
 
-        locality = session.query(Locality).filter(
-            Locality.id == body.locality_id, Locality.user_id == user.id, Locality.season_id == season.id
+        locality = session.scalars(
+            select(Locality).where(
+                Locality.id == body.locality_id,
+                Locality.player_id == player.id,
+                Locality.season_id == season.id,
+            )
         ).first()
         if not locality:
             raise HTTPException(404, "Местность не найдена")
 
-        valid_animals = (
-            session.query(PackAnimal)
-            .filter(
-                PackAnimal.id.in_(body.animal_ids),
-                PackAnimal.user_id == user.id,
-                PackAnimal.season_id == season.id,
-                PackAnimal.is_alive == 1,
-                PackAnimal.id.not_in(active_expedition_animal_ids(session)),
+        squad = session.scalars(
+            select(Animal).where(
+                Animal.id.in_(animal_ids),
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
             )
-            .all()
-        )
-        if len(valid_animals) != len(body.animal_ids):
+        ).all()
+        if len(squad) != len(animal_ids):
             raise HTTPException(400, "Некоторые животные недоступны")
 
-        now = datetime.now(timezone.utc)
-        ends_at = now + timedelta(minutes=EXPEDITION_PARAMS[locality.habitat]["minutes"])
+        now = utcnow()
         expedition = Expedition(
-            user_id=user.id,
+            player_id=player.id,
             season_id=season.id,
             locality_id=locality.id,
             started_at=now,
-            ends_at=ends_at,
+            ends_at=now + timedelta(minutes=EXPEDITIONS[locality.habitat]["minutes"]),  # type: ignore[index]
         )
         session.add(expedition)
-        session.flush()
-        expedition_id = expedition.id
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            # `uq_expeditions_one_active` — someone started one between the check and here.
+            raise HTTPException(400, "Уже есть активная экспедиция") from exc
 
-        for animal_id in body.animal_ids:
-            session.add(ExpeditionAnimal(expedition_id=expedition_id, animal_id=animal_id))
+        for animal in squad:
+            session.add(ExpeditionMember(expedition_id=expedition.id, animal_id=animal.id))
 
-        session.commit()
-        return {
+        bonuses = bonuses_module.load(session, player.id)
+        # Animals on an expedition earn nothing (GDD §7), so income drops immediately.
+        sync_player_income(session, player, bonuses)
+        result = {
             "ok": True,
             "expedition": {
-                "id": expedition_id,
+                "id": expedition.id,
                 "habitat": locality.habitat,
-                "started_at": format_expedition_dt(now),
-                "ends_at": format_expedition_dt(ends_at),
+                "started_at": expedition.started_at.isoformat(),
+                "ends_at": expedition.ends_at.isoformat(),
                 "status": "active",
-                "animals": [format_pack_animal(a) for a in valid_animals],
+                "animals": [animal_payload(a, None, bonuses) for a in squad],
                 "result": None,
             },
         }
+        session.commit()
+        return result
 
 
-def api_finish_expedition(tg_id: int):
+def finish_expedition(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
+        season = ensure_player_season(session, player)
 
-        expedition = (
-            session.query(Expedition)
-            .filter(Expedition.user_id == user.id, Expedition.season_id == season.id, Expedition.status == "active")
+        # FOR UPDATE plus the `resolved_at` re-check make finishing idempotent: the second
+        # caller blocks, then sees the expedition already resolved.
+        expedition = session.scalars(
+            select(Expedition)
+            .where(
+                Expedition.player_id == player.id,
+                Expedition.season_id == season.id,
+                Expedition.resolved_at.is_(None),
+            )
             .order_by(Expedition.started_at.desc())
-            .first()
-        )
+            .with_for_update()
+            .limit(1)
+        ).first()
         if not expedition:
             raise HTTPException(400, "Нет активной экспедиции")
-
-        ends_at = expedition.ends_at
-        if hasattr(ends_at, "tzinfo") and ends_at.tzinfo is None:
-            ends_at = ends_at.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) < ends_at:
+        if utcnow() < expedition.ends_at:
             raise HTTPException(400, "Экспедиция ещё не завершена")
 
-        result = resolve_expedition(session, expedition.id, expedition.locality.habitat, user.id, season.id)
+        result = _resolve(session, expedition, player, season.id)
+
+        bonuses = bonuses_module.load(session, player.id)
+        sync_player_income(session, player, bonuses)
+        if result.get("captured_animal_id"):
+            captured = session.get(Animal, result["captured_animal_id"])
+            if captured:
+                result["captured_animal"] = animal_payload(captured, None, bonuses)
+
         session.commit()
-
-        if result.get("outcome") == "victory" and result.get("reward_animal_id"):
-            reward = session.get(PackAnimal, result["reward_animal_id"])
-            if reward:
-                result["captured_animal"] = format_pack_animal(reward)
-
         return {"ok": True, "result": result}
 
 
-def api_dismiss_expedition(tg_id: int):
+def dismiss_expedition(tg_id: int) -> dict:
     with get_session() as session:
-        user = get_user(session, tg_id)
-        if not user:
+        player = get_player(session, tg_id)
+        if not player:
             raise HTTPException(404, "Нет игрока")
-        season = ensure_player_season(session, user)
-        session.query(Expedition).filter(
-            Expedition.user_id == user.id,
-            Expedition.season_id == season.id,
-            Expedition.status == "finished",
-            Expedition.result_seen == 0,
-        ).update({"result_seen": 1})
+        season = ensure_player_season(session, player)
+        expedition = session.scalars(
+            select(Expedition)
+            .where(
+                Expedition.player_id == player.id,
+                Expedition.season_id == season.id,
+                Expedition.resolved_at.is_not(None),
+                Expedition.acknowledged_at.is_(None),
+            )
+            .with_for_update()
+        ).first()
+        if expedition is not None:
+            expedition.acknowledged_at = utcnow()
         session.commit()
         return {"ok": True}

@@ -47,7 +47,7 @@ export function ReferralPage({ gs }: { gs: GameState }) {
           <div className="card">
             <p className="m-0 mb-[6px] font-bold">🤝 Реферальная ссылка {inviterName}</p>
             <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
-              За каждого приглашённого — <strong className="text-[var(--c-gold)]">$ {fmt(data.reward_usd_per_ref)}</strong>
+              За каждого приглашённого — <strong className="text-[var(--c-gold)]">$ {fmt(data.signup_reward_usd)}</strong>
             </p>
             <div className="surface-subtle px-3 py-[10px] rounded-[10px] mb-[10px] text-[13px] text-tg-hint break-all select-all">
               {refLink}
@@ -78,7 +78,7 @@ export function ReferralPage({ gs }: { gs: GameState }) {
             </div>
             <div className="flex justify-between">
               <span className="text-[13px] text-tg-hint">Заработано</span>
-              <span className="font-bold text-[var(--c-gold)]">$ {fmt(data.total * data.reward_usd_per_ref)}</span>
+              <span className="font-bold text-[var(--c-gold)]">$ {fmt(data.total * data.signup_reward_usd)}</span>
             </div>
           </div>
 

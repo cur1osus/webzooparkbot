@@ -1,0 +1,22 @@
+line-length = 140
+target-version = "py312"
+
+exclude = [".venv", "api/migrations/versions"]
+
+[lint]
+# Deliberately narrow: rules that catch bugs, not rules that reformat existing code.
+# Import sorting (I) and pyupgrade (UP) are left out to keep diffs reviewable.
+select = ["E", "F", "W", "B", "S"]
+ignore = [
+    "E501",  # long lines are pervasive in this codebase and never the cause of a bug
+    "B008",  # FastAPI depends on calls in argument defaults: Header(default="")
+    "S101",  # asserts are used for type narrowing, never for validation
+    "S311",  # game randomness uses SystemRandom; bandit's blanket `random` ban is noise here
+]
+
+[lint.per-file-ignores]
+"api/tests/*" = ["S", "E402", "B011"]
+"api/main.py" = ["E402"]  # the sys.path bootstrap must run before the app imports
+# The leaderboard SQL is assembled from module constants (table names, PACK_INCOME_MULT);
+# every runtime value is a bound parameter. A noqa cannot live inside the f-string itself.
+"api/app/zoopark/social.py" = ["S608"]

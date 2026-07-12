@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'public/tgsticker/**']),
+  globalIgnores(['dist', 'src/lib/tgsticker/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
