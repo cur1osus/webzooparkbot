@@ -4,6 +4,19 @@ export type SpeciesRarity = 'rare' | 'epic' | 'mythic' | 'legendary';
 export type PackTier = 'rare' | 'epic' | 'legendary' | 'mythic';
 export type AnimalOrigin = 'pack' | 'merchant' | 'breeding' | 'expedition';
 
+export interface AnimalIncomeFactor {
+  key: string;
+  label: string;
+  value?: string;
+  multiplier: number;
+}
+
+export interface AnimalIncomeBreakdown {
+  base: number;
+  factors: AnimalIncomeFactor[];
+  total: number;
+}
+
 /**
  * The species is a skin: GDD §3 derives income from genes and habitat only. It carries a
  * name, an emoji and a collection rarity, and nothing else.
@@ -28,6 +41,7 @@ export interface Animal {
   is_sick: boolean;
   can_breed: boolean;
   income: number;
+  income_breakdown?: AnimalIncomeBreakdown;
   /** Price to cure this animal, in dollars (10 hours of its healthy income). */
   cure_cost_usd: number;
   habitat_bonus: boolean;

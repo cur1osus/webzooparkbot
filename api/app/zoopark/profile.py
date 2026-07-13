@@ -14,12 +14,17 @@ from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark.bonuses import Bonuses
 from api.app.zoopark.catalog import (
+    BASE_INCOME_RUB_PER_MIN,
     DIVERSITY_BONUS_PERCENT_PER_SPECIES,
+    GENE_INCOME_MULT,
+    HABITAT_MATCH_BONUS,
     ITEM_PROPERTIES,
     NICKNAME_COLORS,
     PROFILE_FRAMES,
     PROFILE_WALLPAPERS,
     SPECIES_BY_ID,
+    SPECIES_RARITY_INCOME_MULT,
+    SICK_INCOME_MULT,
     PropertyKind,
     item_sell_price_usd,
 )
@@ -124,10 +129,32 @@ def list_item_sets(session: Session, player_id: int) -> list[dict]:
     return payload
 
 
+def animal_income_breakdown(animal: Animal, locality_habitat: str | None, bonuses: Bonuses) -> dict:
+    species = SPECIES_BY_ID[animal.species_id]
+    matches = bool(locality_habitat) and locality_habitat == animal.habitat
+    is_sick = animal.sick_since is not None
+    species_multiplier = bonuses.species_income_multiplier(animal.species_id)
+    factors = [
+        {"key": "survival", "label": "Выживаемость", "value": animal.gene_survival, "multiplier": GENE_INCOME_MULT["survival"][animal.gene_survival]},
+        {"key": "appearance", "label": "Внешность", "value": animal.gene_appearance, "multiplier": GENE_INCOME_MULT["appearance"][animal.gene_appearance]},
+        {"key": "size", "label": "Размер", "value": animal.gene_size, "multiplier": GENE_INCOME_MULT["size"][animal.gene_size]},
+        {"key": "rarity", "label": "Редкость вида", "value": species["rarity"], "multiplier": SPECIES_RARITY_INCOME_MULT[species["rarity"]]},
+        {"key": "habitat", "label": "Родная среда", "value": "да" if matches else "нет", "multiplier": HABITAT_MATCH_BONUS if matches else 1.0},
+        {"key": "sickness", "label": "Здоровье", "value": "болен" if is_sick else "здоров", "multiplier": SICK_INCOME_MULT if is_sick else 1.0},
+        {"key": "species_item", "label": "Предметы вида", "value": "активные" if species_multiplier != 1.0 else "нет", "multiplier": species_multiplier},
+    ]
+    return {
+        "base": BASE_INCOME_RUB_PER_MIN,
+        "factors": factors,
+        "total": animal_income(animal, locality_habitat, bonuses),
+    }
+
+
 def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, today=None, vet_level: int = 0) -> dict:
     species = SPECIES_BY_ID[animal.species_id]
     day = today or utcnow().date()
     matches = bool(locality_habitat) and locality_habitat == animal.habitat
+    income_breakdown = animal_income_breakdown(animal, locality_habitat, bonuses)
     return {
         "id": animal.id,
         "name": animal.name or species["name"],
@@ -146,7 +173,8 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
         "locality_id": animal.locality_id,
         "is_sick": animal.sick_since is not None,
         "can_breed": animal.last_bred_on != day,
-        "income": animal_income(animal, locality_habitat, bonuses),
+        "income": income_breakdown["total"],
+        "income_breakdown": income_breakdown,
         "cure_cost_usd": cure_cost_usd(animal, locality_habitat, bonuses, vet_level),
         "habitat_bonus": matches,
         "parent_a_id": animal.parent_a_id,
