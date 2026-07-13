@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { PublicProfile, TopEntry } from '@/types';
 import { apiGetPublicProfile, apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
@@ -262,6 +262,8 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
 }
 
 export function TopPage() {
+  const topPageRef = useRef<HTMLDivElement>(null);
+  const scrollTopBeforeProfile = useRef(0);
   const [selectedEntry, setSelectedEntry] = useState<TopEntry | null>(null);
   const { data, error, isLoading } = useQuery({
     queryKey: ['top'],
@@ -283,9 +285,22 @@ export function TopPage() {
   const restTitle = rest.length === 1
     ? `Место #${rest[0].rank}`
     : `Топ ${rest[0]?.rank}–${rest[rest.length - 1]?.rank}`;
+  const openProfile = useCallback((entry: TopEntry) => {
+    const scrollContainer = topPageRef.current?.parentElement?.parentElement;
+    scrollTopBeforeProfile.current = scrollContainer?.scrollTop ?? 0;
+    setSelectedEntry(entry);
+  }, []);
+  const closeProfile = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setSelectedEntry(null);
+    requestAnimationFrame(() => {
+      const scrollContainer = topPageRef.current?.parentElement?.parentElement;
+      if (scrollContainer) scrollContainer.scrollTop = scrollTopBeforeProfile.current;
+    });
+  }, []);
 
   return (
-    <div className="top-page">
+    <div ref={topPageRef} className="top-page">
       {isLoading && <p className="text-center text-tg-hint py-8">Собираем рейтинг...</p>}
       {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка'}</p>}
 
@@ -295,11 +310,11 @@ export function TopPage() {
           myRank={data.my_rank}
           myEntry={myEntry}
           shownCount={entries.length}
-          onSelect={setSelectedEntry}
+          onSelect={openProfile}
         />
       )}
 
-      {entries.length > 0 && <IncomeGapChart entries={entries} onSelect={setSelectedEntry} />}
+      {entries.length > 0 && <IncomeGapChart entries={entries} onSelect={openProfile} />}
 
       {podium.length > 0 && (
         <section>
@@ -311,7 +326,7 @@ export function TopPage() {
             <span className="top-section-note">доход / мин</span>
           </div>
           <div className={`top-podium top-podium-count-${podium.length}`}>
-            {podium.map(entry => <PodiumCard key={entry.tg_id} entry={entry} onSelect={setSelectedEntry} />)}
+            {podium.map(entry => <PodiumCard key={entry.tg_id} entry={entry} onSelect={openProfile} />)}
           </div>
         </section>
       )}
@@ -336,7 +351,7 @@ export function TopPage() {
             </div>
           </div>
           <div className="top-player-list">
-            {rest.map(entry => <PlayerRow key={entry.tg_id} entry={entry} onSelect={setSelectedEntry} />)}
+            {rest.map(entry => <PlayerRow key={entry.tg_id} entry={entry} onSelect={openProfile} />)}
           </div>
         </section>
       )}
@@ -355,7 +370,7 @@ export function TopPage() {
           profile={publicProfile}
           isLoading={isProfileLoading}
           error={Boolean(profileError)}
-          onClose={() => setSelectedEntry(null)}
+          onClose={closeProfile}
         />
       )}
     </div>
