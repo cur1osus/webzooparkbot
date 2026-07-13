@@ -14,6 +14,7 @@ import { fmt, formatDateShort } from '@/utils/format';
 import { copyTmaText, inTma } from '@/lib/tma';
 import { PageHeader } from '@/components/PageHeader';
 import { AdminPage } from '@/pages/AdminPage';
+import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
 
 type Section =
   | 'bank' | 'bonus' | 'merchant' | 'clan' | 'top'
@@ -81,18 +82,15 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
 
 export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [section, setSection] = useState<Section>(null);
-  const [botUsername, setBotUsername] = useState('ZooParkBot');
   // Whether today's bonus is still unclaimed is server state, not something the game
   // state carries around: `gs.bonus` was a column that stopped being the source of truth.
   const { data: bonusOffer = null } = useQuery({ queryKey: ['bonus'], queryFn: apiGetBonus });
-
-  useEffect(() => {
-    apiConfig()
-      .then((config) => {
-        if (config.bot_username) setBotUsername(config.bot_username);
-      })
-      .catch(() => {});
-  }, []);
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: apiConfig,
+    staleTime: 300_000,
+  });
+  const botUsername = normalizeBotUsername(config?.bot_username);
 
   const back = () => setSection(null);
   const openSection = (nextSection: SectionId) => setSection(nextSection);
@@ -214,7 +212,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 
 // ─── Inline sub-pages ─────────────────────────────────────────────────────────
 
-function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh: () => void; botUsername: string }) {
+function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh: () => void; botUsername: string | null }) {
   const [amount, setAmount] = useState('');
   const [parts, setParts] = useState('5');
   const [creating, setCreating] = useState(false);
@@ -254,7 +252,8 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   };
 
   const copyLink = (key: string) => {
-    const link = `https://t.me/${botUsername}?startapp=transfer_${key}`;
+    const link = buildBotLink(botUsername, { startapp: `transfer_${key}` });
+    if (!link) return;
     void copyTmaText(link).then((copied) => {
       if (!copied) return;
       setCopiedKey(key);

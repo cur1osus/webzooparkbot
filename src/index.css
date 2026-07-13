@@ -837,6 +837,194 @@ button:disabled {
   border: 1px solid var(--surface-overlay-border);
 }
 
+/* ─── Referral campaign ────────────────────────────────────────────────────── */
+/* One strong visual moment for the referral page: a brass campaign card that
+   reads like a reward voucher, while the rest of the page stays quiet. */
+.referral-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid rgba(var(--c-gold-rgb), 0.42);
+  border-radius: 22px;
+  color: #fff8ec;
+  background:
+    radial-gradient(circle at 92% 4%, rgba(255, 222, 133, 0.28), transparent 34%),
+    radial-gradient(circle at 12% 118%, rgba(var(--c-orange-rgb), 0.22), transparent 42%),
+    linear-gradient(145deg, color-mix(in srgb, var(--c-gold) 21%, var(--card-bg)), color-mix(in srgb, var(--c-orange) 14%, var(--card-bg)) 58%, var(--card-bg));
+  box-shadow: 0 10px 28px rgba(var(--c-gold-rgb), 0.12), inset 0 1px 0 rgba(255, 244, 199, 0.16);
+}
+
+.referral-hero-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.referral-hero-kicker {
+  margin: 0;
+  color: rgba(255, 248, 236, 0.66);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.referral-reward {
+  position: relative;
+  display: flex;
+  min-width: 94px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 10px 9px 9px;
+  border: 1px solid rgba(255, 237, 172, 0.45);
+  border-radius: 16px;
+  background: rgba(54, 34, 10, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 247, 211, 0.14);
+}
+
+.referral-reward-sign {
+  color: #ffdc86;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.referral-reward strong {
+  margin-top: 2px;
+  color: #fff5c9;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -1.5px;
+  line-height: 0.98;
+  font-variant-numeric: tabular-nums;
+}
+
+.referral-reward > span:last-child {
+  margin-top: 5px;
+  color: rgba(255, 248, 236, 0.68);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.referral-hero-orbit {
+  position: absolute;
+  z-index: 0;
+  border: 1px solid rgba(255, 237, 172, 0.16);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.referral-hero-orbit-one { width: 188px; height: 188px; right: -106px; top: -124px; }
+.referral-hero-orbit-two { width: 132px; height: 132px; right: -75px; top: -95px; border-color: rgba(255, 237, 172, 0.26); }
+
+.referral-steps {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  margin-top: 20px;
+  padding: 10px 9px;
+  border: 1px solid rgba(255, 237, 172, 0.16);
+  border-radius: 14px;
+  background: rgba(43, 29, 12, 0.25);
+}
+
+.referral-step {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 248, 236, 0.76);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.14;
+}
+
+.referral-step-mark {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 237, 172, 0.36);
+  border-radius: 50%;
+  color: #fff5c9;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.referral-step-mark-gold { border-color: rgba(255, 237, 172, 0.72); background: rgba(var(--c-gold-rgb), 0.28); color: #ffe19a; }
+
+.referral-step-line {
+  width: 14px;
+  height: 1px;
+  flex-shrink: 0;
+  margin: 0 5px;
+  background: rgba(255, 237, 172, 0.22);
+}
+
+.referral-link-card { padding: 15px; }
+
+.referral-link-badge {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(var(--c-gold-rgb), 0.34);
+  border-radius: 999px;
+  background: rgba(var(--c-gold-rgb), 0.12);
+  color: var(--c-gold);
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.referral-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+.referral-stat {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--surface-overlay-border);
+  border-radius: 13px;
+  background: var(--surface-subtle);
+}
+
+.referral-stat-highlight { border-color: rgba(var(--c-gold-rgb), 0.25); background: rgba(var(--c-gold-rgb), 0.08); }
+
+.referral-stat-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(var(--c-blue-rgb), 0.14);
+  color: var(--c-blue);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.referral-stat-highlight .referral-stat-icon { background: rgba(var(--c-gold-rgb), 0.16); color: var(--c-gold); }
+
+.referral-stat div { display: flex; min-width: 0; flex-direction: column; }
+.referral-stat strong { font-size: 17px; line-height: 1; font-variant-numeric: tabular-nums; }
+.referral-stat span:last-child { margin-top: 3px; color: var(--tg-theme-hint-color); font-size: 10px; font-weight: 700; }
+
+@media (max-width: 360px) {
+  .referral-hero { padding: 15px; }
+  .referral-hero h3 { font-size: 20px; }
+  .referral-reward { min-width: 84px; }
+  .referral-step { gap: 4px; font-size: 9px; }
+  .referral-step-line { width: 8px; margin: 0 3px; }
+}
+
 .modal-backdrop {
   background: var(--backdrop-overlay);
   backdrop-filter: blur(8px);

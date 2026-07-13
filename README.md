@@ -41,7 +41,7 @@ frontend stores a `dev_user_id` in `localStorage` and sends it as `X-Dev-User-Id
 | --- | --- | --- | --- |
 | `APP_ENV` | no | `production` | `development` relaxes the startup checks below |
 | `BOT_TOKEN` | in production | — | Verifies Telegram `initData` and calls the Bot API |
-| `BOT_USERNAME` | no | `ZooParkBot` | Shown to the client via `/api/config` |
+| `BOT_USERNAME` | development fallback | `ZooParkBot` | Used only when Telegram Bot API is unavailable outside production; production resolves the username via `getMe` |
 | `TELEGRAM_WEBHOOK_SECRET` | in production | — | Authenticates `/api/telegram/webhook` |
 | `DEV_AUTH` | no | `0` | Allows the `X-Dev-User-Id` bypass. **Never enable in production** |
 | `ALLOWED_TG_IDS` | no | `474701274` | CSV whitelist; `*` opens the game to everyone |

@@ -14,7 +14,8 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.app.core.config import BOT_USERNAME
+from api.app.core.config import BOT_USERNAME, IS_PRODUCTION
+from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import Player, PlayerCosmetic, utcnow
 from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, RegisterBody
@@ -35,8 +36,33 @@ def health() -> dict:
     return {"ok": True}
 
 
+def _normalise_bot_username(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    username = value.strip().lstrip("@").split("/", 1)[0]
+    return username or None
+
+
+def _telegram_bot_username() -> str | None:
+    """Read the username from Telegram, whose Bot API is the source of truth."""
+    try:
+        payload = call_bot_api("getMe", {})
+    except TelegramApiError as exc:
+        logger.warning("Could not resolve the bot username from Telegram: %s", exc)
+        return None
+    return _normalise_bot_username(payload.get("result", {}).get("username"))
+
+
 def config() -> dict:
-    return {"bot_username": BOT_USERNAME}
+    # BOT_USERNAME used to be copied into the server env and could silently become
+    # stale after changing the bot username in BotFather. Keep the env value only as
+    # a local-development fallback; production links must never be built from it.
+    username = _telegram_bot_username()
+    if username:
+        return {"bot_username": username}
+    if not IS_PRODUCTION:
+        return {"bot_username": _normalise_bot_username(BOT_USERNAME)}
+    return {"bot_username": None}
 
 
 def me(tg_id: int) -> dict:

@@ -14,6 +14,7 @@ import { CocktailTab } from '@/features/games/CocktailTab';
 import { SoloGameFlow } from '@/features/games/SoloGameFlow';
 import { PageHeader } from '@/components/PageHeader';
 import { copyTmaText, shareTmaUrl } from '@/lib/tma';
+import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail';
 type BetAmount = 1 | 10 | 100;
@@ -59,13 +60,15 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   });
 
   const games = openGames?.games ?? [];
-  const botUsername = config?.bot_username ?? 'ZooParkBot';
+  const botUsername = normalizeBotUsername(config?.bot_username);
   const error = actionError ?? (openGamesError instanceof Error ? openGamesError.message : null);
   const bet = parseRubInput(betInput);
   const betTooHigh = bet > gs.rub;
   const canCreate = bet > 0 && !betTooHigh;
   const createdGameDef = createdGame ? getGameDef(createdGame.kind) : null;
-  const createdGameLink = createdGame ? `https://t.me/${botUsername}?startapp=mpgame_${createdGame.id}` : '';
+  const createdGameLink = createdGame
+    ? buildBotLink(botUsername, { startapp: `mpgame_${createdGame.id}` }) ?? ''
+    : '';
   const invitedGameAvailable = inviteGameId ? games.some((game) => game.id === inviteGameId) : false;
   const visibleGames = inviteGameId
     ? [...games].sort((a, b) => Number(b.id === inviteGameId) - Number(a.id === inviteGameId))

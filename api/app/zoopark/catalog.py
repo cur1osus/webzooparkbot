@@ -662,7 +662,9 @@ TRANSFER_MAX_CLAIMS = 100
 TRANSFER_TTL_HOURS = 72
 TOP_LIMIT = 20
 STARS_TO_PAW = 10
-REFERRAL_SIGNUP_REWARD_USD = 1
+# A referral should feel like a meaningful milestone, while still being paid only once
+# for a genuinely new player. It is intentionally close to the price of an epic pack.
+REFERRAL_SIGNUP_REWARD_USD = 50
 
 
 # ─── Animal names ─────────────────────────────────────────────────────────────

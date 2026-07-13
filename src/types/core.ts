@@ -8,7 +8,7 @@ export interface RegisterResponse {
 }
 
 export interface AppConfig {
-  bot_username: string;
+  bot_username: string | null;
 }
 
 export interface AdminPlayer {

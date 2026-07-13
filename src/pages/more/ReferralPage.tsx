@@ -4,6 +4,7 @@ import type { GameState } from '@/types';
 import { apiGetReferrals, apiConfig } from '@/api';
 import { copyTmaText, shareTmaUrl } from '@/lib/tma';
 import { fmt } from '@/utils/format';
+import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
 
 export function ReferralPage({ gs }: { gs: GameState }) {
   const [copied, setCopied] = useState(false);
@@ -20,8 +21,8 @@ export function ReferralPage({ gs }: { gs: GameState }) {
   });
 
   const data = queryData?.referrals ?? null;
-  const botUsername = queryData?.config?.bot_username ?? 'ZooParkBot';
-  const refLink = data ? `https://t.me/${botUsername}?start=${data.code}` : '';
+  const botUsername = normalizeBotUsername(queryData?.config?.bot_username);
+  const refLink = data ? buildBotLink(botUsername, { startapp: data.code }) ?? '' : '';
   const inviterName = gs.nickname;
 
   const copyLink = async () => {
@@ -44,17 +45,59 @@ export function ReferralPage({ gs }: { gs: GameState }) {
 
       {data && (
         <>
-          <div className="card">
-            <p className="m-0 mb-[6px] font-bold">🤝 Реферальная ссылка {inviterName}</p>
-            <p className="m-0 mb-[10px] text-[13px] text-tg-hint">
-              За каждого приглашённого — <strong className="text-[var(--c-gold)]">$ {fmt(data.signup_reward_usd)}</strong>
-            </p>
-            <div className="surface-subtle px-3 py-[10px] rounded-[10px] mb-[10px] text-[13px] text-tg-hint break-all select-all">
-              {refLink}
+          <section className="referral-hero" aria-labelledby="referral-title">
+            <div className="referral-hero-orbit referral-hero-orbit-one" />
+            <div className="referral-hero-orbit referral-hero-orbit-two" />
+            <div className="referral-hero-top">
+              <div className="min-w-0">
+                <p className="referral-hero-kicker">🤝 Реферальная программа</p>
+                <h3 id="referral-title" className="m-0 mt-2 text-[22px] leading-[1.08] font-black tracking-[-0.5px]">
+                  Зови друзей.<br />Получай больше.
+                </h3>
+                <p className="m-0 mt-2 max-w-[210px] text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
+                  Друг зарегистрируется — ты получишь награду.
+                </p>
+              </div>
+              <div className="referral-reward" aria-label={`$ ${fmt(data.signup_reward_usd)} за каждого друга`}>
+                <span className="referral-reward-sign">$</span>
+                <strong>{fmt(data.signup_reward_usd)}</strong>
+                <span>за друга</span>
+              </div>
+            </div>
+
+            <div className="referral-steps" aria-label="Как работает реферальная программа">
+              <div className="referral-step">
+                <span className="referral-step-mark">1</span>
+                <span>Поделись<br />ссылкой</span>
+              </div>
+              <div className="referral-step-line" />
+              <div className="referral-step">
+                <span className="referral-step-mark">2</span>
+                <span>Друг<br />войдёт</span>
+              </div>
+              <div className="referral-step-line" />
+              <div className="referral-step">
+                <span className="referral-step-mark referral-step-mark-gold">$</span>
+                <span>Награда<br />тебе</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="card referral-link-card">
+            <div className="flex items-start justify-between gap-3 mb-[10px]">
+              <div>
+                <p className="m-0 font-bold">Твоя ссылка</p>
+                <p className="m-0 mt-1 text-[12px] text-tg-hint">Приглашает от имени {inviterName}</p>
+              </div>
+              <span className="referral-link-badge">+$ {fmt(data.signup_reward_usd)}</span>
+            </div>
+            <div className="surface-subtle px-3 py-[10px] rounded-[10px] mb-[10px] text-[12px] text-tg-hint break-all select-all">
+              {refLink || 'Ссылка загружается…'}
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => void copyLink()}
+                disabled={!refLink}
                 className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-[var(--tg-theme-button-text-color)] transition-all"
                 style={{ background: copied ? 'var(--c-green)' : 'var(--c-blue)' }}
               >
@@ -62,36 +105,48 @@ export function ReferralPage({ gs }: { gs: GameState }) {
               </button>
               <button
                 onClick={shareLink}
+                disabled={!refLink}
                 className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm"
                 style={{ background: 'rgba(var(--c-blue-rgb),0.25)', color: 'var(--c-blue)' }}
               >
                 🔗 Поделиться
               </button>
             </div>
-          </div>
+          </section>
 
-          <div className="card">
-            <p className="m-0 mb-[10px] font-bold">Статистика</p>
-            <div className="flex justify-between mb-[6px]">
-              <span className="text-[13px] text-tg-hint">Приглашено</span>
-              <span className="font-bold">{data.total}</span>
+          <section className="card referral-stats-card">
+            <p className="m-0 mb-[10px] text-[11px] font-bold text-tg-hint tracking-[0.8px] uppercase">Твоя статистика</p>
+            <div className="referral-stat-grid">
+              <div className="referral-stat">
+                <span className="referral-stat-icon">👥</span>
+                <div>
+                  <strong>{data.total}</strong>
+                  <span>приглашено</span>
+                </div>
+              </div>
+              <div className="referral-stat referral-stat-highlight">
+                <span className="referral-stat-icon">$</span>
+                <div>
+                  <strong>{fmt(data.total * data.signup_reward_usd)}</strong>
+                  <span>заработано</span>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-[13px] text-tg-hint">Заработано</span>
-              <span className="font-bold text-[var(--c-gold)]">$ {fmt(data.total * data.signup_reward_usd)}</span>
-            </div>
-          </div>
+          </section>
 
           {data.referred.length > 0 && (
-            <div className="card">
-              <p className="m-0 mb-2 font-bold">Приглашённые ({data.referred.length})</p>
+            <section className="card">
+              <div className="flex items-center justify-between mb-2">
+                <p className="m-0 font-bold">Приглашённые</p>
+                <span className="text-[11px] font-bold text-tg-hint">{data.referred.length} чел.</span>
+              </div>
               {data.referred.map((nick, i) => (
-                <div key={i} className="flex items-center gap-2 mb-1">
-                  <span className="text-tg-hint text-[13px]">·</span>
+                <div key={i} className="flex items-center gap-2 py-[5px] border-b last:border-b-0" style={{ borderColor: 'var(--surface-overlay-border)' }}>
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px]" style={{ background: 'rgba(var(--c-gold-rgb),0.14)', color: 'var(--c-gold)' }}>✓</span>
                   <span className="text-[13px]">{nick}</span>
                 </div>
               ))}
-            </div>
+            </section>
           )}
         </>
       )}
