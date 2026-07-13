@@ -341,6 +341,9 @@ def register(tg_id: int, body: RegisterBody) -> dict:
         raise HTTPException(400, "Никнейм 1–32 символа")
 
     with get_session() as session:
+        if maintenance.status(session)["active"]:
+            raise HTTPException(503, "Регистрация недоступна во время технического перерыва")
+
         if get_player(session, tg_id) is not None:
             raise HTTPException(400, "Уже зарегистрирован")
 

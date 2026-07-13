@@ -216,6 +216,29 @@ export default function App() {
     };
   }, [patchState, state]);
 
+  // A visitor who has not registered yet has no game state to poll through the
+  // regular branch above. Keep the maintenance gate visible for that visitor too.
+  useEffect(() => {
+    if (state) return;
+
+    let disposed = false;
+    const syncRegistrationMaintenance = async () => {
+      try {
+        const remote = await apiMaintenanceStatus();
+        if (!disposed) setOnlinePresence(remote);
+      } catch {
+        // The registration screen remains available if this auxiliary poll fails.
+      }
+    };
+
+    void syncRegistrationMaintenance();
+    const timer = window.setInterval(() => void syncRegistrationMaintenance(), 2_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [state]);
+
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {
     readyTma();
@@ -309,8 +332,17 @@ export default function App() {
         </div>
       )}
 
+      {/* Registration is also closed during a technical break. */}
+      {!loading && !error && !state && !errorStatus && onlinePresence.active ? (
+        <MaintenanceScreen
+          message={onlinePresence.message}
+          endsAt={onlinePresence.ends_at}
+          onRefresh={reloadFromServer}
+        />
+      ) : null}
+
       {/* Register */}
-      {!loading && !error && !state && !errorStatus && (
+      {!loading && !error && !state && !errorStatus && !onlinePresence.active && (
         <RegisterScreen onDone={setGameState} />
       )}
 
