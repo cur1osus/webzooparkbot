@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useZooStore } from '@/store';
 import { TabBar } from '@/components/TabBar';
 import { PageSkeleton, Skeleton } from '@/components/Skeleton';
-import { apiClaimTransfer, setDevUserId } from '@/api';
+import { ApiError, apiClaimTransfer, setDevUserId } from '@/api';
 import { useLiveGameState } from '@/hooks/useLiveGameState';
 import { useHashTab } from '@/lib/hashRoute';
 import { inTma, hapticImpact, readyTma } from '@/lib/tma';
@@ -13,6 +13,7 @@ import { DevBar } from '@/components/DevBar';
 import { RegisterScreen } from '@/pages/RegisterScreen';
 
 const HIDDEN_RELOAD_MS = 30_000;
+const TRANSFER_HANDLED_STORAGE_KEY = 'zoopark_transfer_claims_v1';
 
 function getInviteGameId(): number | null {
   const startParam = getTelegramStartParam();
@@ -24,6 +25,36 @@ function getTransferCode(): string | null {
   const startParam = getTelegramStartParam();
   const match = startParam?.match(/^transfer_([A-Za-z0-9_-]+)$/);
   return match ? match[1] : null;
+}
+
+function transferHandledKey(tgId: number, code: string): string {
+  return `${TRANSFER_HANDLED_STORAGE_KEY}:${tgId}:${code}`;
+}
+
+function wasTransferHandled(tgId: number, code: string): boolean {
+  try {
+    return window.localStorage.getItem(transferHandledKey(tgId, code)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberTransferHandled(tgId: number, code: string): void {
+  try {
+    window.localStorage.setItem(transferHandledKey(tgId, code), '1');
+  } catch {
+    // Storage can be unavailable in a restricted Telegram/browser context.
+  }
+}
+
+function isTerminalTransferError(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 400) return false;
+  return [
+    'Ты уже получил этот перевод',
+    'Ссылка уже израсходована',
+    'Срок действия ссылки истёк',
+    'Нельзя получить собственный перевод',
+  ].some(message => error.message.includes(message));
 }
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
@@ -52,7 +83,7 @@ export default function App() {
   const [tab, setTab] = useHashTab();
   const [inviteGameId] = useState<number | null>(() => getInviteGameId());
   const [transferCode] = useState<string | null>(() => getTransferCode());
-  const transferClaimStartedRef = useRef(false);
+  const transferClaimStartedRef = useRef<string | null>(null);
   const [transferNotice, setTransferNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
 
@@ -70,14 +101,25 @@ export default function App() {
   // A giveaway deep link carries `transfer_<code>`. Claim it after the player is
   // loaded; for a brand-new recipient this naturally runs after registration.
   useEffect(() => {
-    if (!state || !transferCode || transferClaimStartedRef.current) return;
-    transferClaimStartedRef.current = true;
+    if (!state || !transferCode) return;
+    const claimKey = `${state.tg_id}:${transferCode}`;
+    if (transferClaimStartedRef.current === claimKey) return;
+    transferClaimStartedRef.current = claimKey;
+    if (wasTransferHandled(state.tg_id, transferCode)) return;
+
     void apiClaimTransfer(transferCode)
       .then((result) => {
+        rememberTransferHandled(state.tg_id, transferCode);
         patchState({ rub: result.new_rub });
         setTransferNotice({ kind: 'success', message: `Получено ₽ ${fmt(result.rub_received)} из раздачи` });
       })
       .catch((e) => {
+        // A launch parameter survives reloads in Telegram. Once the server confirms
+        // that this account cannot claim the code anymore, suppress future retries.
+        if (isTerminalTransferError(e)) {
+          rememberTransferHandled(state.tg_id, transferCode);
+          return;
+        }
         setTransferNotice({
           kind: 'error',
           message: e instanceof Error ? `Раздача не получена: ${e.message}` : 'Не удалось получить раздачу',
