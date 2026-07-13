@@ -8,7 +8,7 @@ from random import SystemRandom
 from typing import cast
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -177,9 +177,18 @@ def _paid_tiers_today(openings: list[PackOpening]) -> set[str]:
     return {o.tier for o in openings if int(o.price_paid_usd) > 0}
 
 
-def _paid_pack_count(openings: list[PackOpening]) -> int:
-    """Number of paid packs opened today; the free daily gift never raises prices."""
-    return sum(1 for opening in openings if int(opening.price_paid_usd) > 0)
+def _paid_pack_count(session: Session, player_id: int, season_id: int) -> int:
+    """Number of paid packs opened by this player during this season."""
+    count = session.scalar(
+        select(func.count())
+        .select_from(PackOpening)
+        .where(
+            PackOpening.player_id == player_id,
+            PackOpening.season_id == season_id,
+            PackOpening.price_paid_usd > 0,
+        )
+    )
+    return int(count or 0)
 
 
 def _gift_claimed_today(openings: list[PackOpening]) -> bool:
@@ -220,7 +229,7 @@ def packs_info(tg_id: int) -> dict:
         season = ensure_player_season(session, player)
         openings = _openings_today(session, player.id, season.id)
         paid_tiers = _paid_tiers_today(openings)
-        paid_pack_count = _paid_pack_count(openings)
+        paid_pack_count = _paid_pack_count(session, player.id, season.id)
         pack_discount = bonuses_module.load(session, player.id).pack_discount_multiplier()
         session.commit()
         tiers = [
@@ -267,7 +276,7 @@ def open_pack(tg_id: int, tier: str | None = None) -> dict:
             price = pack_price_usd_for_tier(
                 tier,
                 bonuses.pack_discount_multiplier(),
-                _paid_pack_count(openings),
+                _paid_pack_count(session, player.id, season.id),
             )
         tier = cast(PackTier, tier)
         rewards = pack_reward_range(tier)

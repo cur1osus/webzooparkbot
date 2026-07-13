@@ -390,7 +390,7 @@ PACK_REWARD_RANGES: dict[PackTier, PackRewardRange] = {
 
 # Price doubles per tier: rare is the cheap entry rung, each tier above costs twice as much.
 PACK_TIER_PRICE_MULTIPLIER: dict[PackTier, int] = {"rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
-# Each paid opening makes the next paid pack 5% more expensive for that player today.
+# Each paid opening makes the next paid pack 5% more expensive for that player this season.
 PACK_PRICE_GROWTH_PER_PURCHASE = 1.05
 # The rare (cheapest paid) pack costs this share of what a pack animal earns over its whole
 # life — the main early-game tuning knob.
@@ -417,7 +417,7 @@ def pack_price_usd_for_tier(
     """Return the current dollar price for a tier.
 
     The tier ladder sets the starting price, then each paid opening made by this player
-    today compounds the next price by 5%. `discount_mult` is applied last so the forge's
+    season compounds the next price by 5%. `discount_mult` is applied last so the forge's
     pack discount continues to work on the dynamic price.
     """
     if purchase_count < 0:

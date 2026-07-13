@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from api.app.db.connection import get_session
-from api.app.db.models import Animal, Expedition, LedgerEntry, Player, utcnow
+from api.app.db.models import Animal, Expedition, LedgerEntry, PackOpening, Player, utcnow
 from api.app.zoopark import progression
 from api.app.zoopark.catalog import (
     BREED_TIER_INDEX,
@@ -109,6 +111,15 @@ class TestPackBundles:
         epic_after_first = next(t["price"] for t in after_first["tiers"] if t["tier"] == "epic")
         assert rare_after_first > rare_before
         assert epic_after_first > epic_before
+
+        # Moving the opening to yesterday must not reset the season-wide price ladder.
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            opening = session.query(PackOpening).filter_by(player_id=row.id).one()
+            opening.opened_at = utcnow() - timedelta(days=1)
+            session.commit()
+        after_day_change = progression.packs_info(player)
+        assert next(t["price"] for t in after_day_change["tiers"] if t["tier"] == "rare") == rare_after_first
 
         second = progression.open_pack(player, "rare")
         after_second = progression.packs_info(player)
