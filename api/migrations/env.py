@@ -25,7 +25,15 @@ target_metadata = None
 
 
 def run_migrations_online() -> None:
-    engine = create_engine(DB_URL, poolclass=pool.NullPool)
+    engine = create_engine(
+        DB_URL,
+        poolclass=pool.NullPool,
+        connect_args=(
+            {}
+            if DB_URL.startswith("sqlite")
+            else {"connect_timeout": 10, "read_timeout": 30, "write_timeout": 30}
+        ),
+    )
     with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():

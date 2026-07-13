@@ -120,10 +120,19 @@ Payments only land if the bot's webhook points at `/api/telegram/webhook` with t
   and `SELECT … FOR UPDATE` could freeze every request for every player for the length of
   MySQL's lock timeout.
 
+### Notifications
+
+Expedition completion, animal death and daily-bonus readiness are delivered through the
+durable `notification_outbox`. The game mutation and its notification event commit
+together; a background worker sends due rows with exponential retry. Delivery is
+at-least-once, so a process crash immediately after Telegram accepts a message can cause
+one duplicate, while a temporary Bot API failure cannot lose the event or roll back game
+state.
+
 ## Checks
 
 ```bash
-pytest api/tests -q                       # 107 tests, on the real schema in SQLite
+pytest api/tests -q                       # 131 tests, on the real schema in SQLite
 mypy api/app --ignore-missing-imports     # must stay clean
 ruff check api                            # bug-catching rules only
 npm run lint && npm test && npm run build # frontend
@@ -158,23 +167,17 @@ stored and handed straight back.
 ## Deploy
 
 `./deploy.sh` builds the frontend, uploads both halves, backs up MySQL, runs Alembic,
-verifies the revision is at head, restarts the API, waits for `/api/health`, rewrites the
-Caddyfile (keeping a timestamped backup) and registers the Telegram webhook.
+verifies the revision is at head, restarts the API, waits for `/api/health` (including a
+live database probe), and registers the Telegram webhook.
 
-### There is one revision
+### Migration history
 
-`20260710_0001_initial_schema.py`, and no history behind it. The four revisions that used
-to precede it built the `zoopark_*` tables this schema replaces; on an empty database they
-would have created twenty-five tables only for the next step to drop them. The game is a
-closed beta gated by `ALLOWED_TG_IDS`, so nothing was carried across.
+The schema is a linear Alembic history ending in `20260713_0014_pack_price_usd.py`.
+Deployments run `alembic upgrade head` only after creating a `mysqldump`, then verify that
+the database revision equals the application head.
 
-**Deploying this over the old schema needs one manual step.** Alembic reads its version
-table before any revision runs, and the row there names a revision that no longer exists:
-
-```sql
-DROP DATABASE zoopark;
-CREATE DATABASE zoopark CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-Then `alembic upgrade head`. `deploy.sh` takes a mysqldump immediately before migrating;
-`downgrade()` raises, so restoring that dump is the way back.
+Do not drop the production database to resolve a migration mismatch. If a legacy database
+points at a revision that is not in this checkout, stop the deployment and reconcile its
+Alembic version table with the migration history using the backup and a reviewed migration
+plan. The deploy script deliberately fails before restart when `upgrade head` or the head
+check fails.

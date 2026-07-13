@@ -179,6 +179,19 @@ class Season(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
 
+class SeasonGate(Base):
+    """Singleton row used to serialize active-season rollover.
+
+    A lock on an existing row is portable across MySQL and the SQLite test database;
+    locking the latest season itself is not enough when the first season does not exist.
+    """
+
+    __tablename__ = "season_gate"
+    __table_args__ = (MYSQL,)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+
+
 class SeasonPlayer(Base):
     __tablename__ = "season_players"
     __table_args__ = (Index("ix_season_players_player", "player_id"), MYSQL)
@@ -316,7 +329,9 @@ class PackOpening(Base):
     season_id: Mapped[int] = mapped_column(Integer, ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False)
     animal_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("animals.id", ondelete="CASCADE"), nullable=False)
     tier: Mapped[str] = mapped_column(String(16), nullable=False)
-    price_paid_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # Pack prices are USD. The old column name survived the economy rebase and made
+    # analytics treat dollars as rubles.
+    price_paid_usd: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     opened_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
 
@@ -702,6 +717,35 @@ class TelegramUpdate(Base):
 
     update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     received_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
+class NotificationOutbox(Base):
+    """Durable, at-least-once Telegram notification queue.
+
+    The game transaction inserts a row and the worker sends it later. `dedupe_key` is
+    the business event id, so retries and repeated reads cannot enqueue the same event
+    twice; a crash after Telegram accepted a message can still produce one duplicate.
+    """
+
+    __tablename__ = "notification_outbox"
+    __table_args__ = (
+        CheckConstraint("attempts >= 0", name="ck_notification_outbox_attempts"),
+        UniqueConstraint("dedupe_key", name="uq_notification_outbox_dedupe_key"),
+        Index("ix_notification_outbox_delivery", "sent_at", "available_at", "locked_at"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    dedupe_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
 
 class LedgerEntry(Base):

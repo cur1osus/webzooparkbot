@@ -9,6 +9,7 @@ rabbit cost 1 100 ₽ and a narwhal 268 000 000 000 ₽ for animals whose income
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import cast
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -25,6 +26,8 @@ from api.app.zoopark.catalog import (
     MERCHANT_REFRESH_HOURS,
     MERCHANT_SLOTS,
     SPECIES_BY_ID,
+    GeneTier,
+    Rarity,
     merchant_price_rub,
 )
 from api.app.zoopark.income import sync_player_income
@@ -43,10 +46,10 @@ def offer_price_rub(offer: MerchantOffer, bonuses: Bonuses) -> int:
 def offer_list_price_rub(offer: MerchantOffer) -> int:
     species = SPECIES_BY_ID[offer.species_id]
     return merchant_price_rub(
-        offer.gene_survival,
-        offer.gene_appearance,
-        offer.gene_size,
-        species["rarity"],  # type: ignore[arg-type]
+        cast(GeneTier, offer.gene_survival),
+        cast(GeneTier, offer.gene_appearance),
+        cast(GeneTier, offer.gene_size),
+        cast(Rarity, species["rarity"]),
     )
 
 

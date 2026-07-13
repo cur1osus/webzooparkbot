@@ -64,6 +64,7 @@ from api.app.zoopark.income import (
     on_expedition_subquery,
     sync_player_income,
 )
+from api.app.zoopark.notifications import enqueue_animal_death, enqueue_expedition_finished
 from api.app.zoopark.profile import animal_payload, get_player
 from api.app.zoopark.season import ensure_player_season
 
@@ -173,12 +174,12 @@ def _openings_today(session: Session, player_id: int, season_id: int) -> list[Pa
 
 def _paid_tiers_today(openings: list[PackOpening]) -> set[str]:
     """Tiers the player has bought (price > 0) today — these unlock the next tier."""
-    return {o.tier for o in openings if int(o.price_paid_rub) > 0}
+    return {o.tier for o in openings if int(o.price_paid_usd) > 0}
 
 
 def _gift_claimed_today(openings: list[PackOpening]) -> bool:
     """The free daily gift is recorded as a price-0 opening."""
-    return any(int(o.price_paid_rub) == 0 for o in openings)
+    return any(int(o.price_paid_usd) == 0 for o in openings)
 
 
 def tier_unlocked(tier: str, paid_tiers: set[str]) -> bool:
@@ -283,7 +284,7 @@ def open_pack(tg_id: int, tier: str | None = None) -> dict:
             tier=tier,
             # Packs are now paid in dollars; this write-only audit column keeps its legacy
             # name but records the dollar price paid.
-            price_paid_rub=price,
+            price_paid_usd=price,
         )
         session.add(opening)
         session.flush()
@@ -351,7 +352,9 @@ def ensure_first_locality(session: Session, player_id: int, season_id: int) -> N
 
 def list_localities(tg_id: int) -> dict:
     with get_session() as session:
-        player = get_player(session, tg_id)
+        # This endpoint grants the first locality lazily. Lock the player before the
+        # check so two simultaneous first-page loads cannot roll two free localities.
+        player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
         season = ensure_player_season(session, player)
@@ -601,7 +604,11 @@ def breed(tg_id: int, body: BreedBody) -> dict:
                 ("appearance", child.gene_appearance, parent_a.gene_appearance, parent_b.gene_appearance),
                 ("size_trait", child.gene_size, parent_a.gene_size, parent_b.gene_size),
             ):
-                source = inheritance_source(child_value, parent_a_value, parent_b_value)
+                source = inheritance_source(
+                    cast(GeneTier, child_value),
+                    cast(GeneTier, parent_a_value),
+                    cast(GeneTier, parent_b_value),
+                )
                 inherited_genes.append(
                     {
                         "gene": gene,
@@ -688,7 +695,7 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
 
     now = utcnow()
     # The client names the size gene `size_trait` everywhere else; keep it one name.
-    wild_payload = {key.removeprefix("gene_"): value for key, value in genes.items()}
+    wild_payload: dict[str, object] = {key.removeprefix("gene_"): value for key, value in genes.items()}
     wild_payload["size_trait"] = wild_payload.pop("size")
     wild_payload.update(
         {
@@ -729,11 +736,13 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
             victim.removed_at = now
             victim.removal_reason = "expedition_loss"
             victim.sick_since = None
+            enqueue_animal_death(session, player, victim, reason="expedition_loss")
         result["killed_animal_id"] = victim.id if victim else None
         result["sick_animal_ids"] = _wound_survivors(alive, victim, now, player.vet_level)
 
     expedition.resolved_at = now
     expedition.result_json = json.dumps(result, ensure_ascii=False)
+    enqueue_expedition_finished(session, player, expedition, result)
     return result
 
 

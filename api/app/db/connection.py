@@ -35,6 +35,11 @@ def get_engine() -> Engine:
             pool_size=20,
             max_overflow=20,
             pool_timeout=10,
+            connect_args=(
+                {}
+                if DATABASE_URL.startswith("sqlite")
+                else {"connect_timeout": 10, "read_timeout": 30, "write_timeout": 30}
+            ),
             future=True,
         )
         _session_factory.configure(bind=_engine)

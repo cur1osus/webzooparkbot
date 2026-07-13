@@ -18,7 +18,13 @@ def _env_allowed_ids(name: str, default: str) -> set[int] | None:
     return {int(part) for part in raw.split(",") if part.strip()}
 
 
+def _env_origins(name: str, default: str) -> list[str]:
+    return [origin.strip() for origin in os.getenv(name, default).split(",") if origin.strip()]
+
+
 APP_ENV = os.getenv("APP_ENV", "production")
+if APP_ENV not in {"development", "staging", "production"}:
+    raise RuntimeError("APP_ENV must be one of: development, staging, production")
 IS_PRODUCTION = APP_ENV == "production"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
@@ -35,6 +41,7 @@ ALLOWED_TG_IDS: set[int] | None = _env_allowed_ids("ALLOWED_TG_IDS", "474701274"
 # makes the panel safe even if someone reveals the Mini App bundle.
 ADMIN_TG_IDS: set[int] = _env_allowed_ids("ADMIN_TG_IDS", "474701274") or set()
 CLOSED_MSG = "🚧 Игра в разработке. Скоро открытие — следи за обновлениями!"
+CORS_ORIGINS = _env_origins("CORS_ORIGINS", "http://localhost:5173" if not IS_PRODUCTION else "")
 
 # Shared secret Telegram echoes back in X-Telegram-Bot-Api-Secret-Token on every webhook call.
 TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")

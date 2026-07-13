@@ -40,6 +40,7 @@ Reason = Literal[
     "pack_open",
     "pack_reward",
     "locality_buy",
+    "locality_upgrade",
     "merchant_buy",
     "cure_animal",
     "forge_create",
@@ -58,6 +59,8 @@ Reason = Literal[
     "star_payment",
     "star_refund",
     "cosmetic_purchase",
+    "development_upgrade",
+    "admin_grant",
 ]
 
 

@@ -12,7 +12,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import Species, Treasury
+from api.app.db.models import SeasonGate, Species, Treasury
 from api.app.zoopark.catalog import CURRENCIES, SPECIES
 
 logger = logging.getLogger(__name__)
@@ -45,9 +45,15 @@ def seed_treasury(session: Session) -> None:
             session.add(Treasury(currency=currency, balance=0))
 
 
+def seed_season_gate(session: Session) -> None:
+    if session.get(SeasonGate, 1) is None:
+        session.add(SeasonGate(id=1))
+
+
 def seed_reference_data() -> None:
     with get_session() as session:
         seed_species(session)
         seed_treasury(session)
+        seed_season_gate(session)
         session.commit()
     logger.info("Seeded %d species", len(SPECIES))

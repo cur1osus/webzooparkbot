@@ -14,10 +14,11 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Body, Header, HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from api.app.core.config import TELEGRAM_WEBHOOK_SECRET
-from api.app.core.telegram import TelegramApiError, call_bot_api
+from api.app.core.telegram import call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import TelegramUpdate
 from api.app.zoopark.games import credit_star_payment, refund_star_payment
@@ -36,24 +37,37 @@ def _authorize(secret_token: str) -> None:
         raise HTTPException(403, "Forbidden")
 
 
-def _claim_update(update_id: int) -> bool:
+def _update_was_processed(update_id: int) -> bool:
     """False if Telegram has already delivered this update. Idempotency for every kind
     of update, not only the two that move money."""
+    with get_session() as session:
+        return session.scalar(select(TelegramUpdate.update_id).where(TelegramUpdate.update_id == update_id)) is not None
+
+
+def _record_update(update_id: int) -> None:
+    """Record an update only after its side effects have succeeded."""
     with get_session() as session:
         session.add(TelegramUpdate(update_id=update_id))
         try:
             session.commit()
         except IntegrityError:
             session.rollback()
-            return False
+
+
+def _claim_update(update_id: int) -> bool:
+    """Backward-compatible helper for callers that explicitly claim a standalone update.
+
+    The webhook itself deliberately uses `_update_was_processed` and `_record_update`
+    around its side effects; it never calls this eager helper.
+    """
+    if _update_was_processed(update_id):
+        return False
+    _record_update(update_id)
     return True
 
 
 def _handle_pre_checkout(query: dict[str, Any]) -> None:
-    try:
-        call_bot_api("answerPreCheckoutQuery", {"pre_checkout_query_id": query["id"], "ok": True})
-    except (TelegramApiError, KeyError):
-        logger.exception("Failed to answer pre_checkout_query")
+    call_bot_api("answerPreCheckoutQuery", {"pre_checkout_query_id": query["id"], "ok": True})
 
 
 def _handle_successful_payment(message: dict[str, Any]) -> None:
@@ -94,7 +108,7 @@ def telegram_webhook(
     _authorize(x_telegram_bot_api_secret_token)
 
     update_id = update.get("update_id")
-    if isinstance(update_id, int) and not _claim_update(update_id):
+    if isinstance(update_id, int) and _update_was_processed(update_id):
         logger.info("Update %s already processed", update_id)
         return {"ok": True}
 
@@ -107,5 +121,6 @@ def telegram_webhook(
         elif "refunded_payment" in message:
             _handle_refunded_payment(message)
 
-    # Always 200: a non-2xx makes Telegram retry the same update indefinitely.
+    if isinstance(update_id, int):
+        _record_update(update_id)
     return {"ok": True}

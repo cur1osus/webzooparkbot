@@ -9,9 +9,12 @@ what `GET /api/me` returns.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 
 from fastapi import HTTPException
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from api.app.core.config import BOT_USERNAME, IS_PRODUCTION
@@ -40,10 +43,21 @@ from api.app.zoopark.season import ensure_player_season
 
 logger = logging.getLogger(__name__)
 
+_BOT_USERNAME_CACHE_TTL_SECONDS = 300.0
+_bot_username_cache_lock = threading.Lock()
+_bot_username_cache: str | None = None
+_bot_username_cache_at = 0.0
+
 PROFILE_ACHIEVEMENT_PREFIX = "achievement:"
 
 
 def health() -> dict:
+    try:
+        with get_session() as session:
+            session.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        logger.exception("Health check database probe failed")
+        raise HTTPException(503, "Database unavailable") from exc
     return {"ok": True}
 
 
@@ -56,12 +70,23 @@ def _normalise_bot_username(value: object) -> str | None:
 
 def _telegram_bot_username() -> str | None:
     """Read the username from Telegram, whose Bot API is the source of truth."""
-    try:
-        payload = call_bot_api("getMe", {})
-    except TelegramApiError as exc:
-        logger.warning("Could not resolve the bot username from Telegram: %s", exc)
-        return None
-    return _normalise_bot_username(payload.get("result", {}).get("username"))
+    global _bot_username_cache, _bot_username_cache_at
+    now = time.monotonic()
+    if now - _bot_username_cache_at < _BOT_USERNAME_CACHE_TTL_SECONDS:
+        return _bot_username_cache
+    with _bot_username_cache_lock:
+        now = time.monotonic()
+        if now - _bot_username_cache_at < _BOT_USERNAME_CACHE_TTL_SECONDS:
+            return _bot_username_cache
+        try:
+            payload = call_bot_api("getMe", {})
+        except TelegramApiError as exc:
+            logger.warning("Could not resolve the bot username from Telegram: %s", exc)
+            _bot_username_cache = None
+        else:
+            _bot_username_cache = _normalise_bot_username(payload.get("result", {}).get("username"))
+        _bot_username_cache_at = time.monotonic()
+        return _bot_username_cache
 
 
 def config() -> dict:

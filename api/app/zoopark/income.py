@@ -43,6 +43,7 @@ from api.app.zoopark.catalog import (
     Rarity,
     gene_income_mult,
 )
+from api.app.zoopark.notifications import enqueue_animal_death
 
 
 def alive_clause(now: datetime | None = None):
@@ -144,16 +145,23 @@ def upkeep_rub_per_min(income_rub_per_min: int, animal_count: int) -> int:
     return int(income_rub_per_min * percent / 100)
 
 
-def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None = None) -> tuple[int, int]:
+def calc_player_income(
+    session: Session,
+    player_id: int,
+    bonuses: Bonuses | None = None,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, int]:
     """(income per minute, upkeep per minute) for everything the player currently owns."""
     active_bonuses = bonuses if bonuses is not None else bonuses_module.load(session, player_id)
+    moment = now or utcnow()
 
     rows = session.execute(
         select(Animal, Locality.habitat, Locality.level)
         .outerjoin(Locality, Animal.locality_id == Locality.id)
         .where(
             Animal.player_id == player_id,
-            alive_clause(),
+            alive_clause(moment),
             Animal.id.not_in(on_expedition_subquery()),
         )
     ).all()
@@ -202,20 +210,19 @@ def calc_player_income(session: Session, player_id: int, bonuses: Bonuses | None
     return total, upkeep
 
 
-def accrue(session: Session, player: Player) -> int:
+def _accrue_until(session: Session, player: Player, until: datetime) -> int:
     """Pay out the time elapsed since the last sync, at the rate stored on the player.
 
     Returns the net rubles moved. The clock only advances when something was actually
     paid: a player whose net income is 3 ₽/min would otherwise lose every ruble to
     `trunc()` if the client polled once a second.
     """
-    now = utcnow()
     net_per_min = int(player.income_rub_per_min) - int(player.upkeep_rub_per_min)
     if net_per_min == 0:
-        player.income_synced_at = now
+        player.income_synced_at = until
         return 0
 
-    elapsed_minutes = (now - player.income_synced_at).total_seconds() / 60.0
+    elapsed_minutes = (until - player.income_synced_at).total_seconds() / 60.0
     accrued = trunc(elapsed_minutes * net_per_min)
     if accrued == 0:
         # Less than one ruble has been earned. Leave the clock where it is so the
@@ -231,8 +238,12 @@ def accrue(session: Session, player: Player) -> int:
         if payable:
             ledger.spend(session, player, "rub", payable, "upkeep")
 
-    player.income_synced_at = now
+    player.income_synced_at = until
     return accrued
+
+
+def accrue(session: Session, player: Player) -> int:
+    return _accrue_until(session, player, utcnow())
 
 
 def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None = None) -> tuple[int, int]:
@@ -242,8 +253,32 @@ def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None
     balance. Accruing first is what makes the order correct: the stored rate is exactly
     the rate that applied over the elapsed period.
     """
-    accrue(session, player)
-    income, upkeep = calc_player_income(session, player.id, bonuses)
+    now = utcnow()
+    # The cached rate is authoritative only until the first animal dies. Settle each
+    # time segment at the rate that applied then, enqueue the death event in this same
+    # transaction, and only afterwards compute the current rate. This closes the stale
+    # cache window where an offline player could be paid through a dead animal's death.
+    deaths = session.scalars(
+        select(Animal)
+        .where(
+            Animal.player_id == player.id,
+            Animal.removed_at.is_(None),
+            Animal.dies_at > player.income_synced_at,
+            Animal.dies_at <= now,
+        )
+        .order_by(Animal.dies_at.asc(), Animal.id.asc())
+    ).all()
+    for animal in deaths:
+        _accrue_until(session, player, animal.dies_at)
+        # A sub-ruble fraction cannot be carried across a rate change because the
+        # schema stores whole-ruble balances. Do advance the boundary nevertheless;
+        # otherwise a second death would still be paid at the first animal's rate.
+        if player.income_synced_at < animal.dies_at:
+            player.income_synced_at = animal.dies_at
+        enqueue_animal_death(session, player, animal, reason="естественная смерть")
+
+    _accrue_until(session, player, now)
+    income, upkeep = calc_player_income(session, player.id, bonuses, now=now)
     player.income_rub_per_min = income
     player.upkeep_rub_per_min = upkeep
     return income, upkeep

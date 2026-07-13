@@ -1,22 +1,16 @@
 """Initial schema.
 
-The single revision. The four that preceded it built the `zoopark_*` tables this schema
-replaces; keeping them would have meant creating twenty-five tables on an empty database
-only to drop them again in the next step. They are gone, and so is the data they held:
-the game is a closed beta gated by `ALLOWED_TG_IDS`.
+The first revision replaced the old `zoopark_*` tables. On a fresh database the legacy
+cleanup is a no-op; on a database that can reach this revision it removes only those
+obsolete tables, after the deploy backup has completed.
 
 `_drop_legacy()` still runs, so a database that was already serving the old schema comes
 out clean rather than carrying twenty-five orphans forever. It is a no-op on a fresh one.
 
-**Deploying this over the old schema needs one manual step**, because Alembic reads its
-version table before this file gets a say, and that table names a revision that no longer
-exists:
-
-    DROP DATABASE zoopark;
-    CREATE DATABASE zoopark CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-`deploy.sh` takes a mysqldump immediately before running Alembic. There is nothing to
-downgrade to: restore that dump instead.
+If a database version table points at a revision that is not present in the checkout,
+deployment must stop for a reviewed migration/version-table reconciliation. Never drop
+the production database as an automated migration step; `deploy.sh` takes a mysqldump
+before upgrades and verifies the final head.
 """
 
 from __future__ import annotations

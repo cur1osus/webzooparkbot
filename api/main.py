@@ -12,7 +12,8 @@ if __package__ in (None, ""):
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
 
-from api.app.core.config import validate_config
+from api.app.core.config import BOT_TOKEN, CORS_ORIGINS, validate_config
+from api.app.core.notification_worker import NotificationWorker
 from api.app.db.seed import seed_reference_data
 from api.app.routes.telegram_webhook import router as telegram_webhook_router
 from api.app.routes.zoopark_core import router as core_router
@@ -30,9 +31,9 @@ from api.app.routes.zoopark_status import router as status_router
 def _configure_common_middleware(app: FastAPI) -> None:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=CORS_ORIGINS,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Init-Data", "X-Dev-User-Id"],
     )
 
 
@@ -42,7 +43,14 @@ async def lifespan(_: FastAPI):
     validate_config()
     # The schema is Alembic's job alone; this only fills the reference tables.
     seed_reference_data()
-    yield
+    worker = NotificationWorker() if BOT_TOKEN else None
+    if worker is not None:
+        worker.start()
+    try:
+        yield
+    finally:
+        if worker is not None:
+            worker.stop()
 
 
 def create_app() -> FastAPI:

@@ -21,7 +21,8 @@ def health():
 
 
 @router.get("/api/config")
-def config():
+def config(tg_id: TelegramId):
+    del tg_id
     return core_service.config()
 
 
