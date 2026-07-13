@@ -20,6 +20,7 @@ import { Nickname } from '@/components/NicknameEffects';
 import { profileFrameClass } from '@/data/profileFrames';
 import { wallpaperClass } from '@/data/profileWallpapers';
 import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
+import { getDefaultProfileAnimal, type ProfileAnimal } from '@/data/profileAnimals';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -69,11 +70,6 @@ const RARITY_RANK: Record<Animal['species_rarity'], number> = {
   rare: 0, epic: 1, legendary: 2, mythic: 3,
 };
 
-function randomProfileAnimalId(animals: Animal[]): number | null {
-  if (animals.length === 0) return null;
-  return animals[Math.floor(Math.random() * animals.length)]?.id ?? null;
-}
-
 // Each mode returns a fully-ordered comparator; ties fall back to income so the list never
 // reshuffles arbitrarily between renders.
 function compareAnimals(mode: AnimalSort): (a: Animal, b: Animal) => number {
@@ -100,13 +96,11 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
   const [message, setMessage] = useState<string | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [animalSort, setAnimalSort] = useState<AnimalSort>('new');
-  const [defaultProfileAnimalId, setDefaultProfileAnimalId] = useState<number | null>(() => randomProfileAnimalId(gs.animals));
+  const [defaultProfileAnimal, setDefaultProfileAnimal] = useState<ProfileAnimal>(() => getDefaultProfileAnimal(gs.tg_id, gs.animals));
 
   const profileAchievementId = gs.profile_emoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? gs.profile_emoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
-  const defaultProfileAnimal = gs.animals.find(animal => animal.id === defaultProfileAnimalId) ?? null;
-
   const sortedAnimals = useMemo(
     () => [...gs.animals].sort(compareAnimals(animalSort)),
     [gs.animals, animalSort],
@@ -120,12 +114,11 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
 
   useEffect(() => {
     if (profileAchievementId) return;
-    if (!defaultProfileAnimal && gs.animals.length > 0) {
-      setDefaultProfileAnimalId(randomProfileAnimalId(gs.animals));
-    } else if (gs.animals.length === 0 && defaultProfileAnimalId !== null) {
-      setDefaultProfileAnimalId(null);
+    const next = getDefaultProfileAnimal(gs.tg_id, gs.animals);
+    if (next.id !== defaultProfileAnimal.id || next.species_code !== defaultProfileAnimal.species_code) {
+      setDefaultProfileAnimal(next);
     }
-  }, [defaultProfileAnimal, defaultProfileAnimalId, gs.animals, profileAchievementId]);
+  }, [defaultProfileAnimal, gs.animals, gs.tg_id, profileAchievementId]);
 
   function setSubPage(next: SetStateAction<SubPage>) {
     if (typeof next === 'function') {
@@ -211,12 +204,10 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                 style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
                 {profileAchievementId && ACHIEVEMENT_TGS[profileAchievementId] ? (
                   <TgsPlayer src={ACHIEVEMENT_TGS[profileAchievementId]} loop />
-                ) : defaultProfileAnimal ? (
+                ) : (
                   <div className="grid h-full w-full place-items-center">
                     <AnimalArt animal={defaultProfileAnimal} size={32} />
                   </div>
-                ) : (
-                  <TgsPlayer src="/nft_TopHat-3159.tgs" loop />
                 )}
               </div>
             </div>

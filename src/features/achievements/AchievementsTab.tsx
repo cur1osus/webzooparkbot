@@ -57,7 +57,7 @@ function AchievementCard({
   onSetProfileAvatar: (avatar: string | null) => void;
 }) {
   const percent = Math.min(100, (achievement.value / achievement.target) * 100);
-  const art = ACHIEVEMENT_TGS[achievement.id] ?? '/nft_TopHat-3159.tgs';
+  const art = ACHIEVEMENT_TGS[achievement.id] ?? ACHIEVEMENT_TGS.first_beast;
   const profileValue = profileAchievementValue(achievement.id);
   const isProfileAvatar = profileAvatar === profileValue;
 
