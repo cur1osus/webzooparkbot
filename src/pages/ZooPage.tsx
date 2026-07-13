@@ -96,7 +96,7 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
   const [message, setMessage] = useState<string | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [animalSort, setAnimalSort] = useState<AnimalSort>('new');
-  const [defaultProfileAnimal, setDefaultProfileAnimal] = useState<ProfileAnimal>(() => getDefaultProfileAnimal(gs.tg_id, gs.animals));
+  const [defaultProfileAnimal] = useState<ProfileAnimal>(() => getDefaultProfileAnimal(gs.tg_id));
 
   const profileAchievementId = gs.profile_emoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? gs.profile_emoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
@@ -111,14 +111,6 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
-
-  useEffect(() => {
-    if (profileAchievementId) return;
-    const next = getDefaultProfileAnimal(gs.tg_id, gs.animals);
-    if (next.id !== defaultProfileAnimal.id || next.species_code !== defaultProfileAnimal.species_code) {
-      setDefaultProfileAnimal(next);
-    }
-  }, [defaultProfileAnimal, gs.animals, gs.tg_id, profileAchievementId]);
 
   function setSubPage(next: SetStateAction<SubPage>) {
     if (typeof next === 'function') {

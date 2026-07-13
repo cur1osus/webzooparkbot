@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
 import type { Duel, GameState } from '@/types';
@@ -87,7 +87,8 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     staleTime: 300_000,
   });
 
-  const games = openGames?.games ?? [];
+  const openGameList = openGames?.games;
+  const games = useMemo(() => openGameList ?? [], [openGameList]);
   const botUsername = normalizeBotUsername(config?.bot_username);
   const error = actionError ?? (openGamesError instanceof Error ? openGamesError.message : null);
   const bet = parseRubInput(betInput);

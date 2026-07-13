@@ -1,7 +1,7 @@
-import type { Animal } from '@/types';
-
-export type ProfileAnimal = Pick<Animal, 'species_code' | 'species_name' | 'species_emoji'> & {
-  id?: number;
+export type ProfileAnimal = {
+  species_code: string;
+  species_name: string;
+  species_emoji: string;
 };
 
 /** Catalog animals used only as a profile placeholder before the player owns one. */
@@ -49,22 +49,9 @@ function random<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
 }
 
-/**
- * Keep one profile animal stable per player. Owned animals take priority; a catalog
- * animal is used only while the player has not received their first one yet.
- */
-export function getDefaultProfileAnimal(tgId: number, animals: Animal[]): ProfileAnimal {
+/** Keep one random catalog animal stable per player, independent of game progress. */
+export function getDefaultProfileAnimal(tgId: number): ProfileAnimal {
   const stored = readStored(tgId);
-
-  if (animals.length > 0) {
-    const owned = typeof stored?.id === 'number' ? animals.find(animal => animal.id === stored.id) : undefined;
-    if (owned) return owned;
-
-    const selected = random(animals);
-    writeStored(tgId, { id: selected.id });
-    return selected;
-  }
-
   const catalogAnimal = DEFAULT_PROFILE_ANIMALS.find(animal => animal.species_code === stored?.species_code);
   if (catalogAnimal) return catalogAnimal;
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Nickname } from '@/components/NicknameEffects';
 import { ProfileBadge } from '@/components/ProfileBadge';
 import type { MaintenancePollStatus } from '@/types';
@@ -17,13 +17,11 @@ export function OnlinePlayersIndicator({
   const [expanded, setExpanded] = useState(false);
   const players = data.online_players.slice(0, MAX_VISIBLE_PLAYERS);
 
-  useEffect(() => {
-    if (data.online_count === 0) setExpanded(false);
-  }, [data.online_count]);
+  const expandedForDisplay = expanded && data.online_count > 0;
 
   return (
     <div className={`online-presence${placement === 'inline' ? ' online-presence-inline' : ''}${devBarVisible ? ' online-presence-dev' : ''}`}>
-      {expanded && (
+      {expandedForDisplay && (
         <div className="online-presence-panel" role="dialog" aria-label="Игроки онлайн">
           <div className="online-presence-heading">
             <span>Сейчас в игре</span>
@@ -50,7 +48,7 @@ export function OnlinePlayersIndicator({
         type="button"
         className={`online-presence-toggle${data.online_count > 0 ? ' online-presence-toggle-active' : ''}`}
         onClick={() => setExpanded(value => !value)}
-        aria-expanded={expanded}
+        aria-expanded={expandedForDisplay}
         aria-label={`${data.online_count} игроков онлайн`}
       >
         <span className="online-presence-beacon" aria-hidden="true" />
