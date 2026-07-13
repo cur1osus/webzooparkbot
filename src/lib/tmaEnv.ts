@@ -70,7 +70,13 @@ export function getTelegramStartParam(): string | undefined {
       tgWebAppStartParam?: string;
       startParam?: string;
     };
-    return launchParams.tgWebAppStartParam || launchParams.startParam || undefined;
+    const startParam = launchParams.tgWebAppStartParam || launchParams.startParam;
+    if (startParam) return startParam;
+
+    // The mock Telegram environment used outside Telegram can still be launched
+    // with a real deep-link query, which keeps giveaway links testable in a browser.
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tgWebAppStartParam') || params.get('startapp') || params.get('start') || undefined;
   } catch {
     const params = new URLSearchParams(window.location.search);
     return params.get('tgWebAppStartParam') || params.get('startapp') || params.get('start') || undefined;

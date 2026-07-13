@@ -2,11 +2,12 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useZooStore } from '@/store';
 import { TabBar } from '@/components/TabBar';
 import { PageSkeleton, Skeleton } from '@/components/Skeleton';
-import { setDevUserId } from '@/api';
+import { apiClaimTransfer, setDevUserId } from '@/api';
 import { useLiveGameState } from '@/hooks/useLiveGameState';
 import { useHashTab } from '@/lib/hashRoute';
 import { inTma, hapticImpact, readyTma } from '@/lib/tma';
 import { getTelegramStartParam } from '@/lib/tmaEnv';
+import { fmt } from '@/utils/format';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
 import { RegisterScreen } from '@/pages/RegisterScreen';
@@ -17,6 +18,12 @@ function getInviteGameId(): number | null {
   const startParam = getTelegramStartParam();
   const match = startParam?.match(/^mpgame_(\d+)$/);
   return match ? Number(match[1]) : null;
+}
+
+function getTransferCode(): string | null {
+  const startParam = getTelegramStartParam();
+  const match = startParam?.match(/^transfer_([A-Za-z0-9_-]+)$/);
+  return match ? match[1] : null;
 }
 
 // ─── Lazy page imports ────────────────────────────────────────────────────────
@@ -44,6 +51,9 @@ export default function App() {
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useHashTab();
   const [inviteGameId] = useState<number | null>(() => getInviteGameId());
+  const [transferCode] = useState<string | null>(() => getTransferCode());
+  const transferClaimStartedRef = useRef(false);
+  const [transferNotice, setTransferNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
 
   const reloadFromServer = useCallback(() => {
@@ -56,6 +66,24 @@ export default function App() {
   useEffect(() => {
     if (inviteGameId) setTab('games');
   }, [inviteGameId, setTab]);
+
+  // A giveaway deep link carries `transfer_<code>`. Claim it after the player is
+  // loaded; for a brand-new recipient this naturally runs after registration.
+  useEffect(() => {
+    if (!state || !transferCode || transferClaimStartedRef.current) return;
+    transferClaimStartedRef.current = true;
+    void apiClaimTransfer(transferCode)
+      .then((result) => {
+        patchState({ rub: result.new_rub });
+        setTransferNotice({ kind: 'success', message: `Получено ₽ ${fmt(result.rub_received)} из раздачи` });
+      })
+      .catch((e) => {
+        setTransferNotice({
+          kind: 'error',
+          message: e instanceof Error ? `Раздача не получена: ${e.message}` : 'Не удалось получить раздачу',
+        });
+      });
+  }, [patchState, state, transferCode]);
 
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {
@@ -153,6 +181,12 @@ export default function App() {
           className={`app-shell max-w-[480px] mx-auto relative ${!inTma ? 'pt-12' : ''}`}
           style={inTma ? { paddingTop: 'var(--safe-top)' } : undefined}
         >
+          {transferNotice && (
+            <div className={`transfer-claim-toast transfer-claim-toast-${transferNotice.kind}`} role="status">
+              <span>{transferNotice.kind === 'success' ? '🎉' : '⚠️'}</span>
+              <span>{transferNotice.message}</span>
+            </div>
+          )}
           <div key={tab} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
