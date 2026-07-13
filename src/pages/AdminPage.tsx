@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AdminCurrency } from '@/api/core';
 import { apiAdminGrant, apiAdminOverview, apiAdminSetStatus } from '@/api';
 import type { AdminOverview, AdminPlayer } from '@/types';
@@ -58,7 +59,7 @@ function PlayerRow({ player, selected, onSelect, asOf }: { player: AdminPlayer; 
   );
 }
 
-function PlayerActions({ player, onChanged }: { player: AdminPlayer; onChanged: () => void }) {
+function PlayerActions({ player, onChanged, onClose }: { player: AdminPlayer; onChanged: () => void; onClose: () => void }) {
   const [currency, setCurrency] = useState<AdminCurrency>('rub');
   const [amount, setAmount] = useState('1000');
   const [busy, setBusy] = useState(false);
@@ -106,9 +107,14 @@ function PlayerActions({ player, onChanged }: { player: AdminPlayer; onChanged: 
           <p className="m-0 text-[13px] font-extrabold">Управление игроком</p>
           <p className="m-0 mt-1 text-[11px] text-tg-hint">{player.nickname} · {player.tg_id}</p>
         </div>
-        <button type="button" onClick={() => void toggleBan()} disabled={busy} className="rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ color: player.status === 'banned' ? 'var(--c-green)' : 'var(--c-red-soft)', background: player.status === 'banned' ? 'rgba(var(--c-green-rgb),0.12)' : 'rgba(var(--c-red-rgb),0.12)' }}>
-          {player.status === 'banned' ? 'Разблокировать' : 'Заблокировать'}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button type="button" onClick={() => void toggleBan()} disabled={busy} className="rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ color: player.status === 'banned' ? 'var(--c-green)' : 'var(--c-red-soft)', background: player.status === 'banned' ? 'rgba(var(--c-green-rgb),0.12)' : 'rgba(var(--c-red-rgb),0.12)' }}>
+            {player.status === 'banned' ? 'Разблокировать' : 'Заблокировать'}
+          </button>
+          <button type="button" onClick={onClose} className="grid place-items-center w-8 h-8 rounded-xl border-none text-[20px] leading-none" style={{ color: 'var(--tg-theme-hint-color)', background: 'var(--surface-subtle)' }} aria-label="Закрыть управление игроком">
+            ×
+          </button>
+        </div>
       </div>
       <div className="mt-3 flex gap-2">
         <select value={currency} onChange={e => setCurrency(e.target.value as AdminCurrency)} className="min-w-0 flex-1 rounded-xl px-3 py-2 border-none text-[12px] font-bold" style={{ background: 'var(--input-bg)', color: 'var(--tg-theme-text-color)' }}>
@@ -188,8 +194,22 @@ export function AdminPage() {
         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-tg-hint">⌕</span><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Никнейм, username или Telegram ID" className="w-full rounded-2xl border-none py-3 pl-9 pr-3 text-[12px]" style={{ background: 'var(--input-bg)', color: 'var(--tg-theme-text-color)', boxShadow: 'inset 0 0 0 1px var(--input-border)' }} /></div>
         <p className="m-0 px-1 text-[11px] text-tg-hint">Показаны последние 50 · найдено: {data.players_list.length}</p>
         {data.players_list.length === 0 ? <div className="card text-center text-[13px] text-tg-hint">Игроки не найдены</div> : <div className="flex flex-col gap-2">{data.players_list.map(player => <PlayerRow key={player.tg_id} player={player} selected={player.tg_id === selectedId} asOf={data.generated_at} onSelect={() => setSelectedId(player.tg_id === selectedId ? null : player.tg_id)} />)}</div>}
-        {selectedPlayer && <PlayerActions player={selectedPlayer} onChanged={() => void load()} />}
       </>}
+
+      {selectedPlayer && createPortal(
+        <div
+          className="admin-player-backdrop fixed inset-0 z-[240] flex items-end justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Управление игроком ${selectedPlayer.nickname}`}
+          onClick={event => { if (event.target === event.currentTarget) setSelectedId(null); }}
+        >
+          <div className="admin-player-drawer w-full max-w-[480px] overflow-y-auto">
+            <PlayerActions player={selectedPlayer} onChanged={() => void load()} onClose={() => setSelectedId(null)} />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }

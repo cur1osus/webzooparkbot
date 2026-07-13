@@ -1312,6 +1312,27 @@ button:disabled {
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* Admin actions live in a portal so the drawer never gets buried after a long player list. */
+.admin-player-backdrop {
+  padding: 16px 14px calc(16px + var(--safe-bottom));
+  background: var(--backdrop-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.admin-player-drawer {
+  max-height: min(92dvh, 520px);
+  border-radius: 24px;
+  background: var(--sheet-surface);
+  box-shadow: 0 -14px 42px rgba(0, 0, 0, 0.52), inset 0 1px 0 color-mix(in srgb, var(--tg-theme-text-color) 8%, transparent);
+  animation: admin-drawer-up 0.28s var(--spring-smooth) both;
+}
+
+@keyframes admin-drawer-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .sheet-panel {
   background: var(--sheet-surface);
   border: 1px solid var(--surface-overlay-border);
