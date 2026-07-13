@@ -10,9 +10,10 @@ from sqlalchemy import func, or_, select
 from api.app.core.config import ADMIN_TG_IDS
 from api.app.db.connection import get_session
 from api.app.db.models import Animal, BankRate, LedgerEntry, Player, Treasury, utcnow
-from api.app.schemas.admin import AdminGrantBody
+from api.app.schemas.admin import AdminGrantBody, AdminMaintenanceBody
 from api.app.zoopark import ledger
 from api.app.zoopark.income import alive_clause
+from api.app.zoopark import maintenance
 from api.app.zoopark.profile import get_player
 
 
@@ -109,6 +110,7 @@ def overview(tg_id: int, search: str = "") -> dict:
             "balances": totals,
             "treasury": treasury,
             "bank_rate": rate.rate_rub_per_usd if rate else None,
+            "maintenance": maintenance.status(session, now),
             "players_list": [_player_payload(player, animal_counts.get(player.id, 0)) for player in players],
         }
 
@@ -135,3 +137,25 @@ def set_player_status(admin_tg_id: int, telegram_id: int, status: str) -> dict:
         player.status = status
         session.commit()
         return {"ok": True, "tg_id": telegram_id, "status": status}
+
+
+def get_maintenance(admin_tg_id: int) -> dict:
+    require_admin(admin_tg_id)
+    with get_session() as session:
+        return maintenance.status(session)
+
+
+def start_maintenance(admin_tg_id: int, body: AdminMaintenanceBody) -> dict:
+    require_admin(admin_tg_id)
+    with get_session() as session:
+        result = maintenance.start(session, body.duration_minutes, body.message)
+        session.commit()
+        return result
+
+
+def end_maintenance(admin_tg_id: int) -> dict:
+    require_admin(admin_tg_id)
+    with get_session() as session:
+        result = maintenance.end(session)
+        session.commit()
+        return result

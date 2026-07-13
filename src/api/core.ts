@@ -1,4 +1,4 @@
-import type { AdminGrantResult, AdminOverview, AppConfig, GameState, RegisterResponse } from '@/types';
+import type { AdminGrantResult, AdminOverview, AppConfig, GameState, MaintenanceStatus, RegisterResponse } from '@/types';
 import { req } from './client';
 
 /**
@@ -57,5 +57,14 @@ export const apiAdminSetStatus = (telegramId: number, status: 'active' | 'banned
     method: 'POST',
     body: JSON.stringify({ status }),
   });
+
+export const apiAdminGetMaintenance = () => req<MaintenanceStatus>('/admin/maintenance');
+export const apiAdminStartMaintenance = (durationMinutes: number, message: string) =>
+  req<MaintenanceStatus>('/admin/maintenance', {
+    method: 'POST',
+    body: JSON.stringify({ duration_minutes: durationMinutes, message }),
+  });
+export const apiAdminEndMaintenance = () =>
+  req<MaintenanceStatus>('/admin/maintenance/end', { method: 'POST' });
 
 export type AdminCurrency = 'rub' | 'usd' | 'paw';

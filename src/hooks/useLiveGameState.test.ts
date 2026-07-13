@@ -4,6 +4,8 @@ import { calculateLiveRubBalance, netRubPerMin } from './useLiveGameState';
 
 const baseState: GameState = {
   tg_id: 1,
+  is_admin: false,
+  maintenance: { active: false, started_at: null, ends_at: null, message: 'Технический перерыв' },
   nickname: 'test',
   nickname_color: 'ivory',
   nickname_colors: [{ id: 'ivory', price_paw: 0, animated: false, rarity: 'standard', owned: true }],

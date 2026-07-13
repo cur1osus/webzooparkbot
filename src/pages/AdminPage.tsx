@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AdminCurrency } from '@/api/core';
-import { apiAdminGrant, apiAdminOverview, apiAdminSetStatus } from '@/api';
-import type { AdminOverview, AdminPlayer } from '@/types';
-import { fmt } from '@/utils/format';
+import { apiAdminEndMaintenance, apiAdminGrant, apiAdminOverview, apiAdminSetStatus, apiAdminStartMaintenance } from '@/api';
+import type { AdminOverview, AdminPlayer, MaintenanceStatus } from '@/types';
+import { fmt, formatCountdown } from '@/utils/format';
 
 type AdminTab = 'overview' | 'players';
 
@@ -22,6 +22,94 @@ function StatCard({ label, value, hint, accent }: { label: string; value: string
       </div>
       <p className="m-0 mt-2 font-display text-[24px] leading-none">{value}</p>
       <p className="m-0 mt-2 text-[10px] text-tg-hint">{hint}</p>
+    </div>
+  );
+}
+
+function MaintenanceCard({ status, onChanged }: { status: MaintenanceStatus; onChanged: () => void }) {
+  const [minutes, setMinutes] = useState('30');
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!status.active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [status.active]);
+
+  const remainingSeconds = status.ends_at
+    ? Math.max(0, Math.floor((new Date(status.ends_at).getTime() - now) / 1000))
+    : 0;
+
+  const start = async () => {
+    const duration = Number(minutes);
+    if (!Number.isInteger(duration) || duration < 1 || duration > 1_440) return;
+    if (!window.confirm(`Включить техперерыв на ${duration} мин.?`)) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await apiAdminStartMaintenance(duration, 'Технический перерыв');
+      onChanged();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Не удалось включить техперерыв');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const end = async () => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await apiAdminEndMaintenance();
+      onChanged();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Не удалось завершить техперерыв');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={`admin-maintenance-card${status.active ? ' admin-maintenance-card-active' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="m-0 text-[14px] font-extrabold">Технический перерыв</p>
+          <p className="m-0 mt-1 text-[11px] text-tg-hint">Игроки увидят экран с обратным отсчётом</p>
+        </div>
+        <span className="admin-maintenance-status">{status.active ? 'идёт' : 'выключен'}</span>
+      </div>
+
+      {status.active ? (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="m-0 font-display text-[28px] leading-none tabular-nums">{formatCountdown(remainingSeconds)}</p>
+            <p className="m-0 mt-1 text-[10px] text-tg-hint">до автоматического завершения</p>
+          </div>
+          <button type="button" onClick={() => void end()} disabled={busy} className="rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ background: 'rgba(var(--c-green-rgb),0.14)', color: 'var(--c-green)' }}>
+            {busy ? 'Завершаем…' : 'Завершить сейчас'}
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            max={1_440}
+            value={minutes}
+            onChange={event => setMinutes(event.target.value)}
+            aria-label="Длительность техперерыва в минутах"
+            className="w-[86px] rounded-xl px-3 py-2 border-none text-[12px] font-bold"
+            style={{ background: 'var(--input-bg)', color: 'var(--tg-theme-text-color)' }}
+          />
+          <span className="text-[11px] text-tg-hint">минут</span>
+          <button type="button" onClick={() => void start()} disabled={busy} className="ml-auto rounded-xl px-3 py-2 border-none text-[11px] font-extrabold" style={{ background: 'var(--c-orange)', color: 'var(--tg-theme-button-text-color)' }}>
+            {busy ? 'Запускаем…' : 'Включить'}
+          </button>
+        </div>
+      )}
+      {actionError && <p className="m-0 mt-2 text-[11px]" style={{ color: 'var(--c-red-soft)' }}>{actionError}</p>}
     </div>
   );
 }
@@ -175,6 +263,7 @@ export function AdminPage() {
 
       {loading && !data && <div className="card text-center text-[13px] text-tg-hint">Загружаем данные панели…</div>}
       {error && <div className="rounded-2xl p-3 text-[12px]" style={{ background: 'rgba(var(--c-red-rgb),0.11)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red-soft)' }}>⚠️ {error}<button type="button" onClick={() => void load()} className="ml-2 border-none bg-transparent underline font-bold" style={{ color: 'inherit' }}>Повторить</button></div>}
+      {data && <MaintenanceCard status={data.maintenance} onChanged={() => void load()} />}
 
       {data && tab === 'overview' && <>
         <div className="grid grid-cols-2 gap-2">

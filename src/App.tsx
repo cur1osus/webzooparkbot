@@ -7,7 +7,7 @@ import { useLiveGameState } from '@/hooks/useLiveGameState';
 import { useHashTab } from '@/lib/hashRoute';
 import { inTma, hapticImpact, readyTma } from '@/lib/tma';
 import { getTelegramStartParam } from '@/lib/tmaEnv';
-import { fmt } from '@/utils/format';
+import { fmt, formatCountdown } from '@/utils/format';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
 import { RegisterScreen } from '@/pages/RegisterScreen';
@@ -75,6 +75,40 @@ function PageFallback() {
   );
 }
 
+function MaintenanceScreen({ message, endsAt, onRefresh }: { message: string; endsAt: string | null; onRefresh: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  const refreshedRef = useRef(false);
+  const remainingSeconds = endsAt
+    ? Math.max(0, Math.floor((new Date(endsAt).getTime() - now) / 1000))
+    : 0;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (remainingSeconds > 0 || refreshedRef.current) return;
+    refreshedRef.current = true;
+    onRefresh();
+  }, [onRefresh, remainingSeconds]);
+
+  return (
+    <div className="maintenance-screen min-h-full flex items-center justify-center px-5 py-12">
+      <div className="maintenance-screen-card w-full max-w-[390px] text-center">
+        <div className="maintenance-screen-icon">🔧</div>
+        <p className="m-0 mt-5 font-display text-[28px] leading-none">Технический перерыв</p>
+        <p className="m-0 mt-3 text-[13px] leading-[1.5] text-tg-hint">{message}</p>
+        <div className="maintenance-countdown mt-6">
+          <span>{formatCountdown(remainingSeconds)}</span>
+          <small>до возвращения игры</small>
+        </div>
+        <p className="m-0 mt-5 text-[11px] text-tg-hint">Страница обновится автоматически</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -135,6 +169,14 @@ export default function App() {
     const timeoutId = window.setTimeout(() => setTransferNotice(null), 4_000);
     return () => window.clearTimeout(timeoutId);
   }, [transferNotice]);
+
+  // Keep a player on the maintenance screen in sync if the administrator ends the
+  // break early. The server's absolute deadline remains the source of truth.
+  useEffect(() => {
+    if (!state?.maintenance?.active || state.is_admin) return;
+    const timer = window.setInterval(() => void loadFromServer(), 10_000);
+    return () => window.clearInterval(timer);
+  }, [loadFromServer, state?.is_admin, state?.maintenance?.active]);
 
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {
@@ -234,8 +276,17 @@ export default function App() {
         <RegisterScreen onDone={setGameState} />
       )}
 
+      {/* Technical break for regular players; admins keep access to end it. */}
+      {state?.maintenance?.active && !state.is_admin && (
+        <MaintenanceScreen
+          message={state.maintenance.message}
+          endsAt={state.maintenance.ends_at}
+          onRefresh={reloadFromServer}
+        />
+      )}
+
       {/* Main app */}
-      {state && displayState && (
+      {state && displayState && (!state.maintenance?.active || state.is_admin) && (
         <div
           className={`app-shell max-w-[480px] mx-auto relative ${!inTma ? 'pt-12' : ''}`}
           style={inTma ? { paddingTop: 'var(--safe-top)' } : undefined}

@@ -11,6 +11,13 @@ export interface AppConfig {
   bot_username: string | null;
 }
 
+export interface MaintenanceStatus {
+  active: boolean;
+  started_at: string | null;
+  ends_at: string | null;
+  message: string;
+}
+
 export interface AdminPlayer {
   id: number;
   tg_id: number;
@@ -41,6 +48,7 @@ export interface AdminOverview {
   balances: { rub: number; usd: number; paw: number };
   treasury: { rub: number; usd: number; paw: number };
   bank_rate: number | null;
+  maintenance: MaintenanceStatus;
   players_list: AdminPlayer[];
 }
 

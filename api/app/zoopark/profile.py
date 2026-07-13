@@ -9,9 +9,11 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from api.app.core.config import ADMIN_TG_IDS
 from api.app.db.models import Animal, Clan, ClanMember, Item, ItemSet, Locality, Player, PlayerCosmetic, Season, utcnow
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import bonuses as bonuses_module
+from api.app.zoopark import maintenance
 from api.app.zoopark.bonuses import Bonuses
 from api.app.zoopark.catalog import (
     BASE_INCOME_RUB_PER_MIN,
@@ -271,6 +273,8 @@ def build_state(session: Session, player: Player) -> dict:
 
     return {
         "tg_id": player.telegram_id,
+        "is_admin": player.telegram_id in ADMIN_TG_IDS,
+        "maintenance": maintenance.status(session),
         "nickname": player.nickname,
         "nickname_color": player.nickname_color,
         "nickname_colors": nickname_colors_payload(session, player.id),

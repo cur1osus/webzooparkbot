@@ -192,6 +192,23 @@ class SeasonGate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
 
 
+class GameMaintenance(Base):
+    """Singleton server-side technical break timer.
+
+    The game remains readable while the break is active so clients can render the
+    authoritative countdown; the frontend blocks normal gameplay for non-admins.
+    """
+
+    __tablename__ = "game_maintenance"
+    __table_args__ = (MYSQL,)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    message: Mapped[str] = mapped_column(String(160), nullable=False, default="Технический перерыв")
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
 class SeasonPlayer(Base):
     __tablename__ = "season_players"
     __table_args__ = (Index("ix_season_players_player", "player_id"), MYSQL)

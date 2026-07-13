@@ -1455,6 +1455,89 @@ button:disabled {
   animation: admin-drawer-up 0.28s var(--spring-smooth) both;
 }
 
+.admin-maintenance-card {
+  padding: 14px;
+  border: 1px solid rgba(var(--c-orange-rgb), 0.26);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(var(--c-orange-rgb), 0.1), var(--surface-subtle) 62%);
+}
+
+.admin-maintenance-card-active {
+  border-color: rgba(var(--c-red-rgb), 0.38);
+  background: linear-gradient(145deg, rgba(var(--c-red-rgb), 0.15), var(--surface-subtle) 62%);
+}
+
+.admin-maintenance-status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(var(--c-orange-rgb), 0.14);
+  color: var(--c-orange);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.admin-maintenance-card-active .admin-maintenance-status {
+  background: rgba(var(--c-red-rgb), 0.14);
+  color: var(--c-red-soft);
+}
+
+.maintenance-screen {
+  min-height: 100%;
+  background: radial-gradient(circle at 50% 28%, rgba(var(--c-orange-rgb), 0.12), transparent 42%), var(--tg-theme-bg-color);
+}
+
+.maintenance-screen-card {
+  padding: 28px 22px;
+  border: 1px solid rgba(var(--c-orange-rgb), 0.24);
+  border-radius: 28px;
+  background: linear-gradient(150deg, rgba(var(--c-orange-rgb), 0.1), var(--surface-subtle) 58%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+}
+
+.maintenance-screen-icon {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin: 0 auto;
+  place-items: center;
+  border: 1px solid rgba(var(--c-orange-rgb), 0.34);
+  border-radius: 22px;
+  background: rgba(var(--c-orange-rgb), 0.14);
+  font-size: 32px;
+  animation: maintenance-pulse 2.4s ease-in-out infinite;
+}
+
+.maintenance-countdown {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+}
+
+.maintenance-countdown span {
+  color: var(--c-orange);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.maintenance-countdown small {
+  color: var(--tg-theme-hint-color);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+@keyframes maintenance-pulse {
+  0%, 100% { transform: rotate(-4deg) scale(1); }
+  50% { transform: rotate(4deg) scale(1.04); }
+}
+
 @keyframes admin-drawer-up {
   from { opacity: 0; transform: translateY(24px); }
   to   { opacity: 1; transform: translateY(0); }

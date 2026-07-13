@@ -1,4 +1,5 @@
 import type { Animal } from './progression';
+import type { MaintenanceStatus } from './core';
 
 export interface Achievement {
   id: string;
@@ -62,6 +63,8 @@ export interface ClanInfo {
 
 export interface GameState {
   tg_id: number;
+  is_admin: boolean;
+  maintenance: MaintenanceStatus;
   nickname: string;
   nickname_color: NicknameColor;
   nickname_colors: NicknameColorOption[];

@@ -12,3 +12,8 @@ class AdminGrantBody(BaseModel):
 
 class AdminPlayerStatusBody(BaseModel):
     status: Literal["active", "banned"]
+
+
+class AdminMaintenanceBody(BaseModel):
+    duration_minutes: int = Field(ge=1, le=1_440)
+    message: str = Field(default="Технический перерыв", max_length=160)
