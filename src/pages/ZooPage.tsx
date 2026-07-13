@@ -233,10 +233,11 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Primary balance = the number that grows; income rate is its subordinate line */}
-        <div className="relative z-[1] mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
-          style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
+      {/* Primary balance = the number that grows; income rate is its subordinate line */}
+      <div className="mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
+        style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
           <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.5px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Касса зоопарка
           </p>
@@ -258,7 +259,6 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             <span>содержание <b style={{ color: 'var(--c-orange)' }}>{fmt(gs.upkeep_rub_per_min)} ₽</b></span>
           </div>
         </div>
-      </div>
 
       {/* ── Section tabs ── */}
       <div
