@@ -494,11 +494,12 @@ button, input, select, textarea { font: inherit; }
   white-space: nowrap;
 }
 .top-gap-value {
-  flex: 0 0 auto;
+  flex: 0 0 82px;
   color: var(--c-green);
   font-size: 11px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .top-gap-track {
   height: 6px;
@@ -546,6 +547,7 @@ button, input, select, textarea { font: inherit; }
 }
 .top-player-row {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 10px;
   min-height: 66px;
@@ -561,7 +563,7 @@ button, input, select, textarea { font: inherit; }
 .top-player-row .top-rank-mark { flex: 0 0 28px; }
 .top-player-main { min-width: 0; flex: 1; }
 .top-player-caption { display: block; margin-top: 2px; color: var(--tg-theme-hint-color); font-size: 10px; }
-.top-player-income { flex: 0 0 auto; color: var(--c-green); font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.top-player-income { flex: 0 0 86px; color: var(--c-green); font-size: 12px; font-weight: 900; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .top-my-rank-card {
   display: flex;
   align-items: center;
