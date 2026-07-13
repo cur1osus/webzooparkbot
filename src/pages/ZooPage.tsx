@@ -198,28 +198,30 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   return (
     <div className="page-content-safe">
       {/* ── Header HUD — one grid, one font, left-aligned (idle-tycoon convention) ── */}
-      <div className="relative overflow-hidden" style={{ paddingTop: '16px' }}>
+      <div className="relative overflow-hidden">
         {gs.profile_wallpaper && gs.profile_wallpaper !== 'none' && (
           <div className={`profile-wallpaper ${wallpaperClass(gs.profile_wallpaper)}`} aria-hidden="true" />
         )}
         {/* Identity row: avatar + name (left), premium currencies (right) */}
-        <div className="relative z-[1] px-[14px] flex items-center gap-3">
-          <div className={`profile-badge-frame shrink-0 ${profileFrameClass(gs.profile_frame)}`} style={{ '--frame-w': '3px' } as CSSProperties}>
-            <div className="w-10 h-10 rounded-full overflow-hidden"
-              style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
-              {profileAchievementId && ACHIEVEMENT_TGS[profileAchievementId] ? (
-                <TgsPlayer src={ACHIEVEMENT_TGS[profileAchievementId]} loop />
-              ) : defaultProfileAnimal ? (
-                <div className="grid h-full w-full place-items-center">
-                  <AnimalArt animal={defaultProfileAnimal} size={32} />
-                </div>
-              ) : (
-                <TgsPlayer src="/nft_TopHat-3159.tgs" loop />
-              )}
+        <div className="relative z-[1] px-[14px] flex items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className={`profile-badge-frame shrink-0 ${profileFrameClass(gs.profile_frame)}`} style={{ '--frame-w': '3px' } as CSSProperties}>
+              <div className="w-10 h-10 rounded-full overflow-hidden"
+                style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
+                {profileAchievementId && ACHIEVEMENT_TGS[profileAchievementId] ? (
+                  <TgsPlayer src={ACHIEVEMENT_TGS[profileAchievementId]} loop />
+                ) : defaultProfileAnimal ? (
+                  <div className="grid h-full w-full place-items-center">
+                    <AnimalArt animal={defaultProfileAnimal} size={32} />
+                  </div>
+                ) : (
+                  <TgsPlayer src="/nft_TopHat-3159.tgs" loop />
+                )}
+              </div>
             </div>
-          </div>
-          <div className="min-w-0 flex-1">
-            <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[16px] font-extrabold leading-tight truncate" />
+            <div className="min-w-0 flex-1">
+              <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[16px] font-extrabold leading-tight truncate" />
+            </div>
           </div>
           <div className="flex gap-[6px] shrink-0">
             {[
@@ -233,10 +235,11 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Primary balance = the number that grows; income rate is its subordinate line */}
-        <div className="relative z-[1] mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
-          style={{ background: gs.profile_wallpaper && gs.profile_wallpaper !== 'none' ? 'color-mix(in srgb, var(--tg-theme-bg-color) 80%, transparent)' : 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
+      {/* Primary balance = the number that grows; income rate is its subordinate line */}
+      <div className="mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
+        style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
           <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.5px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Касса зоопарка
           </p>
@@ -258,7 +261,6 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             <span>содержание <b style={{ color: 'var(--c-orange)' }}>{fmt(gs.upkeep_rub_per_min)} ₽</b></span>
           </div>
         </div>
-      </div>
 
       {/* ── Section tabs ── */}
       <div
