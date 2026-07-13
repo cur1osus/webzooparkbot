@@ -7,6 +7,7 @@ import { fmt } from '@/utils/format';
 import { ProfileBadge, type ProfileBadgeTone } from '@/components/ProfileBadge';
 import { Nickname } from '@/components/NicknameEffects';
 import { wallpaperClass } from '@/data/profileWallpapers';
+import { DEVELOPER_TG_ID } from '@/lib/access';
 
 function rankTone(rank: number): ProfileBadgeTone {
   if (rank === 1) return 'gold';
@@ -205,7 +206,9 @@ function PlayerRow({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: Top
           <PlayerName entry={entry} />
           {entry.is_me && <span className="top-you-label">ты</span>}
         </div>
-        <span className="top-player-caption">смотритель зоопарка</span>
+        {entry.tg_id === DEVELOPER_TG_ID && (
+          <span className="top-player-caption">смотритель зоопарка</span>
+        )}
       </div>
       <span className="top-player-income">+{fmt(entry.income_rub_per_min)} ₽<small>/мин</small></span>
     </button>

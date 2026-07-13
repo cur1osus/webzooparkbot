@@ -12,6 +12,7 @@ import { DonatePage } from './more/DonatePage';
 import { apiConfig, apiCreateTransfer, apiGetBonus, apiGetMyTransfers } from '@/api';
 import { fmt, formatDateShort } from '@/utils/format';
 import { copyTmaText, inTma } from '@/lib/tma';
+import { DEVELOPER_TG_ID } from '@/lib/access';
 import { PageHeader } from '@/components/PageHeader';
 import { AdminPage } from '@/pages/AdminPage';
 import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
@@ -191,7 +192,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       ))}
 
       {/* Admin panel (только для владельца) */}
-      {gs.tg_id === 474701274 && (
+      {gs.tg_id === DEVELOPER_TG_ID && (
         <div
           className="card flex items-center gap-[14px] cursor-pointer"
           style={{ border: '1px solid rgba(var(--c-red-rgb),0.3)' }}

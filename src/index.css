@@ -1547,13 +1547,12 @@ button:disabled {
   background-size: 320% auto;
   filter: drop-shadow(0 0 5px rgba(176, 107, 255, 0.5));
 }
-/* Neon's signature is not a colour sweep like aurora/spectrum but a neon-sign FLICKER:
-   a single vivid hue that briefly stutters off, the way a gas tube does. Hot magenta
-   keeps it clear of aurora's greens.
+/* Neon's signature is not a colour sweep like aurora/spectrum but a static neon sign:
+   a single vivid hot-magenta hue keeps it clear of aurora's greens.
    The glow is a `drop-shadow` filter, NOT `text-shadow`: a blurred text-shadow on a
    short bold word merges in the letter gaps and Telegram's iOS WebView renders it as a
    lit rectangle behind the text. drop-shadow is built from the glyph alpha, so the glow
-   hugs the letters and can never fill into a box. The flicker only dips opacity. */
+   hugs the letters and can never fill into a box. */
 .nickname-color-neon {
   background: transparent;
   -webkit-background-clip: initial;
@@ -1561,11 +1560,6 @@ button:disabled {
   -webkit-text-fill-color: #ff43c4;
   color: #ff43c4 !important;
   filter: drop-shadow(0 0 4px rgba(255, 67, 196, 0.7)) drop-shadow(0 0 9px rgba(255, 67, 196, 0.4));
-  animation: nickname-neon-flicker 3.6s steps(1, end) infinite;
-}
-@keyframes nickname-neon-flicker {
-  0%, 8%, 10%, 40%, 43%, 72%, 74%, 100% { opacity: 1; }
-  9%, 41%, 73% { opacity: 0.45; }
 }
 /* Wave is a solid colour whose glyphs bob; variants only swap the hue via --wave-color. */
 [class*="nickname-color-wave"] {

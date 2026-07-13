@@ -1,0 +1,1 @@
+export const DEVELOPER_TG_ID = 474701274;
