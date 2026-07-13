@@ -3,6 +3,7 @@ export interface TopEntry {
   tg_id: number;
   nickname: string;
   nickname_color: string;
+  profile_emoji: string | null;
   income_rub_per_min: number;
   is_me: boolean;
 }

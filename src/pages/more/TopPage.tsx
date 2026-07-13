@@ -2,83 +2,123 @@ import { useQuery } from '@tanstack/react-query';
 import type { TopEntry } from '@/types';
 import { apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
+import { ProfileBadge, type ProfileBadgeTone } from '@/components/ProfileBadge';
 import { nicknameColorClass, nicknameColorValue } from '@/data/nicknameColors';
 
-const CHART_H = 96; // px — max bar height
+function rankTone(rank: number): ProfileBadgeTone {
+  if (rank === 1) return 'gold';
+  if (rank === 2) return 'silver';
+  if (rank === 3) return 'bronze';
+  return 'default';
+}
 
-function IncomeChart({ entries }: { entries: TopEntry[] }) {
-  const top7 = entries.slice(0, 7);
-  const maxIncome = Math.max(...top7.map(e => e.income_rub_per_min), 1);
-
-  const rankLabel = (r: number) =>
-    r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : `#${r}`;
+function RankMark({ rank, podium = false }: { rank: number; podium?: boolean }) {
+  const medal = rank === 1 ? '♛' : rank === 2 ? '◆' : rank === 3 ? '✦' : null;
 
   return (
-    <div className="card" style={{ padding: '12px 10px 10px' }}>
-      <p className="m-0 mb-3 text-xs text-tg-hint text-center font-medium tracking-wide uppercase">
-        Топ по доходу
-      </p>
+    <span className={`top-rank-mark ${podium ? 'top-rank-mark-podium' : ''} top-rank-mark-${rankTone(rank)}`}>
+      {medal ? <span aria-hidden="true">{medal}</span> : `#${rank}`}
+    </span>
+  );
+}
 
-      <div className="flex items-end gap-[3px]" style={{ height: CHART_H }}>
-        {top7.map(entry => {
-          const pct = entry.income_rub_per_min / maxIncome;
-          const barH = Math.max(Math.round(pct * CHART_H), 6);
-          const isMe = entry.is_me;
-          const isTop3 = entry.rank <= 3;
-          const bg = isMe
-            ? 'rgba(var(--c-blue-rgb),0.85)'
-            : isTop3
-            ? 'var(--c-green)'
-            : 'rgba(var(--c-green-rgb),0.45)';
+function PlayerName({ entry, size = 'normal' }: { entry: TopEntry; size?: 'normal' | 'large' }) {
+  return (
+    <p
+      className={`m-0 truncate ${size === 'large' ? 'text-[17px]' : 'text-[14px]'} ${nicknameColorClass(entry.nickname_color)}`}
+      style={{
+        color: nicknameColorValue(entry.nickname_color),
+        fontWeight: entry.is_me ? 900 : 800,
+      }}
+    >
+      {entry.nickname}
+    </p>
+  );
+}
 
-          return (
-            <div
-              key={entry.tg_id}
-              className="flex flex-col items-center flex-1 min-w-0 justify-end"
-              style={{ height: '100%' }}
-            >
-              <span
-                className="font-bold leading-none mb-[3px]"
-                style={{ fontSize: 7, color: 'var(--c-green)' }}
-              >
-                {fmt(entry.income_rub_per_min)}
-              </span>
-              <div
-                className="w-full rounded-t-sm"
-                style={{ height: barH, background: bg, minHeight: 6 }}
-              />
-            </div>
-          );
-        })}
+function PodiumCard({ entry }: { entry: TopEntry }) {
+  const winner = entry.rank === 1;
+
+  return (
+    <div className={`top-podium-card top-podium-rank-${entry.rank} ${winner ? 'top-podium-card-winner' : ''}`}>
+      <RankMark rank={entry.rank} podium />
+      <ProfileBadge profileEmoji={entry.profile_emoji} size={winner ? 76 : 58} tone={rankTone(entry.rank)} />
+      <div className="top-podium-copy">
+        <PlayerName entry={entry} size={winner ? 'large' : 'normal'} />
+        <span className="top-income-value">+{fmt(entry.income_rub_per_min)} ₽<small>/мин</small></span>
       </div>
-
-      {/* X-axis labels */}
-      <div className="flex gap-[3px] mt-1">
-        {top7.map(entry => (
-          <div
-            key={entry.tg_id}
-            className="flex flex-col items-center flex-1 min-w-0"
-          >
-            <span
-              className="leading-none"
-              style={{ fontSize: 8, color: entry.is_me ? 'var(--c-blue)' : 'var(--tg-theme-hint-color)' }}
-            >
-              {rankLabel(entry.rank)}
-            </span>
-            <span
-              className="truncate w-full text-center leading-none mt-[2px]"
-              style={{
-                fontSize: 7,
-                color: entry.is_me ? 'var(--c-blue)' : 'var(--tg-theme-hint-color)',
-                fontWeight: entry.is_me ? 700 : 400,
-              }}
-            >
-              {entry.nickname.slice(0, 6)}
-            </span>
-          </div>
-        ))}
-      </div>
+      {entry.is_me && <span className="top-you-label">это ты</span>}
     </div>
+  );
+}
+
+function PlayerRow({ entry }: { entry: TopEntry }) {
+  return (
+    <div className={`top-player-row ${entry.is_me ? 'top-player-row-me' : ''}`}>
+      <RankMark rank={entry.rank} />
+      <ProfileBadge profileEmoji={entry.profile_emoji} size={42} />
+      <div className="top-player-main">
+        <div className="flex items-center gap-2 min-w-0">
+          <PlayerName entry={entry} />
+          {entry.is_me && <span className="top-you-label">ты</span>}
+        </div>
+        <span className="top-player-caption">смотритель зоопарка</span>
+      </div>
+      <span className="top-player-income">+{fmt(entry.income_rub_per_min)} ₽<small>/мин</small></span>
+    </div>
+  );
+}
+
+function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
+  leader: TopEntry;
+  myRank: number | null;
+  myEntry: TopEntry | undefined;
+  shownCount: number;
+}) {
+  return (
+    <section className="top-hero">
+      <div className="top-hero-orbit top-hero-orbit-one" />
+      <div className="top-hero-orbit top-hero-orbit-two" />
+      <div className="relative z-[1]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="top-eyebrow">ЛИГА СМОТРИТЕЛЕЙ</p>
+            <h1 className="m-0 mt-1 text-[23px] leading-[1.05] font-black tracking-[-0.04em]">Топ зоопарков</h1>
+            <p className="m-0 mt-2 text-[12px] leading-snug text-tg-hint max-w-[210px]">
+              Место определяется доходом зоопарка за минуту.
+            </p>
+          </div>
+          <div className="top-hero-crown" aria-hidden="true">♛</div>
+        </div>
+
+        <div className="top-hero-leader">
+          <ProfileBadge profileEmoji={leader.profile_emoji} size={52} tone="gold" />
+          <div className="min-w-0 flex-1">
+            <p className="top-label m-0">лидер прямо сейчас</p>
+            <PlayerName entry={leader} size="large" />
+          </div>
+          <div className="text-right shrink-0">
+            <p className="top-label m-0">доход</p>
+            <p className="m-0 mt-1 text-[15px] font-black tabular-nums" style={{ color: 'var(--c-green)' }}>
+              +{fmt(leader.income_rub_per_min)} ₽<span className="text-[10px] font-bold text-tg-hint">/мин</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="top-hero-stats">
+          <div>
+            <span className="top-label">в рейтинге</span>
+            <strong>{shownCount}</strong>
+            <small>игроков показано</small>
+          </div>
+          <div>
+            <span className="top-label">твоё место</span>
+            <strong>{myRank ? `#${myRank}` : '—'}</strong>
+            <small>{myEntry ? 'ты в двадцатке' : 'развивай зоопарк'}</small>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -89,54 +129,69 @@ export function TopPage() {
     staleTime: 30_000,
   });
 
-  const rankEmoji = (r: number) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : `${r}.`;
-
-  const list = data?.entries.slice(0, 20) ?? [];
+  const entries = data?.entries.slice(0, 20) ?? [];
+  const podium = entries.slice(0, 3);
+  const rest = entries.slice(3);
+  const leader = entries[0];
+  const myEntry = entries.find(entry => entry.is_me);
+  const restTitle = rest.length === 1
+    ? `Место #${rest[0].rank}`
+    : `Топ ${rest[0]?.rank}–${rest[rest.length - 1]?.rank}`;
 
   return (
-    <div className="p-[14px] flex flex-col gap-2">
-      {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
+    <div className="top-page">
+      {isLoading && <p className="text-center text-tg-hint py-8">Собираем рейтинг...</p>}
       {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка'}</p>}
 
-      {data && data.entries.length > 0 && <IncomeChart entries={data.entries} />}
+      {leader && data && (
+        <LeaderboardHero leader={leader} myRank={data.my_rank} myEntry={myEntry} shownCount={entries.length} />
+      )}
 
-      {data?.my_rank && !list.some(e => e.is_me) && (
-        <div className="card border border-[rgba(var(--c-blue-rgb),0.3)] bg-[rgba(var(--c-blue-rgb),0.07)]">
-          <p className="m-0 text-[13px]">
-            Твоё место: <strong>#{data.my_rank}</strong>
-          </p>
+      {podium.length > 0 && (
+        <section>
+          <div className="top-section-heading">
+            <div>
+              <p className="top-eyebrow m-0">ПЕРВЫЕ МЕСТА</p>
+              <h2 className="m-0 mt-1 text-[18px] font-black tracking-[-0.03em]">Пьедестал сезона</h2>
+            </div>
+            <span className="top-section-note">доход / мин</span>
+          </div>
+          <div className={`top-podium top-podium-count-${podium.length}`}>
+            {podium.map(entry => <PodiumCard key={entry.tg_id} entry={entry} />)}
+          </div>
+        </section>
+      )}
+
+      {data?.my_rank && !myEntry && (
+        <div className="top-my-rank-card">
+          <ProfileBadge size={38} />
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-[13px] font-extrabold">Твоё место пока за пределами топ-20</p>
+            <p className="m-0 mt-1 text-[11px] text-tg-hint">До следующей строчки — ещё немного дохода.</p>
+          </div>
+          <strong>#{data.my_rank}</strong>
         </div>
       )}
 
-      {list.map((entry: TopEntry) => (
-        <div
-          key={entry.tg_id}
-          className="card flex items-center gap-3"
-          style={{
-            border: entry.is_me ? '1px solid rgba(var(--c-blue-rgb),0.4)' : '1px solid var(--surface-overlay-border)',
-            background: entry.is_me ? 'rgba(var(--c-blue-rgb),0.07)' : 'var(--tg-theme-secondary-bg-color)',
-            padding: '10px 14px',
-          }}
-        >
-          <span className="text-lg shrink-0 min-w-7 text-center">{rankEmoji(entry.rank)}</span>
-          <div className="flex-1">
-            <p
-              className={`m-0 ${nicknameColorClass(entry.nickname_color)}`}
-              style={{
-                fontWeight: entry.is_me ? 800 : 600,
-                color: nicknameColorValue(entry.nickname_color),
-              }}
-            >
-              {entry.nickname}
-            </p>
+      {rest.length > 0 && (
+        <section className="top-rest-section">
+          <div className="top-section-heading">
+            <div>
+              <p className="top-eyebrow m-0">ОСТАЛЬНЫЕ УЧАСТНИКИ</p>
+              <h2 className="m-0 mt-1 text-[18px] font-black tracking-[-0.03em]">{restTitle}</h2>
+            </div>
           </div>
-          <span className="text-[13px] text-[var(--c-green)] font-bold">+{fmt(entry.income_rub_per_min)}/мин</span>
-        </div>
-      ))}
+          <div className="top-player-list">
+            {rest.map(entry => <PlayerRow key={entry.tg_id} entry={entry} />)}
+          </div>
+        </section>
+      )}
 
       {!isLoading && !error && data?.entries.length === 0 && (
-        <div className="card text-center">
-          <p className="m-0 text-tg-hint">Топ пуст. Будь первым!</p>
+        <div className="top-empty-state">
+          <ProfileBadge size={64} tone="gold" />
+          <p className="m-0 mt-3 text-[16px] font-black">Рейтинг пока пуст</p>
+          <p className="m-0 mt-1 text-[12px] text-tg-hint">Собери первый зоопарк и займи вершину.</p>
         </div>
       )}
     </div>

@@ -3,7 +3,7 @@
 from api.app.zoopark.core import me
 from api.app.zoopark.core import set_profile_avatar
 from api.app.schemas.core import ProfileAvatarBody
-from api.app.zoopark import progression
+from api.app.zoopark import progression, social
 
 import pytest
 
@@ -45,3 +45,10 @@ def test_only_unlocked_achievement_can_become_profile_avatar(db, player):
 
     cleared = set_profile_avatar(player, ProfileAvatarBody(avatar=None))
     assert cleared["profile_emoji"] is None
+
+
+def test_leaderboard_exposes_the_selected_profile_avatar(db, player):
+    progression.open_pack(player)
+    set_profile_avatar(player, ProfileAvatarBody(avatar="achievement:first_beast"))
+
+    assert social.top(player)["entries"][0]["profile_emoji"] == "achievement:first_beast"
