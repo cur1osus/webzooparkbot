@@ -37,20 +37,34 @@ def offer_price_rub(offer: MerchantOffer, bonuses: Bonuses) -> int:
     """List price minus the merchant's own per-offer discount. (Item discounts now apply to
     packs, not the merchant — see the `discount_packs` property.)"""
     del bonuses  # kept for call-site compatibility; the merchant has no item discount now
-    return max(1, int(offer.list_price_rub * (100 - offer.discount_pct) / 100))
+    return max(1, int(offer_list_price_rub(offer) * (100 - offer.discount_pct) / 100))
+
+
+def offer_list_price_rub(offer: MerchantOffer) -> int:
+    species = SPECIES_BY_ID[offer.species_id]
+    return merchant_price_rub(
+        offer.gene_survival,
+        offer.gene_appearance,
+        offer.gene_size,
+        species["rarity"],  # type: ignore[arg-type]
+    )
 
 
 def _fresh_offer(player_id: int, season_id: int, slot: int, expires_at) -> MerchantOffer:
     genes = roll_genes()
+    species_id = roll_species_id()
     return MerchantOffer(
         player_id=player_id,
         season_id=season_id,
         slot=slot,
-        species_id=roll_species_id(),
+        species_id=species_id,
         habitat=roll_habitat(),
         discount_pct=random.choice(MERCHANT_DISCOUNTS),
         list_price_rub=merchant_price_rub(
-            genes["gene_survival"], genes["gene_appearance"], genes["gene_size"]
+            genes["gene_survival"],
+            genes["gene_appearance"],
+            genes["gene_size"],
+            SPECIES_BY_ID[species_id]["rarity"],  # type: ignore[arg-type]
         ),
         expires_at=expires_at,
         **genes,
@@ -88,13 +102,20 @@ def ensure_offers(session: Session, player_id: int, season_id: int) -> list[Merc
             offer.habitat = roll_habitat()
             offer.discount_pct = random.choice(MERCHANT_DISCOUNTS)
             offer.list_price_rub = merchant_price_rub(
-                genes["gene_survival"], genes["gene_appearance"], genes["gene_size"]
+                genes["gene_survival"],
+                genes["gene_appearance"],
+                genes["gene_size"],
+                SPECIES_BY_ID[offer.species_id]["rarity"],  # type: ignore[arg-type]
             )
             offer.purchased_at = None
             offer.created_at = now
             offer.expires_at = expires_at
             for key, value in genes.items():
                 setattr(offer, key, value)
+        elif offer.purchased_at is None:
+            # Reprice unbought offers when the balance constants change, so an old row
+            # never keeps a stale pre-rebase price until its next daily rotation.
+            offer.list_price_rub = offer_list_price_rub(offer)
 
     session.flush()
     return list(
@@ -119,7 +140,7 @@ def _offer_payload(offer: MerchantOffer, bonuses: Bonuses) -> dict:
         "appearance": offer.gene_appearance,
         "size_trait": offer.gene_size,
         "habitat": offer.habitat,
-        "list_price": offer.list_price_rub,
+        "list_price": offer_list_price_rub(offer),
         "discount_pct": offer.discount_pct,
         "final_price": offer_price_rub(offer, bonuses),
         "bought": offer.purchased_at is not None,

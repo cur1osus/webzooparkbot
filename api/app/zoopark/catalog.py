@@ -402,19 +402,25 @@ EXPEDITIONS: dict[Habitat, ExpeditionDef] = {
 # ─── Merchant ─────────────────────────────────────────────────────────────────
 #
 # Not in the GDD. An offer is one concrete animal with visible genes, so it is priced
-# from what that animal will earn over its own lifetime — the same rule as packs, minus
-# the lottery premium, because here you can see exactly what you are buying.
+# from what that animal will earn over its own lifetime. The merchant is a guaranteed
+# purchase, so it costs twice the blind pack fraction, while still leaving a clear
+# payback window for the player.
 
 MERCHANT_SLOTS = 3
 MERCHANT_REFRESH_HOURS = 24
 MERCHANT_DISCOUNTS = (5, 10, 15, 20, 25, 30)
-# Twice a pack's fraction: the merchant shows you the genes, the pack does not. Paying
-# double for certainty is the trade, and it is what keeps a blind pack worth opening.
-MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = 0.10
+# Twice the pack's 0.5% fraction: the merchant shows the genes, the pack does not.
+MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME * 2
 
 
-def merchant_price_rub(survival: GeneTier, appearance: GeneTier, size: GeneTier) -> int:
-    return int(lifetime_income_rub(survival, appearance, size) * MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME)
+def merchant_price_rub(
+    survival: GeneTier,
+    appearance: GeneTier,
+    size: GeneTier,
+    species_rarity: Rarity,
+) -> int:
+    lifetime = lifetime_income_rub(survival, appearance, size)
+    return int(lifetime * SPECIES_RARITY_INCOME_MULT[species_rarity] * MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME)
 
 
 # ─── Bank ─────────────────────────────────────────────────────────────────────
