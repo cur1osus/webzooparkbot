@@ -1,3 +1,7 @@
+import type { CSSProperties, ElementType } from 'react';
+import type { NicknameColor } from '@/types';
+import { nicknameColorClass, nicknameColorValue } from '@/data/nicknameColors';
+
 export function TextWave({ text }: { text: string }) {
   return (
     <span className="wave">
@@ -7,5 +11,33 @@ export function TextWave({ text }: { text: string }) {
         </span>
       ))}
     </span>
+  );
+}
+
+// Single source of truth for rendering a styled nickname. Every place that shows a
+// player's name (home HUD, leaderboard, public profile) routes through this so the
+// colour, glow and per-effect quirks (the "wave" bob) stay identical everywhere —
+// previously each call site re-implemented this and drifted out of sync.
+export function Nickname({
+  name,
+  color,
+  as: Tag = 'span',
+  className = '',
+  style,
+}: {
+  name: string;
+  color: NicknameColor | string | null | undefined;
+  as?: ElementType;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const colorClass = nicknameColorClass(color);
+  return (
+    <Tag
+      className={`nickname ${colorClass} ${className}`.replace(/\s+/g, ' ').trim()}
+      style={{ color: nicknameColorValue(color), ...style }}
+    >
+      {color === 'wave' ? <TextWave text={name} /> : name}
+    </Tag>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
 import type { GameState, NicknameColor } from '@/types';
 import { apiBuyNicknameColor, apiSetNicknameColor } from '@/api';
@@ -33,11 +34,21 @@ function GlitchText({ children }: { children: string }) {
 }
 
 function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const queryClient = useQueryClient();
   const [selectedColor, setSelectedColor] = useState<NicknameColor>(gs.nickname_color);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Cached state from the previous app build may briefly lack this new field on startup.
   const colorStates = gs.nickname_colors ?? [];
+
+  // The leaderboard and public profiles carry each player's colour but live in their own
+  // react-query caches, so a fresh choice must invalidate them or it would only appear
+  // after the 30s staleTime elapses.
+  const refreshNameEverywhere = () => {
+    onRefresh();
+    void queryClient.invalidateQueries({ queryKey: ['top'] });
+    void queryClient.invalidateQueries({ queryKey: ['public-profile'] });
+  };
 
   const setColor = async (color: NicknameColor) => {
     if (saving || color === gs.nickname_color) return;
@@ -46,7 +57,7 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     setError(null);
     try {
       await apiSetNicknameColor(color);
-      onRefresh();
+      refreshNameEverywhere();
     } catch (cause) {
       setSelectedColor(gs.nickname_color);
       setError(cause instanceof Error ? cause.message : 'Не удалось сохранить цвет');
@@ -62,7 +73,7 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
     setError(null);
     try {
       await apiBuyNicknameColor(color);
-      onRefresh();
+      refreshNameEverywhere();
     } catch (cause) {
       setSelectedColor(gs.nickname_color);
       setError(cause instanceof Error ? cause.message : 'Не удалось купить цвет');

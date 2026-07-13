@@ -1439,6 +1439,9 @@ button:disabled {
   color: #ff8a00 !important;
   text-shadow: 0 0 12px rgba(255, 138, 0, 0.42);
 }
+/* The "wave" bob lifts glyphs above their line box; any clipping ancestor (e.g. a
+   truncated name row) would cut them off, so the styled element opts out of clipping. */
+.nickname.nickname-color-wave { overflow: visible; }
 .wave {
   display: inline-flex;
   align-items: baseline;

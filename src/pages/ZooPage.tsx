@@ -16,6 +16,7 @@ import { ForgeTab, ItemDetailPage, ItemSelectPage } from '@/features/forge/Forge
 import { VetTab } from '@/features/vet/VetTab';
 import { DevelopmentTab } from '@/features/development/DevelopmentTab';
 import { AchievementsTab } from '@/features/achievements/AchievementsTab';
+import { Nickname } from '@/components/NicknameEffects';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -211,7 +212,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="m-0 text-[16px] font-extrabold leading-tight truncate">{gs.nickname}</p>
+            <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[16px] font-extrabold leading-tight truncate" />
           </div>
           <div className="flex gap-[6px] shrink-0">
             {[

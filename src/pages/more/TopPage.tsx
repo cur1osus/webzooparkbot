@@ -5,8 +5,7 @@ import type { PublicProfile, TopEntry } from '@/types';
 import { apiGetPublicProfile, apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
 import { ProfileBadge, type ProfileBadgeTone } from '@/components/ProfileBadge';
-import { nicknameColorClass, nicknameColorValue } from '@/data/nicknameColors';
-import { TextWave } from '@/components/NicknameEffects';
+import { Nickname } from '@/components/NicknameEffects';
 
 function rankTone(rank: number): ProfileBadgeTone {
   if (rank === 1) return 'gold';
@@ -25,15 +24,13 @@ function RankMark({ rank, podium = false }: { rank: number; podium?: boolean }) 
 
 function PlayerName({ entry, size = 'normal' }: { entry: Pick<TopEntry, 'nickname' | 'nickname_color' | 'is_me'>; size?: 'normal' | 'large' }) {
   return (
-    <p
-      className={`m-0 top-player-name ${size === 'large' ? 'text-[17px] top-player-name-large' : 'text-[14px]'} ${nicknameColorClass(entry.nickname_color)}`}
-      style={{
-        color: nicknameColorValue(entry.nickname_color),
-        fontWeight: entry.is_me ? 900 : 800,
-      }}
-    >
-      {entry.nickname_color === 'wave' ? <TextWave text={entry.nickname} /> : entry.nickname}
-    </p>
+    <Nickname
+      as="p"
+      name={entry.nickname}
+      color={entry.nickname_color}
+      className={`m-0 top-player-name ${size === 'large' ? 'text-[17px] top-player-name-large' : 'text-[14px]'}`}
+      style={{ fontWeight: entry.is_me ? 900 : 800 }}
+    />
   );
 }
 
@@ -148,9 +145,7 @@ function IncomeGapChart({ entries, onSelect }: { entries: TopEntry[]; onSelect: 
             <button type="button" className="top-gap-row" key={entry.tg_id} onClick={() => onSelect(entry)} aria-label={`Открыть профиль ${entry.nickname}`}>
               <div className="top-gap-meta">
                 <RankMark rank={entry.rank} />
-                <span className="top-gap-name">
-                  {entry.nickname}
-                </span>
+                <Nickname as="span" name={entry.nickname} color={entry.nickname_color} className="top-gap-name" />
                 <span className="top-gap-value">+{fmt(entry.income_rub_per_min)} ₽</span>
               </div>
               <div className="top-gap-track" aria-hidden="true">
