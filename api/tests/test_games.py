@@ -108,6 +108,8 @@ def test_cocktail_history_persists_and_reward_goes_to_first_winner(db):
     assert winner["reward_paw"] == 150
     assert second["won"] is True
     assert "reward_paw" not in second
+    assert second["winner_nickname"] == "player-1"
+    assert games.cocktail_state(1002)["winner_nickname"] == "player-1"
 
     with get_session() as session:
         balances = [session.query(Player).filter_by(telegram_id=tg_id).one().balance_paw for tg_id in (1001, 1002)]

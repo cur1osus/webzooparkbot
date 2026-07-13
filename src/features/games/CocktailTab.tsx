@@ -13,6 +13,7 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ won: boolean; message: string } | null>(null);
   const [history, setHistory] = useState<CocktailHistoryEntry[]>([]);
+  const [winnerNickname, setWinnerNickname] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -21,6 +22,7 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         if (!mounted) return;
         setAttemptsLeft(state.attempts_left);
         setHistory(state.history);
+        setWinnerNickname(state.winner_nickname);
         if (state.solved) {
           setResult({
             won: true,
@@ -68,6 +70,7 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
       const response = await apiCocktailGuess(slots as string[]);
       setAttemptsLeft(response.attempts_left);
       setHistory((current) => [...current, { fruits: slots as string[], clues: response.clues }]);
+      setWinnerNickname(response.winner_nickname ?? null);
 
       if (response.won) {
         setResult({
@@ -217,6 +220,18 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         >
           <p className="m-0 font-bold text-base">{result.won ? '🎉 Победа!' : '😢 Попробуй снова'}</p>
           <p className="mt-1 mb-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>{result.message}</p>
+        </div>
+      )}
+
+      {winnerNickname && (
+        <div
+          className="rounded-2xl p-4"
+          style={{ background: 'rgba(var(--c-gold-rgb),0.1)', border: '1px solid rgba(var(--c-gold-rgb),0.35)' }}
+        >
+          <p className="m-0 font-bold text-base">🏆 Победитель коктейля</p>
+          <p className="mt-1 mb-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            {winnerNickname} первым угадал рецепт и получил 150 🐾
+          </p>
         </div>
       )}
 

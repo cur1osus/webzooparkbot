@@ -613,6 +613,7 @@ def cocktail_state(tg_id: int) -> dict:
         history = _cocktail_history(current_round) if current_round else []
         solved = bool(current_round and current_round.solved_at is not None)
         winner_id = day.winner_player_id if day else None
+        winner = session.get(Player, winner_id) if winner_id else None
         return {
             "ok": True,
             "attempts_left": max(0, COCKTAIL_BASE_ATTEMPTS - (current_round.attempts if current_round else 0)),
@@ -620,6 +621,7 @@ def cocktail_state(tg_id: int) -> dict:
             "solved": solved,
             "rewarded": solved and winner_id == player.id,
             "reward_claimed": winner_id is not None,
+            "winner_nickname": winner.nickname if winner else None,
         }
 
 
@@ -696,6 +698,9 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
                 ledger.grant(session, player, "paw", COCKTAIL_REWARD_PAW, "cocktail_reward")
                 result["reward_paw"] = COCKTAIL_REWARD_PAW
                 result["new_paw_coins"] = ledger.balance(player, "paw")
+
+        winner = session.get(Player, daily.winner_player_id) if daily.winner_player_id else None
+        result["winner_nickname"] = winner.nickname if winner else None
 
         session.commit()
         return result

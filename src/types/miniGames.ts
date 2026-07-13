@@ -93,6 +93,7 @@ export interface CocktailGuessResult {
   clues: Array<{ pos: number; status: 'correct' | 'present' | 'absent' }>;
   reward_paw?: number;
   new_paw_coins?: number;
+  winner_nickname?: string | null;
 }
 
 export interface CocktailHistoryEntry {
@@ -107,4 +108,5 @@ export interface CocktailState {
   solved: boolean;
   rewarded: boolean;
   reward_claimed: boolean;
+  winner_nickname: string | null;
 }
