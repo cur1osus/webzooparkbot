@@ -369,11 +369,18 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                       <button
                         key={s.id}
                         onClick={() => setAnimalSort(s.id)}
-                        className="min-w-0 w-full px-1 py-[10px] rounded-xl text-[11px] font-bold border-none cursor-pointer whitespace-nowrap transition-colors"
+                        className="min-w-0 w-full rounded-xl border-none cursor-pointer whitespace-nowrap transition-colors"
                         style={{
                           background: active ? 'color-mix(in srgb, var(--c-gold) 18%, transparent)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 9%, transparent)',
                           color: active ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
                           border: `1px solid ${active ? 'color-mix(in srgb, var(--c-gold) 40%, transparent)' : 'transparent'}`,
+                          minHeight: 44,
+                          padding: '0 2px',
+                          fontSize: 11,
+                          lineHeight: 1.1,
+                          fontWeight: 700,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                         }}
                       >
                         {s.label}
