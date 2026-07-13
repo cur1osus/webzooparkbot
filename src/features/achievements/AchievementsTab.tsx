@@ -33,13 +33,23 @@ export function AchievementsTab({
       </div>
 
       <div className="flex flex-col gap-2">
-        {achievements.map(achievement => (
-          <AchievementCard
-            key={achievement.id}
-            achievement={achievement}
-            profileAvatar={profileAvatar}
-            onSetProfileAvatar={onSetProfileAvatar}
-          />
+        {achievements.map((achievement, index) => (
+          <div key={achievement.id}>
+            {index === 10 && (
+              <div className="mb-2 mt-4 flex items-center gap-2">
+                <span className="h-px flex-1" style={{ background: 'rgba(var(--c-gold-rgb),0.22)' }} />
+                <span className="text-[10px] font-extrabold uppercase tracking-[1px]" style={{ color: 'var(--c-gold)' }}>
+                  Финал сезона
+                </span>
+                <span className="h-px flex-1" style={{ background: 'rgba(var(--c-gold-rgb),0.22)' }} />
+              </div>
+            )}
+            <AchievementCard
+              achievement={achievement}
+              profileAvatar={profileAvatar}
+              onSetProfileAvatar={onSetProfileAvatar}
+            />
+          </div>
         ))}
       </div>
     </div>

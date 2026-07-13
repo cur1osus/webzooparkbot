@@ -1,16 +1,21 @@
 export const PROFILE_ACHIEVEMENT_PREFIX = 'achievement:';
 
 export const ACHIEVEMENT_TGS: Record<string, string> = {
-  first_beast: '/nft_ScaredCat-15455.tgs',
-  growing_zoo: '/nft_KhabibsPapakha-28085.tgs',
-  collector: '/nft_CrystalBall-9406.tgs',
-  first_baby: '/nft_HypnoLollipop-9514.tgs',
-  geneticist: '/nft_AstralShard-3155.tgs',
-  first_expedition: '/nft_StellarRocket-31355.tgs',
-  pathfinder: '/nft_HeroicHelmet-611.tgs',
-  architect: '/nft_ArtisanBrick-2928.tgs',
-  blacksmith: '/nft_SwissWatch-6567.tgs',
-  arena_winner: '/nft_MiniOscar-1300.tgs',
+  first_beast: '/nft_BunnyMuffin-20044.tgs',
+  growing_zoo: '/nft_JollyChimp-1.tgs',
+  collector: '/nft_RareBird-1.tgs',
+  first_baby: '/nft_KissedFrog-9639.tgs',
+  geneticist: '/nft_MagicPotion-1.tgs',
+  first_expedition: '/nft_StellarRocket-1.tgs',
+  pathfinder: '/nft_HeroicHelmet-2751.tgs',
+  architect: '/nft_ArtisanBrick-4828.tgs',
+  blacksmith: '/nft_MightyArm-1.tgs',
+  arena_winner: '/nft_UFCStrike-2254.tgs',
+  endgame_zoo: '/nft_BigYear-9228.tgs',
+  endgame_collector: '/nft_TimelessBook-56334.tgs',
+  endgame_geneticist: '/nft_MagicPotion-62.tgs',
+  endgame_explorer: '/nft_VictoryMedal-10059.tgs',
+  endgame_empire: '/nft_MoneyPot-1.tgs',
 };
 
 export function profileAchievementValue(id: string): string {

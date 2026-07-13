@@ -34,6 +34,11 @@ ACHIEVEMENTS: tuple[AchievementDefinition, ...] = (
     AchievementDefinition("architect", "Архитектор", "Открой три местности в зоопарке", 3),
     AchievementDefinition("blacksmith", "Кузнец", "Создай три артефакта в кузнице", 3),
     AchievementDefinition("arena_winner", "Победитель арены", "Выиграй пять одиночных игр", 5),
+    AchievementDefinition("endgame_zoo", "Великий зверинец", "Собери финальный зверинец из 30 животных", 30),
+    AchievementDefinition("endgame_collector", "Хранитель коллекции", "Собери животных 15 разных видов", 15),
+    AchievementDefinition("endgame_geneticist", "Мастер наследия", "Стань мастером наследия: 25 успешных скрещиваний", 25),
+    AchievementDefinition("endgame_explorer", "Повелитель экспедиций", "Одержи 12 побед в экспедициях", 12),
+    AchievementDefinition("endgame_empire", "Империя зоопарков", "Развивай инфраструктуру до 15 уровней суммарно", 15),
 )
 
 
@@ -67,6 +72,9 @@ def list_achievements(session: Session, player: Player) -> list[dict]:
         or 0
     )
     locality_count = int(session.scalar(select(func.count(Locality.id)).where(Locality.player_id == player_id)) or 0)
+    locality_levels = int(
+        session.scalar(select(func.coalesce(func.sum(Locality.level), 0)).where(Locality.player_id == player_id)) or 0
+    )
     forge_creations = int(
         session.scalar(
             select(func.count(LedgerEntry.id)).where(
@@ -90,6 +98,11 @@ def list_achievements(session: Session, player: Player) -> list[dict]:
         "architect": locality_count,
         "blacksmith": forge_creations,
         "arena_winner": solo_wins,
+        "endgame_zoo": animal_count,
+        "endgame_collector": species_count,
+        "endgame_geneticist": successful_breedings,
+        "endgame_explorer": expedition_victories,
+        "endgame_empire": locality_levels,
     }
 
     return [

@@ -11,7 +11,7 @@ import pytest
 def test_profile_contains_all_achievements(db, player):
     state = me(player)
 
-    assert len(state["achievements"]) == 10
+    assert len(state["achievements"]) == 15
     assert [item["id"] for item in state["achievements"]] == [
         "first_beast",
         "growing_zoo",
@@ -23,6 +23,11 @@ def test_profile_contains_all_achievements(db, player):
         "architect",
         "blacksmith",
         "arena_winner",
+        "endgame_zoo",
+        "endgame_collector",
+        "endgame_geneticist",
+        "endgame_explorer",
+        "endgame_empire",
     ]
     assert state["achievements"][0]["value"] == 0
     # Registration grants the first locality, so the third achievement step is already
