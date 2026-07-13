@@ -214,24 +214,27 @@ export function AnimalDetailCard({ animal, onClose }: { animal: Animal; onClose:
             </div>
           )}
           {incomeBreakdown && (
-            <div className="mt-3 rounded-xl px-3 py-2" style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid var(--card-border)' }}>
+            <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
               <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.2px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                Расчёт индивидуального дохода
+                Состав дохода
               </p>
-              <p className="m-0 mt-2 text-[11px] leading-relaxed tabular-nums break-words" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                ₽{fmt(incomeBreakdown.base)}{' '}
-                {incomeBreakdown.factors.map(factor => formatMultiplier(factor.multiplier)).join(' × ')}{' '}
-                = ₽{fmt(incomeBreakdown.total)} /мин
-              </p>
-              <div className="mt-2 flex flex-col gap-1">
+              <div className="mt-2 flex flex-col gap-0">
                 <div className="flex items-center justify-between gap-3 text-[11px]">
-                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>Базовый доход</span>
+                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>Общая ставка</span>
+                  <span className="font-bold tabular-nums">₽{fmt(incomeBreakdown.base_reference)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-[11px]">
+                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>Редкость вида · {rarity.label}</span>
+                  <span className="font-bold tabular-nums" style={{ color: 'var(--c-green)' }}>{formatMultiplier(incomeBreakdown.base_multiplier)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-[11px]">
+                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>База вида</span>
                   <span className="font-bold tabular-nums">₽{fmt(incomeBreakdown.base)}</span>
                 </div>
                 {incomeBreakdown.factors.map(factor => (
                   <div key={factor.key} className="flex items-center justify-between gap-3 text-[11px]">
                     <span className="min-w-0 truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                      {factor.label}{factor.value ? ` · ${factor.value}` : ''}
+                      {factor.label}{['habitat', 'sickness', 'species_item'].includes(factor.key) && factor.value ? ` · ${factor.value}` : ''}
                     </span>
                     <span className="shrink-0 font-bold tabular-nums" style={{ color: factor.multiplier === 1 ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
                       {formatMultiplier(factor.multiplier)}

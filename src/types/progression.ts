@@ -13,13 +13,14 @@ export interface AnimalIncomeFactor {
 
 export interface AnimalIncomeBreakdown {
   base: number;
+  base_reference: number;
+  base_multiplier: number;
   factors: AnimalIncomeFactor[];
   total: number;
 }
 
 /**
- * The species is a skin: GDD §3 derives income from genes and habitat only. It carries a
- * name, an emoji and a collection rarity, and nothing else.
+ * Species rarity sets the animal's income baseline; genes and current state then refine it.
  */
 export interface Animal {
   id: number;

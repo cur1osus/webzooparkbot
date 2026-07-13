@@ -168,17 +168,17 @@ SPECIES_IDS_BY_RARITY: dict[Rarity, list[int]] = {
     rarity: [i for i, s in SPECIES_BY_ID.items() if s["rarity"] == rarity] for rarity in RARITIES
 }
 
-# Species rarity is rolled independently from genes. It gives the species a modest
-# economic identity while keeping the inherited genes as the main source of variance.
+# Species rarity is rolled independently from genes. It defines the species' baseline
+# income, while inherited genes and current state refine that baseline.
 SPECIES_RARITY_WEIGHTS: dict[Rarity, float] = {
     "rare": 0.55, "epic": 0.30, "mythic": 0.12, "legendary": 0.03,
 }
 
 SPECIES_RARITY_INCOME_MULT: dict[Rarity, float] = {
-    "rare": 0.9,
-    "epic": 1.0,
-    "mythic": 1.1,
-    "legendary": 1.2,
+    "rare": 0.8,
+    "epic": 1.2,
+    "mythic": 1.8,
+    "legendary": 2.6,
 }
 
 # ─── Genes and income ─────────────────────────────────────────────────────────

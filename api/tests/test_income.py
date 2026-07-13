@@ -36,7 +36,7 @@ class TestFormula:
         assert plain == BASE_INCOME_RUB_PER_MIN
         assert matched == int(BASE_INCOME_RUB_PER_MIN * HABITAT_MATCH_BONUS)
 
-    def test_species_rarity_changes_income_modestly(self):
+    def test_species_rarity_defines_a_meaningful_income_baseline(self):
         income_by_rarity = {
             rarity: income.animal_income_rub_per_min(
                 survival="medium",
@@ -47,14 +47,8 @@ class TestFormula:
             )
             for rarity in SPECIES_RARITY_INCOME_MULT
         }
-        assert income_by_rarity == {"rare": 45, "epic": 50, "mythic": 55, "legendary": 60}
-        assert income_by_rarity["legendary"] < income.animal_income_rub_per_min(
-            survival="high",
-            appearance="high",
-            size="high",
-            habitat_matches=False,
-            species_rarity="rare",
-        )
+        assert income_by_rarity == {"rare": 40, "epic": 60, "mythic": 90, "legendary": 130}
+        assert income_by_rarity["rare"] < income_by_rarity["epic"] < income_by_rarity["mythic"] < income_by_rarity["legendary"]
 
     def test_a_sick_animal_earns_half(self):
         healthy = income.animal_income_rub_per_min(

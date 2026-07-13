@@ -134,17 +134,19 @@ def animal_income_breakdown(animal: Animal, locality_habitat: str | None, bonuse
     matches = bool(locality_habitat) and locality_habitat == animal.habitat
     is_sick = animal.sick_since is not None
     species_multiplier = bonuses.species_income_multiplier(animal.species_id)
+    rarity_multiplier = SPECIES_RARITY_INCOME_MULT[species["rarity"]]
     factors = [
         {"key": "survival", "label": "Выживаемость", "value": animal.gene_survival, "multiplier": GENE_INCOME_MULT["survival"][animal.gene_survival]},
         {"key": "appearance", "label": "Внешность", "value": animal.gene_appearance, "multiplier": GENE_INCOME_MULT["appearance"][animal.gene_appearance]},
         {"key": "size", "label": "Размер", "value": animal.gene_size, "multiplier": GENE_INCOME_MULT["size"][animal.gene_size]},
-        {"key": "rarity", "label": "Редкость вида", "value": species["rarity"], "multiplier": SPECIES_RARITY_INCOME_MULT[species["rarity"]]},
         {"key": "habitat", "label": "Родная среда", "value": "да" if matches else "нет", "multiplier": HABITAT_MATCH_BONUS if matches else 1.0},
         {"key": "sickness", "label": "Здоровье", "value": "болен" if is_sick else "здоров", "multiplier": SICK_INCOME_MULT if is_sick else 1.0},
         {"key": "species_item", "label": "Предметы вида", "value": "активные" if species_multiplier != 1.0 else "нет", "multiplier": species_multiplier},
     ]
     return {
-        "base": BASE_INCOME_RUB_PER_MIN,
+        "base": round(BASE_INCOME_RUB_PER_MIN * rarity_multiplier),
+        "base_reference": BASE_INCOME_RUB_PER_MIN,
+        "base_multiplier": rarity_multiplier,
         "factors": factors,
         "total": animal_income(animal, locality_habitat, bonuses),
     }

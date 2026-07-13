@@ -1,6 +1,6 @@
 """Income, upkeep and the passive accrual of rubles.
 
-GDD §3:  Доход = База × М_выживаемость × М_внешность × М_размер × М_местность
+GDD §3:  Доход = База вида × М_выживаемость × М_внешность × М_размер × М_местность
 GDD §7:  animals away on an expedition earn nothing.
 
 On top of that the zoo applies, in order: the sickness penalty (halves one animal), the

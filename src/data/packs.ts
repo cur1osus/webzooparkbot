@@ -48,7 +48,7 @@ export const HABITAT_INFO: Record<Habitat, {
   },
 };
 
-// Collection rarity also contributes a modest income multiplier on the server. This
+// Collection rarity contributes a meaningful income multiplier on the server. This
 // metadata is kept here so the pack-reward tile and animal card read identically.
 export const SPECIES_RARITY_META: Record<Animal['species_rarity'], { label: string; color: string }> = {
   rare: { label: 'Редкое', color: '#63C268' },

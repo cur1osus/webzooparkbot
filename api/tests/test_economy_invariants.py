@@ -158,8 +158,8 @@ class TestMerchantIsPricedForTheRebasedEconomy:
         base_lifetime = lifetime_income_rub("medium", "medium", "medium")
         rare = merchant_price_rub("medium", "medium", "medium", "rare")
         legendary = merchant_price_rub("medium", "medium", "medium", "legendary")
-        assert rare == int(base_lifetime * 0.9 * 0.01)
-        assert legendary == int(base_lifetime * 1.2 * 0.01)
+        assert rare == int(base_lifetime * 0.8 * 0.01)
+        assert legendary == int(base_lifetime * 2.6 * 0.01)
         assert legendary > rare
 
 
