@@ -5,7 +5,15 @@ import type { MaintenancePollStatus } from '@/types';
 
 const MAX_VISIBLE_PLAYERS = 15;
 
-export function OnlinePlayersIndicator({ data, devBarVisible = false }: { data: MaintenancePollStatus; devBarVisible?: boolean }) {
+export function OnlinePlayersIndicator({
+  data,
+  devBarVisible = false,
+  placement = 'floating',
+}: {
+  data: MaintenancePollStatus;
+  devBarVisible?: boolean;
+  placement?: 'floating' | 'inline';
+}) {
   const [expanded, setExpanded] = useState(false);
   const players = data.online_players.slice(0, MAX_VISIBLE_PLAYERS);
 
@@ -14,7 +22,7 @@ export function OnlinePlayersIndicator({ data, devBarVisible = false }: { data: 
   }, [data.online_count]);
 
   return (
-    <div className={`online-presence${devBarVisible ? ' online-presence-dev' : ''}`}>
+    <div className={`online-presence${placement === 'inline' ? ' online-presence-inline' : ''}${devBarVisible ? ' online-presence-dev' : ''}`}>
       {expanded && (
         <div className="online-presence-panel" role="dialog" aria-label="Игроки онлайн">
           <div className="online-presence-heading">

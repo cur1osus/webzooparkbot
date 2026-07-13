@@ -10,7 +10,6 @@ import { getTelegramStartParam } from '@/lib/tmaEnv';
 import { fmt, formatCountdown } from '@/utils/format';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
-import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { RegisterScreen } from '@/pages/RegisterScreen';
 import type { MaintenancePollStatus } from '@/types';
 
@@ -326,10 +325,9 @@ export default function App() {
       {/* Main app */}
       {state && displayState && (!state.maintenance?.active || state.is_admin) && (
         <div
-          className={`app-shell max-w-[480px] mx-auto relative ${!inTma ? 'pt-12' : ''}`}
-          style={inTma ? { paddingTop: 'var(--safe-top)' } : undefined}
+          className={`app-shell max-w-[480px] mx-auto relative ${showDevBar ? 'pt-[60px]' : ''}`}
+          style={inTma && !showDevBar ? { paddingTop: 'var(--safe-top)' } : undefined}
         >
-          <OnlinePlayersIndicator data={onlinePresence} devBarVisible={showDevBar} />
           {transferNotice && (
             <div className={`transfer-claim-toast transfer-claim-toast-${transferNotice.kind}`} role="status">
               <span>{transferNotice.kind === 'success' ? '🎉' : '⚠️'}</span>
@@ -339,7 +337,7 @@ export default function App() {
           <div key={`${tab}-${tabResetSignal}`} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
-                <ZooPage gs={displayState} onRefresh={reloadFromServer} />
+                <ZooPage gs={displayState} onRefresh={reloadFromServer} onlinePresence={onlinePresence} />
               )}
               {tab === 'shop' && (
                 <ShopPage

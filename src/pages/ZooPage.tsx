@@ -4,7 +4,7 @@ import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
 import { AnimalDetailCard } from '@/components/AnimalDetailCard';
 import { AnimalArt } from '@/components/AnimalArt';
-import type { Animal, GameState } from '@/types';
+import type { Animal, GameState, MaintenancePollStatus } from '@/types';
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
@@ -19,6 +19,7 @@ import { AchievementsTab } from '@/features/achievements/AchievementsTab';
 import { Nickname } from '@/components/NicknameEffects';
 import { profileFrameClass } from '@/data/profileFrames';
 import { wallpaperClass } from '@/data/profileWallpapers';
+import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -92,7 +93,7 @@ function compareAnimals(mode: AnimalSort): (a: Animal, b: Animal) => number {
   }
 }
 
-export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRefresh: () => void; onlinePresence: MaintenancePollStatus }) {
   const [tab, setTab] = useState<ZooTab>('overview');
   const [subPage, setSubPageState] = useState<SubPage>(() => getZooSubPageFromHash());
   const [busy, setBusy] = useState(false);
@@ -198,7 +199,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   return (
     <div className="page-content-safe">
       {/* ── Header HUD — one grid, one font, left-aligned (idle-tycoon convention) ── */}
-      <div className="relative overflow-hidden">
+      <div className="relative">
         {gs.profile_wallpaper && gs.profile_wallpaper !== 'none' && (
           <div className={`profile-wallpaper ${wallpaperClass(gs.profile_wallpaper)}`} aria-hidden="true" />
         )}
@@ -223,7 +224,14 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
               <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[16px] font-extrabold leading-tight truncate" />
             </div>
           </div>
-          <div className="flex gap-[6px] shrink-0">
+          <OnlinePlayersIndicator data={onlinePresence} placement="inline" />
+        </div>
+      </div>
+
+      {/* Primary balance = the number that grows; income rate is its subordinate line */}
+      <div className="relative mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
+        style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
+          <div className="zoo-cash-currencies">
             {[
               { label: `$ ${fmt(gs.usd)}`,   color: 'var(--c-gold)' },
               { label: `🐾 ${gs.paw_coins}`, color: 'var(--c-purple)' },
@@ -234,13 +242,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
               </span>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Primary balance = the number that grows; income rate is its subordinate line */}
-      <div className="mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
-        style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
-          <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.5px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+          <p className="zoo-cash-label m-0 text-[10px] font-extrabold uppercase tracking-[1.5px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Касса зоопарка
           </p>
           <p className="font-display m-0 mt-[3px] text-[28px] leading-none tabular-nums">

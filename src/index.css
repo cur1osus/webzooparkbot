@@ -1980,6 +1980,18 @@ button:disabled {
 }
 
 .online-presence-dev { top: calc(var(--safe-top) + 58px); }
+.online-presence-inline {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: 2;
+  flex: 0 0 auto;
+}
+.online-presence-inline .online-presence-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+}
 
 .online-presence-toggle {
   display: inline-flex;
@@ -2113,6 +2125,18 @@ button:disabled {
   background: color-mix(in srgb, var(--c-red) 12%, var(--card-bg));
   color: var(--c-red-soft);
 }
+
+/* The secondary balances belong to the cash register; keeping them in its upper-right
+   corner leaves the profile row quiet for the live-player indicator. */
+.zoo-cash-currencies {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.zoo-cash-label { padding-right: 152px; }
 
 /* ─── Keyframes ──────────────────────────────────────────────────────────────── */
 @keyframes spin {
