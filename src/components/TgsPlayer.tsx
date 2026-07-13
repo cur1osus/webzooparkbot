@@ -19,6 +19,7 @@ declare global {
 type TgsPictureElement = HTMLPictureElement & { rlPlayer?: unknown };
 
 let rlottiePromise: Promise<void> | null = null;
+let mountedTgsPlayers = 0;
 const ANIMATION_FALLBACK_TIMEOUT_MS = 5000;
 
 function loadRLottie(): Promise<void> {
@@ -160,6 +161,7 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; lo
   useEffect(() => {
     const picture = pictureRef.current;
     if (!picture) return;
+    mountedTgsPlayers += 1;
 
     const observer = new MutationObserver(() => syncPlayerCanvas(picture));
     observer.observe(picture, { childList: true, subtree: true });
@@ -167,10 +169,11 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; lo
     return () => {
       observer.disconnect();
       resetPlayer(picture);
-      // The bundled RLottie runtime keeps its shared workers and proxy table
-      // alive after destroying a player. Recreate that pool on the next mount
-      // so switching root tabs cannot accumulate stale TGS players.
-      window.RLottie?.destroyWorkers?.();
+      mountedTgsPlayers = Math.max(0, mountedTgsPlayers - 1);
+      // RLottie workers are shared by every sticker on the page. Only tear down
+      // the pool after the last player leaves; destroying it when a profile modal
+      // closes freezes the stickers that remain in the leaderboard underneath.
+      if (mountedTgsPlayers === 0) window.RLottie?.destroyWorkers?.();
     };
   }, []);
 
