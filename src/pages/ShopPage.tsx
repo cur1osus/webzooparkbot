@@ -8,7 +8,7 @@ import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
 import { PageHeader } from '@/components/PageHeader';
-import { TextWave } from '@/components/NicknameEffects';
+import { GlitchText, TextWave } from '@/components/NicknameEffects';
 
 const RARITY_LABEL = { standard: null, rare: 'Редкий', legendary: 'Легендарный' } as const;
 
@@ -20,18 +20,6 @@ const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
   { id: 'forge',      emoji: '🔨', label: 'Кузница' },
   { id: 'cosmetics',  emoji: '🎨', label: 'Стиль' },
 ];
-
-function ShimmerText({ children }: { children: string }) {
-  return <span className="shimmer-text">{children}</span>;
-}
-
-function GlitchText({ children }: { children: string }) {
-  return (
-    <span className="glitch" data-text={children}>
-      <ShimmerText>{children}</ShimmerText>
-    </span>
-  );
-}
 
 function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const queryClient = useQueryClient();

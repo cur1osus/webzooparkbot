@@ -1513,12 +1513,17 @@ button:disabled {
   50% { clip-path: inset(20% 0 42% 0); transform: translate(-2px, -1px); }
   100% { clip-path: inset(0 0 72% 0); transform: translate(1px, -1px); }
 }
+/* Touch devices (Telegram) can't hover, so the glitch must run on its own wherever the
+   neon name appears — the shop preview and every .nickname render (home, leaderboard,
+   profile) alike. */
 @media (hover: none) and (pointer: coarse) {
-  .nickname-preview-neon .glitch::before {
+  .nickname-preview-neon .glitch::before,
+  .nickname .glitch::before {
     opacity: 0.85;
     animation: g-a 0.4s steps(2) infinite;
   }
-  .nickname-preview-neon .glitch::after {
+  .nickname-preview-neon .glitch::after,
+  .nickname .glitch::after {
     opacity: 0.85;
     animation: g-b 0.4s steps(2) infinite;
   }
