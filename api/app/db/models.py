@@ -119,6 +119,7 @@ class Player(Base):
     nickname: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
     profile_emoji: Mapped[str | None] = mapped_column(String(64), nullable=True)
     nickname_color: Mapped[str] = mapped_column(String(16), nullable=False, default="ivory")
+    profile_frame: Mapped[str] = mapped_column(String(24), nullable=False, default="none")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
 
     registered_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)

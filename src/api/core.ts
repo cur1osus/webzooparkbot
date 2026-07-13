@@ -24,6 +24,15 @@ export const apiBuyNicknameColor = (color: string) =>
   req<{ ok: true; nickname_color: string; new_paw_coins: number }>(`/profile/nickname-colors/${color}`, {
     method: 'POST',
   });
+export const apiSetProfileFrame = (frame: string) =>
+  req<{ ok: true; profile_frame: string }>('/profile/frame', {
+    method: 'POST',
+    body: JSON.stringify({ frame }),
+  });
+export const apiBuyProfileFrame = (frame: string) =>
+  req<{ ok: true; profile_frame: string; new_paw_coins: number }>(`/profile/frames/${frame}`, {
+    method: 'POST',
+  });
 
 export const apiAdminOverview = (search = '') =>
   req<AdminOverview>(`/admin/overview${search ? `?search=${encodeURIComponent(search)}` : ''}`);

@@ -7,6 +7,8 @@ const baseState: GameState = {
   nickname: 'test',
   nickname_color: 'ivory',
   nickname_colors: [{ id: 'ivory', price_paw: 0, animated: false, rarity: 'standard', owned: true }],
+  profile_frame: 'none',
+  profile_frames: [{ id: 'none', price_paw: 0, animated: false, rarity: 'standard', owned: true }],
   registered_at: '2026-01-01T00:00:00.000Z',
   profile_emoji: null,
   rub: 100,

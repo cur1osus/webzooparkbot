@@ -14,3 +14,7 @@ class NicknameColorBody(BaseModel):
 
 class ProfileAvatarBody(BaseModel):
     avatar: str | None = Field(default=None, max_length=64)
+
+
+class ProfileFrameBody(BaseModel):
+    frame: str = Field(min_length=1, max_length=24)

@@ -65,6 +65,8 @@ export interface GameState {
   nickname: string;
   nickname_color: NicknameColor;
   nickname_colors: NicknameColorOption[];
+  profile_frame: ProfileFrame;
+  profile_frames: ProfileFrameOption[];
   registered_at: string;
   profile_emoji: string | null;
 
@@ -106,6 +108,16 @@ export type NicknameColorRarity = 'standard' | 'rare' | 'legendary';
 
 export interface NicknameColorOption {
   id: NicknameColor;
+  price_paw: number;
+  animated: boolean;
+  rarity: NicknameColorRarity;
+  owned: boolean;
+}
+
+export type ProfileFrame = 'none' | 'brass' | 'jade' | 'coral' | 'azure' | 'aurora' | 'ember' | 'spectrum' | 'royal';
+
+export interface ProfileFrameOption {
+  id: ProfileFrame;
   price_paw: number;
   animated: boolean;
   rarity: NicknameColorRarity;

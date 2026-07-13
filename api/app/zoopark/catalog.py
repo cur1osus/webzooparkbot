@@ -53,6 +53,28 @@ NICKNAME_COLORS: dict[str, NicknameColorDef] = {
     "google": {"price_paw": 700, "animated": True, "rarity": "legendary"},
 }
 
+
+class ProfileFrameDef(TypedDict):
+    price_paw: int
+    animated: bool
+    rarity: str
+
+
+# Avatar frames wrap the profile badge on the leaderboard and in the player card. Like the
+# nickname colours they use a fixed server catalogue; ownership is tracked in the shared
+# player_cosmetics table under a "frame:" prefix so ids never collide with colours.
+PROFILE_FRAMES: dict[str, ProfileFrameDef] = {
+    "none": {"price_paw": 0, "animated": False, "rarity": "standard"},
+    "brass": {"price_paw": 120, "animated": False, "rarity": "standard"},
+    "jade": {"price_paw": 120, "animated": False, "rarity": "standard"},
+    "coral": {"price_paw": 120, "animated": False, "rarity": "standard"},
+    "azure": {"price_paw": 120, "animated": False, "rarity": "standard"},
+    "aurora": {"price_paw": 320, "animated": True, "rarity": "rare"},
+    "ember": {"price_paw": 320, "animated": True, "rarity": "rare"},
+    "spectrum": {"price_paw": 480, "animated": True, "rarity": "legendary"},
+    "royal": {"price_paw": 480, "animated": True, "rarity": "legendary"},
+}
+
 # GDD §2: "Среда обитания — равномерно: 20% на каждую из 5 местностей."
 # GDD §1: "Низкое: 40%, Среднее: 40%, Высокое: 20%" for each of the four genes.
 GENE_ROLL_WEIGHTS: tuple[float, float, float] = (0.40, 0.40, 0.20)

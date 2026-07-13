@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
-import type { GameState, NicknameColor } from '@/types';
-import { apiBuyNicknameColor, apiSetNicknameColor } from '@/api';
+import type { GameState, NicknameColor, ProfileFrame } from '@/types';
+import { apiBuyNicknameColor, apiSetNicknameColor, apiBuyProfileFrame, apiSetProfileFrame } from '@/api';
 import { NICKNAME_COLORS } from '@/data/nicknameColors';
+import { PROFILE_FRAMES } from '@/data/profileFrames';
 import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
 import { PageHeader } from '@/components/PageHeader';
+import { ProfileBadge } from '@/components/ProfileBadge';
 import { Nickname } from '@/components/NicknameEffects';
 
 const RARITY_LABEL = { standard: null, rare: 'Редкий', legendary: 'Легендарный' } as const;
@@ -21,7 +23,15 @@ const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
   { id: 'cosmetics',  emoji: '🎨', label: 'Стиль' },
 ];
 
-function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+// A cosmetic choice shows on the leaderboard and public profiles, which live in their own
+// react-query caches; invalidate them or a fresh choice only appears after the staleTime.
+function refreshCosmeticsEverywhere(queryClient: QueryClient, onRefresh: () => void) {
+  onRefresh();
+  void queryClient.invalidateQueries({ queryKey: ['top'] });
+  void queryClient.invalidateQueries({ queryKey: ['public-profile'] });
+}
+
+function ColorSection({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const queryClient = useQueryClient();
   const [selectedColor, setSelectedColor] = useState<NicknameColor>(gs.nickname_color);
   const [saving, setSaving] = useState(false);
@@ -29,14 +39,7 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   // Cached state from the previous app build may briefly lack this new field on startup.
   const colorStates = gs.nickname_colors ?? [];
 
-  // The leaderboard and public profiles carry each player's colour but live in their own
-  // react-query caches, so a fresh choice must invalidate them or it would only appear
-  // after the 30s staleTime elapses.
-  const refreshNameEverywhere = () => {
-    onRefresh();
-    void queryClient.invalidateQueries({ queryKey: ['top'] });
-    void queryClient.invalidateQueries({ queryKey: ['public-profile'] });
-  };
+  const refreshNameEverywhere = () => refreshCosmeticsEverywhere(queryClient, onRefresh);
 
   const setColor = async (color: NicknameColor) => {
     if (saving || color === gs.nickname_color) return;
@@ -155,6 +158,163 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         </button>
         {error && <p className="m-0 mt-3 text-[12px] text-[var(--c-red-soft)]">{error}</p>}
       </div>
+    </div>
+  );
+}
+
+function FrameSection({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const queryClient = useQueryClient();
+  const [selectedFrame, setSelectedFrame] = useState<ProfileFrame>(gs.profile_frame ?? 'none');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const frameStates = gs.profile_frames ?? [];
+
+  const refresh = () => refreshCosmeticsEverywhere(queryClient, onRefresh);
+
+  const equipFrame = async (frame: ProfileFrame) => {
+    if (saving || frame === gs.profile_frame) return;
+    setSelectedFrame(frame);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSetProfileFrame(frame);
+      refresh();
+    } catch (cause) {
+      setSelectedFrame(gs.profile_frame ?? 'none');
+      setError(cause instanceof Error ? cause.message : 'Не удалось сохранить рамку');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buyFrame = async (frame: ProfileFrame) => {
+    if (saving) return;
+    setSelectedFrame(frame);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiBuyProfileFrame(frame);
+      refresh();
+    } catch (cause) {
+      setSelectedFrame(gs.profile_frame ?? 'none');
+      setError(cause instanceof Error ? cause.message : 'Не удалось купить рамку');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const active = PROFILE_FRAMES.find(option => option.id === selectedFrame) ?? PROFILE_FRAMES[0];
+  const activeState = frameStates.find(frame => frame.id === selectedFrame);
+  const activeOwned = activeState?.owned ?? selectedFrame === 'none';
+  const activePrice = activeState?.price_paw ?? 0;
+  const isCurrentFrame = selectedFrame === gs.profile_frame;
+
+  return (
+    <div className="px-[14px] pt-3 flex flex-col gap-3">
+      <div
+        className="relative rounded-2xl px-4 py-5 flex items-center gap-4"
+        style={{ background: `linear-gradient(135deg, ${active.glow}, transparent 70%), var(--tg-theme-secondary-bg-color)`, border: `1px solid ${active.value}52` }}
+      >
+        <ProfileBadge profileEmoji={gs.profile_emoji} size={72} frame={active.id} />
+        <div className="min-w-0">
+          <p className="m-0 text-[11px] font-extrabold tracking-[0.7px] uppercase text-tg-hint">Рамка аватара</p>
+          <p className="m-0 mt-1 text-[19px] leading-none font-extrabold">{active.label}</p>
+          <p className="m-0 mt-2 max-w-[190px] text-[12px] leading-[1.35] text-tg-hint">
+            Рамка видна в топе и в твоей карточке игрока. Открытые рамки остаются навсегда.
+          </p>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <p className="m-0 font-extrabold text-[15px]">Коллекция рамок</p>
+          {saving && <span className="text-[11px] font-bold text-tg-hint">Сохраняем...</span>}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {PROFILE_FRAMES.map(option => {
+            const isSelected = option.id === selectedFrame;
+            const state = frameStates.find(frame => frame.id === option.id);
+            const owned = state?.owned ?? option.id === 'none';
+            const price = state?.price_paw ?? 0;
+            const rarity = state?.rarity ?? 'standard';
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setSelectedFrame(option.id)}
+                aria-pressed={isSelected}
+                className="min-h-[58px] rounded-xl px-3 text-left flex items-center gap-2"
+                style={{
+                  background: isSelected ? option.glow : 'var(--surface-subtle)',
+                  border: `1px solid ${isSelected ? option.value : 'var(--surface-overlay-border)'}`,
+                  borderRadius: '12px',
+                  boxShadow: isSelected ? `inset 0 0 0 1px ${option.value}30` : 'none',
+                }}
+              >
+                <ProfileBadge profileEmoji={gs.profile_emoji} size={34} frame={option.id} />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-extrabold truncate">{option.label}</span>
+                  <span className="block mt-[1px] text-[10px] text-tg-hint">
+                    {isSelected ? 'Выбрано' : owned ? 'Надеть' : `${price} 🐾`}{RARITY_LABEL[rarity] ? ` · ${RARITY_LABEL[rarity]}` : ''}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => void (activeOwned ? equipFrame(selectedFrame) : buyFrame(selectedFrame))}
+          disabled={saving || isCurrentFrame}
+          className="w-full mt-3 min-h-[46px] rounded-xl border-none font-extrabold text-[14px] disabled:opacity-55"
+          style={{
+            background: activeOwned ? 'var(--c-blue)' : 'var(--c-purple)',
+            color: 'var(--tg-theme-button-text-color)',
+            boxShadow: activeOwned ? 'none' : `0 0 20px ${active.glow}`,
+          }}
+        >
+          {saving ? 'Сохраняем...' : isCurrentFrame ? 'Сейчас используется' : activeOwned ? `Надеть «${active.label}»` : `Купить за ${activePrice} 🐾`}
+        </button>
+        {error && <p className="m-0 mt-3 text-[12px] text-[var(--c-red-soft)]">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+type StyleSection = 'color' | 'frame';
+
+function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const [section, setSection] = useState<StyleSection>('color');
+
+  return (
+    <div>
+      <div className="px-[14px] pt-3">
+        <div
+          className="flex rounded-2xl p-1"
+          style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent)' }}
+        >
+          {([['color', 'Цвет ника'], ['frame', 'Рамка']] as const).map(([id, label]) => {
+            const isActive = section === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSection(id)}
+                className="flex-1 py-[8px] rounded-xl border-none text-[13px] transition-all duration-200"
+                style={{
+                  background: isActive ? 'color-mix(in srgb, var(--tg-theme-button-color) 15%, transparent)' : 'transparent',
+                  color: isActive ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-hint-color)',
+                  fontWeight: isActive ? 800 : 600,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {section === 'color' ? <ColorSection gs={gs} onRefresh={onRefresh} /> : <FrameSection gs={gs} onRefresh={onRefresh} />}
     </div>
   );
 }

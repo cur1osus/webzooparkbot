@@ -4,6 +4,7 @@ export interface TopEntry {
   nickname: string;
   nickname_color: string;
   profile_emoji: string | null;
+  profile_frame: string;
   income_rub_per_min: number;
   is_me: boolean;
 }
@@ -24,6 +25,7 @@ export interface PublicProfile {
   nickname: string;
   nickname_color: string;
   profile_emoji: string | null;
+  profile_frame: string;
   rank: number;
   income_rub_per_min: number;
   upkeep_rub_per_min: number;

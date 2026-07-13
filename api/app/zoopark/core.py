@@ -18,10 +18,10 @@ from api.app.core.config import BOT_USERNAME, IS_PRODUCTION
 from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import Player, PlayerCosmetic, utcnow
-from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, RegisterBody
+from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, ProfileFrameBody, RegisterBody
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import ledger
-from api.app.zoopark.catalog import NICKNAME_COLORS, REFERRAL_SIGNUP_REWARD_USD
+from api.app.zoopark.catalog import NICKNAME_COLORS, PROFILE_FRAMES, REFERRAL_SIGNUP_REWARD_USD
 from api.app.zoopark.income import sync_player_income
 from api.app.zoopark.progression import ensure_first_locality
 from api.app.zoopark.profile import build_state, get_player
@@ -140,6 +140,45 @@ def buy_nickname_color(tg_id: int, color: str) -> dict:
         return {
             "ok": True,
             "nickname_color": player.nickname_color,
+            "new_paw_coins": ledger.balance(player, "paw"),
+        }
+
+
+def set_profile_frame(tg_id: int, body: ProfileFrameBody) -> dict:
+    if body.frame not in PROFILE_FRAMES:
+        raise HTTPException(400, "Неизвестная рамка")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+        if body.frame != "none" and session.get(PlayerCosmetic, (player.id, f"frame:{body.frame}")) is None:
+            raise HTTPException(400, "Сначала открой эту рамку за PawCoins")
+        player.profile_frame = body.frame
+        session.commit()
+        return {"ok": True, "profile_frame": player.profile_frame}
+
+
+def buy_profile_frame(tg_id: int, frame: str) -> dict:
+    frame_def = PROFILE_FRAMES.get(frame)
+    if frame_def is None:
+        raise HTTPException(404, "Рамка не найдена")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+
+        cosmetic_id = f"frame:{frame}"
+        cosmetic = session.get(PlayerCosmetic, (player.id, cosmetic_id))
+        if cosmetic is None and frame_def["price_paw"] > 0:
+            ledger.spend(session, player, "paw", frame_def["price_paw"], "cosmetic_purchase")
+            session.add(PlayerCosmetic(player_id=player.id, cosmetic_id=cosmetic_id))
+        player.profile_frame = frame
+        session.commit()
+        return {
+            "ok": True,
+            "profile_frame": player.profile_frame,
             "new_paw_coins": ledger.balance(player, "paw"),
         }
 

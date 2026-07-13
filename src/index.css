@@ -273,6 +273,44 @@ button, input, select, textarea { font: inherit; }
   background: radial-gradient(circle at 35% 24%, rgba(128,187,239,0.23), transparent 48%), rgba(var(--c-blue-rgb),0.13);
 }
 
+/* ─── Avatar frames ─────────────────────────────────────────────────────────── */
+/* A purchased frame is a decorative ring painted on the badge's outer rim. It sits ON
+   TOP of the badge (::after, higher z-index than the sheen) rather than around it, so
+   equipping a frame never grows the badge and never disturbs leaderboard layout. The
+   ring is a circular annulus via a radial mask; the wrapper's box-shadow is its glow. */
+.profile-badge-frame {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+.profile-badge-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 50%;
+  pointer-events: none;
+  background: var(--frame-bg, transparent);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--frame-w, 3px)), #000 calc(100% - var(--frame-w, 3px)));
+          mask: radial-gradient(farthest-side, transparent calc(100% - var(--frame-w, 3px)), #000 calc(100% - var(--frame-w, 3px)));
+}
+.profile-frame-brass { --frame-bg: #f3b53f; box-shadow: 0 0 10px rgba(243, 181, 63, 0.45); }
+.profile-frame-jade  { --frame-bg: #63c268; box-shadow: 0 0 10px rgba(99, 194, 104, 0.45); }
+.profile-frame-coral { --frame-bg: #f0837b; box-shadow: 0 0 10px rgba(240, 131, 123, 0.45); }
+.profile-frame-azure { --frame-bg: #56bfdc; box-shadow: 0 0 10px rgba(86, 191, 220, 0.45); }
+.profile-frame-aurora   { --frame-bg: conic-gradient(from 0deg, #16e0a0, #23c6e6, #4bf0a6, #16e0a0); box-shadow: 0 0 12px rgba(35, 224, 176, 0.5); }
+.profile-frame-ember    { --frame-bg: conic-gradient(from 0deg, #ffcf6b, #ff7148, #ff3d6b, #ffcf6b); box-shadow: 0 0 12px rgba(255, 113, 72, 0.5); }
+.profile-frame-spectrum { --frame-bg: conic-gradient(from 0deg, #ff5c7a, #ff9f43, #ffe14d, #4be07a, #4bb8ff, #b06bff, #ff5c7a); box-shadow: 0 0 12px rgba(176, 107, 255, 0.5); }
+.profile-frame-royal    { --frame-bg: conic-gradient(from 0deg, #c9a24b, #f6e27a, #9a6bff, #c9a24b); box-shadow: 0 0 12px rgba(201, 162, 75, 0.5); }
+.profile-frame-aurora::after,
+.profile-frame-ember::after,
+.profile-frame-spectrum::after,
+.profile-frame-royal::after {
+  animation: profile-frame-spin 5s linear infinite;
+}
+@keyframes profile-frame-spin { to { transform: rotate(360deg); } }
+
 .top-page {
   display: flex;
   flex-direction: column;
@@ -792,6 +830,7 @@ button[aria-pressed]:focus-visible {
   .card-pressable:hover { transform: none !important; }
   .income-glow { animation: none !important; }
   [class*="nickname-color-"], [class*="nickname-preview-"], [class*="nickname-swatch-"] { animation: none !important; }
+  [class*="profile-frame-"]::after { animation: none !important; }
 }
 
 button:disabled {

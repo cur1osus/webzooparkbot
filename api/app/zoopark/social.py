@@ -62,6 +62,7 @@ def top(tg_id: int) -> dict:
                     "nickname": player.nickname,
                     "nickname_color": player.nickname_color,
                     "profile_emoji": player.profile_emoji,
+                    "profile_frame": player.profile_frame,
                     "income_rub_per_min": player.income_rub_per_min,
                     "is_me": is_me,
                 }
@@ -138,6 +139,7 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
             "nickname": target.nickname,
             "nickname_color": target.nickname_color,
             "profile_emoji": target.profile_emoji,
+            "profile_frame": target.profile_frame,
             "rank": rank,
             "income_rub_per_min": target.income_rub_per_min,
             "upkeep_rub_per_min": target.upkeep_rub_per_min,

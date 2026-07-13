@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type SetStateAction } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type SetStateAction } from 'react';
 import { fmt, fmtMin, fmtBalance } from '@/utils/format';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
@@ -17,6 +17,7 @@ import { VetTab } from '@/features/vet/VetTab';
 import { DevelopmentTab } from '@/features/development/DevelopmentTab';
 import { AchievementsTab } from '@/features/achievements/AchievementsTab';
 import { Nickname } from '@/components/NicknameEffects';
+import { profileFrameClass } from '@/data/profileFrames';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -199,17 +200,19 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       <div className="relative overflow-hidden" style={{ paddingTop: '16px' }}>
         {/* Identity row: avatar + name (left), premium currencies (right) */}
         <div className="relative px-[14px] flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full shrink-0 overflow-hidden"
-            style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
-            {profileAchievementId && ACHIEVEMENT_TGS[profileAchievementId] ? (
-              <TgsPlayer src={ACHIEVEMENT_TGS[profileAchievementId]} loop />
-            ) : defaultProfileAnimal ? (
-              <div className="grid h-full w-full place-items-center">
-                <AnimalArt animal={defaultProfileAnimal} size={32} />
-              </div>
-            ) : (
-              <TgsPlayer src="/nft_TopHat-3159.tgs" loop />
-            )}
+          <div className={`profile-badge-frame shrink-0 ${profileFrameClass(gs.profile_frame)}`} style={{ '--frame-w': '3px' } as CSSProperties}>
+            <div className="w-10 h-10 rounded-full overflow-hidden"
+              style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
+              {profileAchievementId && ACHIEVEMENT_TGS[profileAchievementId] ? (
+                <TgsPlayer src={ACHIEVEMENT_TGS[profileAchievementId]} loop />
+              ) : defaultProfileAnimal ? (
+                <div className="grid h-full w-full place-items-center">
+                  <AnimalArt animal={defaultProfileAnimal} size={32} />
+                </div>
+              ) : (
+                <TgsPlayer src="/nft_TopHat-3159.tgs" loop />
+              )}
+            </div>
           </div>
           <div className="min-w-0 flex-1">
             <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[16px] font-extrabold leading-tight truncate" />
