@@ -12,6 +12,7 @@ import { DonatePage } from './more/DonatePage';
 import { apiConfig, apiCreateTransfer, apiGetBonus, apiGetMyTransfers } from '@/api';
 import { fmt, formatDateShort } from '@/utils/format';
 import { copyTmaText, inTma } from '@/lib/tma';
+import { setHashPath } from '@/lib/hashRoute';
 import { DEVELOPER_TG_ID } from '@/lib/access';
 import { PageHeader } from '@/components/PageHeader';
 import { AdminPage } from '@/pages/AdminPage';
@@ -82,7 +83,10 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
 }
 
 export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [section, setSection] = useState<Section>(null);
+  const [section, setSection] = useState<Section>(() => {
+    const parts = window.location.hash.replace(/^#/, '').split('/').filter(Boolean);
+    return parts[0] === 'more' && parts[1] === 'clan' ? 'clan' : null;
+  });
   // Whether today's bonus is still unclaimed is server state, not something the game
   // state carries around: `gs.bonus` was a column that stopped being the source of truth.
   const { data: bonusOffer = null } = useQuery({ queryKey: ['bonus'], queryFn: apiGetBonus });
@@ -93,7 +97,10 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   });
   const botUsername = normalizeBotUsername(config?.bot_username);
 
-  const back = () => setSection(null);
+  const back = () => {
+    setSection(null);
+    setHashPath('/more');
+  };
   const openSection = (nextSection: SectionId) => setSection(nextSection);
 
   if (section === 'bank') return (

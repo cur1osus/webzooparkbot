@@ -62,3 +62,8 @@ def donate_invoice(body: DonateInvoiceBody, tg_id: TelegramId):
 @router.post("/api/cocktail/guess")
 def cocktail_guess(body: CocktailGuessBody, tg_id: TelegramId):
     return games_service.cocktail_guess(tg_id, body)
+
+
+@router.get("/api/cocktail")
+def cocktail_state(tg_id: TelegramId):
+    return games_service.cocktail_state(tg_id)

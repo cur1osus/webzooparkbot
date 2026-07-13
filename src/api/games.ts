@@ -1,5 +1,6 @@
 import type {
   CocktailGuessResult,
+  CocktailState,
   DuelActionResponse,
   DuelCancelResponse,
   DuelResponse,
@@ -35,3 +36,4 @@ export const apiGetSoloStats = () => req<SoloStats>('/solo/stats');
 
 export const apiCocktailGuess = (fruits: string[]) =>
   req<CocktailGuessResult>('/cocktail/guess', { method: 'POST', body: JSON.stringify({ fruits }) });
+export const apiGetCocktailState = () => req<CocktailState>('/cocktail');

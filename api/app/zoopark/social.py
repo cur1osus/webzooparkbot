@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import Animal, Clan, ClanMember, Locality, Player, Transfer, TransferClaim, utcnow
+from api.app.db.models import Animal, Clan, ClanMember, Item, Locality, Player, Transfer, TransferClaim, utcnow
 from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
@@ -31,7 +31,7 @@ from api.app.zoopark.catalog import (
 )
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark.income import on_expedition_subquery, sync_player_income
-from api.app.zoopark.profile import get_clan, get_player
+from api.app.zoopark.profile import get_clan, get_player, item_payload
 from api.app.zoopark.season import active_season
 
 
@@ -136,6 +136,9 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
             select(Locality).where(Locality.player_id == target.id, Locality.season_id == season.id)
         ).all()
         achievements = achievements_module.list_achievements(session, target)
+        active_items = session.scalars(
+            select(Item).where(Item.player_id == target.id, Item.is_active.is_(True)).order_by(Item.created_at.asc(), Item.id.asc())
+        ).all()
 
         return {
             "tg_id": target.telegram_id,
@@ -158,6 +161,7 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
             "registered_at": target.registered_at.isoformat(),
             "clan": get_clan(session, target.id),
             "species": species,
+            "active_items": [item_payload(item) for item in active_items],
         }
 
 

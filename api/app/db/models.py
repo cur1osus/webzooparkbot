@@ -651,9 +651,23 @@ class CocktailRound(Base):
     player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), primary_key=True)
     secret: Mapped[str] = mapped_column(String(64), nullable=False)
     attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    history: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     started_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
     solved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class CocktailDay(Base):
+    """One shared daily recipe and its single PawCoins winner."""
+
+    __tablename__ = "cocktail_days"
+    __table_args__ = (MYSQL,)
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    secret: Mapped[str] = mapped_column(String(64), nullable=False)
+    winner_player_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class DailyBonus(Base):

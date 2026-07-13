@@ -274,7 +274,8 @@ UPKEEP_MAX_PERCENT = 45.0
 
 # Infrastructure upgrades turn the five localities into a real development choice.
 LOCALITY_UPKEEP_DISCOUNTS: tuple[int, ...] = (0, 1, 3, 6, 9, 12)
-LOCALITY_UPGRADE_COSTS_RUB: tuple[int, ...] = (0, 500, 2_000, 8_000, 30_000, 100_000)
+# Infrastructure is a long-term investment: the previous ladder was 20x too cheap.
+LOCALITY_UPGRADE_COSTS_RUB: tuple[int, ...] = (0, 10_000, 40_000, 160_000, 600_000, 2_000_000)
 HABITAT_MATCH_UPKEEP_DISCOUNT = 5
 
 

@@ -21,6 +21,8 @@ export interface PublicProfileSpecies {
   count: number;
 }
 
+import type { ForgeItem } from './gameState';
+
 export interface PublicProfile {
   tg_id: number;
   nickname: string;
@@ -47,6 +49,7 @@ export interface PublicProfile {
     role: 'owner' | 'member';
   } | null;
   species: PublicProfileSpecies[];
+  active_items: ForgeItem[];
 }
 
 export interface ClanOut {

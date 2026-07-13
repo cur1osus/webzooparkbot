@@ -126,6 +126,28 @@ function PublicProfileSheet({
               )}
             </div>
 
+            <div className="top-profile-section">
+              <div className="flex items-center justify-between gap-3">
+                <p className="top-eyebrow m-0">АКТИВИРОВАННЫЕ ПРЕДМЕТЫ</p>
+                <span className="text-[10px] text-tg-hint">{profile.active_items.length} шт.</span>
+              </div>
+              {profile.active_items.length > 0 ? (
+                <div className="mt-2 flex flex-col gap-2">
+                  {profile.active_items.map(item => (
+                    <div key={item.id} className="rounded-xl px-3 py-2 surface-subtle flex items-center gap-3">
+                      <span className="text-[22px] shrink-0">{item.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="m-0 text-[12px] font-bold truncate">{item.name}</p>
+                        <p className="m-0 mt-1 text-[10px] text-tg-hint truncate">ур. {item.level} · {item.properties.map(property => property.label).join(' · ')}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="m-0 mt-2 text-[12px] text-tg-hint">Активированных предметов пока нет.</p>
+              )}
+            </div>
+
             <p className="top-profile-footnote">В игре с {new Date(profile.registered_at).toLocaleDateString('ru-RU')}</p>
           </div>
         )}

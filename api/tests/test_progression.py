@@ -210,7 +210,7 @@ class TestExpeditionLifecycle:
         from api.app.schemas.progression import AssignLocalityBody, UpgradeLocalityBody
 
         progression.open_pack(player)
-        grant(player, "rub", 1_000)
+        grant(player, "rub", 20_000)
         locality_id = progression.list_localities(player)["localities"][0]["id"]
         animal_id = progression.list_available_animals(player)["animals"][0]["id"]
         progression.assign_locality(player, AssignLocalityBody(animal_id=animal_id, locality_id=locality_id))

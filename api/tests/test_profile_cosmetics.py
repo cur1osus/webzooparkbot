@@ -42,3 +42,4 @@ def test_public_profile_contains_only_public_progress(player):
     assert "rub" not in profile
     assert "usd" not in profile
     assert "paw_coins" not in profile
+    assert profile["active_items"] == []

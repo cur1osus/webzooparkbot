@@ -21,6 +21,7 @@ import { profileFrameClass } from '@/data/profileFrames';
 import { wallpaperClass } from '@/data/profileWallpapers';
 import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { getDefaultProfileAnimal, type ProfileAnimal } from '@/data/profileAnimals';
+import { SPECIES_RARITY_META } from '@/data/packs';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -307,7 +308,12 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
           </div>
 
           {gs.clan && (
-            <div className="card flex items-center gap-3" style={{ border: '1px solid rgba(var(--c-blue-rgb),0.24)' }}>
+            <button
+              type="button"
+              className="card flex items-center gap-3 cursor-pointer border-none text-left w-full"
+              style={{ border: '1px solid rgba(var(--c-blue-rgb),0.24)' }}
+              onClick={() => setHashPath('/more/clan')}
+            >
               <div className="icon-box" style={{ background: 'rgba(var(--c-blue-rgb),0.14)' }}>🏰</div>
               <div className="flex-1">
                 <p className="m-0 font-bold text-sm">«{gs.clan.name}»</p>
@@ -316,7 +322,7 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                 </p>
               </div>
               <span className="text-base text-tg-hint">›</span>
-            </div>
+            </button>
           )}
 
           <ExpeditionOverviewCard onOpen={() => setSubPage({ type: 'expeditions' })} />
@@ -375,12 +381,17 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
               <div className="grid grid-cols-2 gap-2">
                 {sortedAnimals.map(a => {
                   const life = lifeLeft(a.dies_at);
+                  const rarityColor = SPECIES_RARITY_META[a.species_rarity].color;
                   return (
                     <button
                       key={a.id}
                       onClick={() => setSelectedAnimal(a)}
                       className="card card-pressable text-left border-none w-full"
-                      style={{ padding: '10px 12px' }}
+                      style={{
+                        padding: '10px 12px',
+                        border: `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
+                        boxShadow: `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
+                      }}
                     >
                       <div className="flex items-center gap-[10px]">
                         <span className="relative shrink-0 w-[38px] h-[38px] flex items-center justify-center">

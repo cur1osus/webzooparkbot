@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { apiCocktailGuess } from '@/api';
-
-type CocktailClueStatus = 'correct' | 'present' | 'absent';
+import { useEffect, useState } from 'react';
+import { apiCocktailGuess, apiGetCocktailState } from '@/api';
+import type { CocktailHistoryEntry } from '@/types';
 
 // Must stay in sync with COCKTAIL_FRUITS on the backend (catalog.py): the secret is
 // drawn from that set, so a mismatch makes the puzzle unsolvable / rejects valid picks.
@@ -13,7 +12,31 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
   const [guessing, setGuessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ won: boolean; message: string } | null>(null);
-  const [history, setHistory] = useState<Array<{ fruits: string[]; clues: Array<{ pos: number; status: CocktailClueStatus }> }>>([]);
+  const [history, setHistory] = useState<CocktailHistoryEntry[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    void apiGetCocktailState()
+      .then((state) => {
+        if (!mounted) return;
+        setAttemptsLeft(state.attempts_left);
+        setHistory(state.history);
+        if (state.solved) {
+          setResult({
+            won: true,
+            message: state.rewarded
+              ? 'Рецепт угадан. Награда: 150 🐾'
+              : 'Рецепт угадан, но 150 🐾 уже достались первому победителю.',
+          });
+        } else if (state.attempts_left === 0) {
+          setResult({ won: false, message: 'Попытки закончились. Завтра будет новый рецепт.' });
+        }
+      })
+      .catch(() => {
+        // The board remains usable if an older server has not deployed the read endpoint.
+      });
+    return () => { mounted = false; };
+  }, []);
 
   const gameFinished = attemptsLeft <= 0 || Boolean(result?.won);
 
@@ -47,7 +70,12 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
       setHistory((current) => [...current, { fruits: slots as string[], clues: response.clues }]);
 
       if (response.won) {
-        setResult({ won: true, message: `Рецепт угадан. Награда: ${response.reward_paw ?? 0} 🐾` });
+        setResult({
+          won: true,
+          message: response.reward_paw
+            ? `Рецепт угадан. Награда: ${response.reward_paw} 🐾`
+            : 'Рецепт угадан, но 150 🐾 уже достались первому победителю.',
+        });
         onRefresh();
       } else if (response.attempts_left === 0) {
         setResult({ won: false, message: 'Попытки закончились. Завтра будет новый рецепт.' });
@@ -196,23 +224,6 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         <div className="rounded-2xl p-4" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>
           <p className="m-0 text-[13px] font-semibold" style={{ color: 'var(--c-red-soft)' }}>{error}</p>
         </div>
-      )}
-
-      {gameFinished && !result?.won && (
-        <button
-          type="button"
-          onClick={() => {
-            setSlots([null, null, null, null]);
-            setAttemptsLeft(10);
-            setHistory([]);
-            setResult(null);
-            setError(null);
-          }}
-          className="py-[13px] rounded-[14px] border-none font-bold text-sm"
-          style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-text-color)' }}
-        >
-          Начать заново
-        </button>
       )}
 
       {history.length > 0 && (

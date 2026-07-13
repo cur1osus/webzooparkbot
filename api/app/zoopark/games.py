@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
-from api.app.db.models import CocktailRound, Duel, Player, SoloStats, StarPayment, utcnow
+from api.app.db.models import CocktailDay, CocktailRound, Duel, Player, SoloStats, StarPayment, utcnow
 from api.app.schemas.games import CocktailGuessBody, DonateInvoiceBody, DuelCreateBody, SoloStartBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
@@ -559,6 +559,70 @@ def _next_utc_midnight(now: datetime) -> datetime:
     return start + timedelta(days=1)
 
 
+def _cocktail_history(round_: CocktailRound) -> list[dict]:
+    try:
+        history = json.loads(round_.history or "[]")
+    except (TypeError, ValueError):
+        return []
+    return history if isinstance(history, list) else []
+
+
+def _get_cocktail_day(session: Session, now: datetime) -> CocktailDay:
+    day = now.astimezone(timezone.utc).date()
+    daily = session.scalars(
+        select(CocktailDay).where(CocktailDay.day == day).with_for_update()
+    ).first()
+    if daily is not None:
+        return daily
+
+    # The first guess of the day creates the shared recipe. A savepoint keeps a
+    # concurrent insert from rolling back the player's locked transaction.
+    try:
+        with session.begin_nested():
+            daily = CocktailDay(
+                day=day,
+                secret=json.dumps(random.sample(COCKTAIL_FRUITS, COCKTAIL_LENGTH)),
+            )
+            session.add(daily)
+            session.flush()
+    except IntegrityError:
+        daily = None
+
+    if daily is None:
+        daily = session.scalars(
+            select(CocktailDay).where(CocktailDay.day == day).with_for_update()
+        ).first()
+    if daily is None:
+        raise HTTPException(503, "Не удалось открыть коктейль дня")
+    return daily
+
+
+def cocktail_state(tg_id: int) -> dict:
+    """Return the current player's persisted cocktail board."""
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+
+        now = utcnow()
+        day = session.scalars(
+            select(CocktailDay).where(CocktailDay.day == now.astimezone(timezone.utc).date())
+        ).first()
+        round_ = session.get(CocktailRound, player.id)
+        current_round = round_ if round_ is not None and round_.expires_at > now else None
+        history = _cocktail_history(current_round) if current_round else []
+        solved = bool(current_round and current_round.solved_at is not None)
+        winner_id = day.winner_player_id if day else None
+        return {
+            "ok": True,
+            "attempts_left": max(0, COCKTAIL_BASE_ATTEMPTS - (current_round.attempts if current_round else 0)),
+            "history": history,
+            "solved": solved,
+            "rewarded": solved and winner_id == player.id,
+            "reward_claimed": winner_id is not None,
+        }
+
+
 def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
     fruits = body.fruits
     if len(fruits) != COCKTAIL_LENGTH:
@@ -572,18 +636,25 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
             raise HTTPException(404, "Нет игрока")
 
         now = utcnow()
+        daily = _get_cocktail_day(session, now)
         round_ = session.get(CocktailRound, player.id, with_for_update=True)
 
         # The round resets at the next UTC midnight, not 24 hours after it started: a
         # player who solved it a minute in should not wait 23 hours and 59 minutes.
-        if round_ is None or round_.expires_at <= now:
-            secret = random.sample(COCKTAIL_FRUITS, COCKTAIL_LENGTH)
+        if round_ is None or round_.expires_at <= now or round_.secret != daily.secret:
+            secret = json.loads(daily.secret)
             if round_ is None:
-                round_ = CocktailRound(player_id=player.id, secret=json.dumps(secret), expires_at=_next_utc_midnight(now))
+                round_ = CocktailRound(
+                    player_id=player.id,
+                    secret=daily.secret,
+                    history="[]",
+                    expires_at=_next_utc_midnight(now),
+                )
                 session.add(round_)
             else:
-                round_.secret = json.dumps(secret)
+                round_.secret = daily.secret
                 round_.attempts = 0
+                round_.history = "[]"
                 round_.solved_at = None
                 round_.started_at = now
                 round_.expires_at = _next_utc_midnight(now)
@@ -609,6 +680,9 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
                 clues.append({"pos": index, "status": "absent"})
 
         won = all(clue["status"] == "correct" for clue in clues)
+        history = _cocktail_history(round_)
+        history.append({"fruits": fruits, "clues": clues})
+        round_.history = json.dumps(history, ensure_ascii=False)
         result: dict = {
             "ok": True,
             "won": won,
@@ -617,9 +691,11 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
         }
         if won:
             round_.solved_at = now
-            ledger.grant(session, player, "paw", COCKTAIL_REWARD_PAW, "cocktail_reward")
-            result["reward_paw"] = COCKTAIL_REWARD_PAW
-            result["new_paw_coins"] = ledger.balance(player, "paw")
+            if daily.winner_player_id is None:
+                daily.winner_player_id = player.id
+                ledger.grant(session, player, "paw", COCKTAIL_REWARD_PAW, "cocktail_reward")
+                result["reward_paw"] = COCKTAIL_REWARD_PAW
+                result["new_paw_coins"] = ledger.balance(player, "paw")
 
         session.commit()
         return result

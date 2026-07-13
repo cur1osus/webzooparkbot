@@ -1,11 +1,12 @@
-"""Multiplayer lobby, timer and prize-pool rules."""
+"""Multiplayer lobby, timer, prize-pool and cocktail rules."""
 
+import json
 from datetime import timedelta
 
 from api.app.db.connection import get_session
-from api.app.db.models import Player, utcnow
+from api.app.db.models import CocktailDay, Player, utcnow
 from api.app.schemas.core import RegisterBody
-from api.app.schemas.games import DuelCreateBody, SoloStartBody
+from api.app.schemas.games import CocktailGuessBody, DuelCreateBody, SoloStartBody
 from api.app.zoopark import games, ledger
 from api.app.zoopark.core import register
 
@@ -84,3 +85,30 @@ def test_solo_stake_is_calculated_from_locked_balance_percentage(db):
     with get_session() as session:
         balance = session.query(Player).filter_by(telegram_id=1001).one().balance_rub
         assert balance == 1000 + result["rub_delta"]
+
+
+def test_cocktail_history_persists_and_reward_goes_to_first_winner(db):
+    _register_players(1001, 1002)
+
+    wrong = ["🍓", "🍓", "🍓", "🍓"]
+    first_attempt = games.cocktail_guess(1001, CocktailGuessBody(fruits=wrong))
+    assert first_attempt["attempts_left"] == 9
+    state = games.cocktail_state(1001)
+    assert state["attempts_left"] == 9
+    assert len(state["history"]) == 1
+
+    with get_session() as session:
+        daily = session.query(CocktailDay).one()
+        secret = json.loads(daily.secret)
+
+    winner = games.cocktail_guess(1001, CocktailGuessBody(fruits=secret))
+    second = games.cocktail_guess(1002, CocktailGuessBody(fruits=secret))
+
+    assert winner["won"] is True
+    assert winner["reward_paw"] == 150
+    assert second["won"] is True
+    assert "reward_paw" not in second
+
+    with get_session() as session:
+        balances = [session.query(Player).filter_by(telegram_id=tg_id).one().balance_paw for tg_id in (1001, 1002)]
+        assert balances == [150, 0]
