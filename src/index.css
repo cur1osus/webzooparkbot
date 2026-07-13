@@ -421,6 +421,8 @@ button, input, select, textarea { font: inherit; }
   line-height: 1;
 }
 .top-hero-leader {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -432,6 +434,15 @@ button, input, select, textarea { font: inherit; }
   border: 1px solid rgba(var(--c-gold-rgb),0.18);
   border-radius: 14px;
   background: rgba(0,0,0,0.16);
+}
+.top-hero-leader > *:not(.profile-wallpaper),
+.top-podium-card > *:not(.profile-wallpaper) {
+  position: relative;
+  z-index: 1;
+}
+.profile-wallpaper--hero::after,
+.profile-wallpaper--podium::after {
+  background: linear-gradient(to bottom, rgba(8, 10, 18, 0.16), rgba(8, 10, 18, 0.62));
 }
 .top-label {
   color: var(--tg-theme-hint-color);

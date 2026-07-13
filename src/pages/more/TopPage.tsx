@@ -36,6 +36,11 @@ function PlayerName({ entry, size = 'normal' }: { entry: Pick<TopEntry, 'nicknam
   );
 }
 
+function WallpaperLayer({ wallpaper, className }: { wallpaper: string | null | undefined; className: string }) {
+  if (!wallpaper || wallpaper === 'none') return null;
+  return <div className={`profile-wallpaper ${className} ${wallpaperClass(wallpaper)}`} aria-hidden="true" />;
+}
+
 function PublicProfileSheet({
   entry,
   profile,
@@ -177,6 +182,7 @@ function PodiumCard({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: To
       onClick={() => onSelect(entry)}
       aria-label={`Открыть профиль ${entry.nickname}`}
     >
+      <WallpaperLayer wallpaper={entry.profile_wallpaper} className="profile-wallpaper--podium" />
       <RankMark rank={entry.rank} podium />
       <ProfileBadge profileEmoji={entry.profile_emoji} size={winner ? 76 : 58} tone={rankTone(entry.rank)} frame={entry.profile_frame} />
       <div className="top-podium-copy">
@@ -238,6 +244,7 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
         </div>
 
         <button type="button" className="top-hero-leader" onClick={() => onSelect(leader)} aria-label={`Открыть профиль ${leader.nickname}`}>
+          <WallpaperLayer wallpaper={leader.profile_wallpaper} className="profile-wallpaper--hero" />
           <ProfileBadge profileEmoji={leader.profile_emoji} size={52} tone="gold" frame={leader.profile_frame} />
           <div className="min-w-0 flex-1">
             <p className="top-label m-0">лидер прямо сейчас</p>
