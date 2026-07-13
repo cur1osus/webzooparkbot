@@ -723,7 +723,7 @@ class StarPayment(Base):
     __tablename__ = "star_payments"
     __table_args__ = (Index("ix_star_payments_player", "player_id"), MYSQL)
 
-    charge_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    charge_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
     stars: Mapped[int] = mapped_column(Integer, nullable=False)
     paw_credited: Mapped[int] = mapped_column(BigInteger, nullable=False)
