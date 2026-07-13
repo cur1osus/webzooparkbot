@@ -145,8 +145,6 @@ def animal_income_breakdown(animal: Animal, locality_habitat: str | None, bonuse
     ]
     return {
         "base": round(BASE_INCOME_RUB_PER_MIN * rarity_multiplier),
-        "base_reference": BASE_INCOME_RUB_PER_MIN,
-        "base_multiplier": rarity_multiplier,
         "factors": factors,
         "total": animal_income(animal, locality_habitat, bonuses),
     }

@@ -13,8 +13,6 @@ export interface AnimalIncomeFactor {
 
 export interface AnimalIncomeBreakdown {
   base: number;
-  base_reference: number;
-  base_multiplier: number;
   factors: AnimalIncomeFactor[];
   total: number;
 }

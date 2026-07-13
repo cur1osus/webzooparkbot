@@ -81,6 +81,7 @@ function formatMultiplier(value: number): string {
 export function AnimalDetailCard({ animal, onClose }: { animal: Animal; onClose: () => void }) {
   // Advance `now` once a second so the countdown ticks live.
   const [now, setNow] = useState(() => Date.now());
+  const [showIncomeDetails, setShowIncomeDetails] = useState(false);
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
@@ -191,12 +192,26 @@ export function AnimalDetailCard({ animal, onClose }: { animal: Animal; onClose:
 
         {/* ── Income ── */}
         <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
-          <div className="flex items-baseline justify-between">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 border-none bg-transparent p-0 text-left"
+            style={{ cursor: incomeBreakdown ? 'pointer' : 'default' }}
+            onClick={() => incomeBreakdown && setShowIncomeDetails(value => !value)}
+            aria-expanded={incomeBreakdown ? showIncomeDetails : undefined}
+            aria-controls={incomeBreakdown ? 'animal-income-breakdown' : undefined}
+          >
             <span className="text-[12px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>Доход</span>
-            <span className="font-display text-[22px] tabular-nums" style={{ color: 'var(--c-green)' }}>
-              ₽{fmt(animal.income)}<span className="text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}> /мин</span>
+            <span className="flex items-center gap-2">
+              <span className="font-display text-[22px] tabular-nums" style={{ color: 'var(--c-green)' }}>
+                ₽{fmt(animal.income)}<span className="text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}> /мин</span>
+              </span>
+              {incomeBreakdown && (
+                <span className="text-[16px] leading-none" style={{ color: 'var(--tg-theme-hint-color)' }} aria-hidden>
+                  {showIncomeDetails ? '⌃' : '⌄'}
+                </span>
+              )}
             </span>
-          </div>
+          </button>
           {(animal.is_sick || animal.habitat_bonus) && (
             <div className="mt-[6px] flex flex-wrap gap-[6px]">
               {animal.is_sick && (
@@ -213,22 +228,14 @@ export function AnimalDetailCard({ animal, onClose }: { animal: Animal; onClose:
               )}
             </div>
           )}
-          {incomeBreakdown && (
-            <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
+          {incomeBreakdown && showIncomeDetails && (
+            <div id="animal-income-breakdown" className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--card-border)' }}>
               <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.2px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
                 Состав дохода
               </p>
               <div className="mt-2 flex flex-col gap-0">
                 <div className="flex items-center justify-between gap-3 text-[11px]">
-                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>Общая ставка</span>
-                  <span className="font-bold tabular-nums">₽{fmt(incomeBreakdown.base_reference)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-[11px]">
-                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>Редкость вида · {rarity.label}</span>
-                  <span className="font-bold tabular-nums" style={{ color: 'var(--c-green)' }}>{formatMultiplier(incomeBreakdown.base_multiplier)}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-[11px]">
-                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>База вида</span>
+                  <span style={{ color: 'var(--tg-theme-hint-color)' }}>База вида · {rarity.label}</span>
                   <span className="font-bold tabular-nums">₽{fmt(incomeBreakdown.base)}</span>
                 </div>
                 {incomeBreakdown.factors.map(factor => (
