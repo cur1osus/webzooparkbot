@@ -1666,6 +1666,38 @@ button:disabled {
   animation: fade-in 0.15s ease;
 }
 
+/* Result of opening a giveaway deep link */
+.transfer-claim-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--app-bottom-offset) + 12px);
+  z-index: 120;
+  display: flex;
+  width: min(calc(100% - 28px), 452px);
+  align-items: center;
+  gap: 9px;
+  transform: translateX(-50%);
+  padding: 12px 14px;
+  border: 1px solid;
+  border-radius: 13px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  font-weight: 800;
+  animation: transfer-toast-in 0.25s var(--spring-smooth) both;
+}
+
+.transfer-claim-toast-success {
+  border-color: rgba(var(--c-green-rgb), 0.35);
+  background: color-mix(in srgb, var(--c-green) 16%, var(--card-bg));
+  color: var(--c-green);
+}
+
+.transfer-claim-toast-error {
+  border-color: rgba(var(--c-red-rgb), 0.35);
+  background: color-mix(in srgb, var(--c-red) 12%, var(--card-bg));
+  color: var(--c-red-soft);
+}
+
 /* ─── Keyframes ──────────────────────────────────────────────────────────────── */
 @keyframes spin {
   to { transform: rotate(360deg); }
@@ -1677,6 +1709,11 @@ button:disabled {
      animation-fill-mode: both) would make .page-enter a containing block for
      position:fixed, trapping modals/sheets inside the scroll area. */
   to   { transform: none; opacity: 1; }
+}
+
+@keyframes transfer-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
 @keyframes slide-down {
