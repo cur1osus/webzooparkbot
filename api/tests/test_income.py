@@ -9,7 +9,12 @@ import pytest
 from api.app.db.connection import get_session
 from api.app.db.models import Player, utcnow
 from api.app.zoopark import income, ledger
-from api.app.zoopark.catalog import BASE_INCOME_RUB_PER_MIN, HABITAT_MATCH_BONUS, gene_income_mult
+from api.app.zoopark.catalog import (
+    BASE_INCOME_RUB_PER_MIN,
+    HABITAT_MATCH_BONUS,
+    SPECIES_RARITY_INCOME_MULT,
+    gene_income_mult,
+)
 
 
 class TestFormula:
@@ -30,6 +35,26 @@ class TestFormula:
         )
         assert plain == BASE_INCOME_RUB_PER_MIN
         assert matched == int(BASE_INCOME_RUB_PER_MIN * HABITAT_MATCH_BONUS)
+
+    def test_species_rarity_changes_income_modestly(self):
+        income_by_rarity = {
+            rarity: income.animal_income_rub_per_min(
+                survival="medium",
+                appearance="medium",
+                size="medium",
+                habitat_matches=False,
+                species_rarity=rarity,
+            )
+            for rarity in SPECIES_RARITY_INCOME_MULT
+        }
+        assert income_by_rarity == {"rare": 45, "epic": 50, "mythic": 55, "legendary": 60}
+        assert income_by_rarity["legendary"] < income.animal_income_rub_per_min(
+            survival="high",
+            appearance="high",
+            size="high",
+            habitat_matches=False,
+            species_rarity="rare",
+        )
 
     def test_a_sick_animal_earns_half(self):
         healthy = income.animal_income_rub_per_min(

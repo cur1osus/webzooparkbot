@@ -39,10 +39,10 @@ class TestGddNumbers:
 
 class TestPackBundles:
     def test_each_tier_has_a_larger_animal_bundle(self):
-        assert PACK_REWARD_RANGES["rare"]["animals"] == (1, 3)
-        assert PACK_REWARD_RANGES["epic"]["animals"] == (2, 5)
-        assert PACK_REWARD_RANGES["legendary"]["animals"] == (3, 7)
-        assert PACK_REWARD_RANGES["mythic"]["animals"] == (4, 10)
+        assert PACK_REWARD_RANGES["rare"]["animals"] == (1, 2)
+        assert PACK_REWARD_RANGES["epic"]["animals"] == (1, 3)
+        assert PACK_REWARD_RANGES["legendary"]["animals"] == (2, 5)
+        assert PACK_REWARD_RANGES["mythic"]["animals"] == (3, 6)
 
     def test_daily_gift_favours_rare_and_starves_the_top_tiers(self):
         from api.app.zoopark.catalog import DAILY_GIFT_TIER_WEIGHTS

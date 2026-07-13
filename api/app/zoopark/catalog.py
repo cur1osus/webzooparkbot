@@ -53,12 +53,12 @@ GENE_ROLL_WEIGHTS: tuple[float, float, float] = (0.40, 0.40, 0.20)
 
 # ─── Species ──────────────────────────────────────────────────────────────────
 #
-# GDD §3 derives income from genes and habitat only — the species never appears in
-# the formula. It is a skin: a name, an emoji and a collection tier. The old catalogue
-# carried `price` and `income` columns per species (a leftover from the Telegram bot,
-# where animals were bought by the thousand and had no genes); nothing read them, and
-# they implied a ladder from a 1 100 ₽ rabbit to a 268 000 000 000 ₽ narwhal that the
-# income formula flatly contradicted. They are gone.
+# GDD §3 derives income from genes and habitat. The rarity multiplier below is a small
+# economy-facing extension: species rarity matters, but genes still dominate the result.
+# The old catalogue carried `price` and `income` columns per species (a leftover from
+# the Telegram bot, where animals were bought by the thousand and had no genes); nothing
+# read them, and they implied a ladder from a 1 100 ₽ rabbit to a 268 000 000 000 ₽ narwhal
+# that the income formula flatly contradicted. They are gone.
 
 
 class SpeciesDef(TypedDict):
@@ -118,10 +118,17 @@ SPECIES_IDS_BY_RARITY: dict[Rarity, list[int]] = {
     rarity: [i for i, s in SPECIES_BY_ID.items() if s["rarity"] == rarity] for rarity in RARITIES
 }
 
-# Purely cosmetic: which skin you get. Income does not depend on it, so these weights
-# can be retuned without touching the economy.
+# Species rarity is rolled independently from genes. It gives the species a modest
+# economic identity while keeping the inherited genes as the main source of variance.
 SPECIES_RARITY_WEIGHTS: dict[Rarity, float] = {
     "rare": 0.55, "epic": 0.30, "mythic": 0.12, "legendary": 0.03,
+}
+
+SPECIES_RARITY_INCOME_MULT: dict[Rarity, float] = {
+    "rare": 0.9,
+    "epic": 1.0,
+    "mythic": 1.1,
+    "legendary": 1.2,
 }
 
 # ─── Genes and income ─────────────────────────────────────────────────────────
@@ -325,10 +332,10 @@ class PackRewardRange(TypedDict):
 # runs a dollar loss, so the bank (rub → usd) stays the real source of dollars. Rouble
 # rewards were cut ~3× — the old ranges flooded players with roubles they had no sink for.
 PACK_REWARD_RANGES: dict[PackTier, PackRewardRange] = {
-    "rare": {"animals": (1, 3), "rub": (180, 500), "usd": (5, 8)},
-    "epic": {"animals": (2, 5), "rub": (350, 1_000), "usd": (14, 17)},
-    "legendary": {"animals": (3, 7), "rub": (1_300, 3_500), "usd": (28, 34)},
-    "mythic": {"animals": (4, 10), "rub": (3_500, 7_000), "usd": (55, 68)},
+    "rare": {"animals": (1, 2), "rub": (180, 500), "usd": (5, 8)},
+    "epic": {"animals": (1, 3), "rub": (350, 1_000), "usd": (14, 17)},
+    "legendary": {"animals": (2, 5), "rub": (1_300, 3_500), "usd": (28, 34)},
+    "mythic": {"animals": (3, 6), "rub": (3_500, 7_000), "usd": (55, 68)},
 }
 
 # Price doubles per tier: rare is the cheap entry rung, each tier above costs twice as much.

@@ -110,8 +110,8 @@ def daily_gift_odds() -> list[dict]:
 
 
 def roll_species_id() -> int:
-    """Cosmetic. GDD §3 keeps species out of the income formula, so the rarity weights
-    below decide which skin you get and nothing else."""
+    """Roll a species independently from its genes; rarity affects the species income
+    multiplier while the genes still determine most of the animal's value."""
     rarity = random.choices(list(SPECIES_RARITY_WEIGHTS), weights=list(SPECIES_RARITY_WEIGHTS.values()))[0]
     return random.choice(SPECIES_IDS_BY_RARITY[rarity])
 

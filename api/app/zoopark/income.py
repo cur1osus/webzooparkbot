@@ -32,12 +32,15 @@ from api.app.zoopark.catalog import (
     HABITAT_MATCH_UPKEEP_DISCOUNT,
     RATE_START_RUB_PER_USD,
     SICK_INCOME_MULT,
+    SPECIES_BY_ID,
+    SPECIES_RARITY_INCOME_MULT,
     development_effect_percent,
     locality_upkeep_discount,
     UPKEEP_BASE_PERCENT,
     UPKEEP_MAX_PERCENT,
     UPKEEP_PERCENT_PER_LOG10_ANIMALS,
     GeneTier,
+    Rarity,
     gene_income_mult,
 )
 
@@ -69,8 +72,11 @@ def animal_income_rub_per_min(
     habitat_matches: bool,
     is_sick: bool = False,
     species_multiplier: float = 1.0,
+    species_rarity: Rarity | None = None,
 ) -> int:
     value = BASE_INCOME_RUB_PER_MIN * gene_income_mult(survival, appearance, size)
+    if species_rarity is not None:
+        value *= SPECIES_RARITY_INCOME_MULT[species_rarity]
     if habitat_matches:
         value *= HABITAT_MATCH_BONUS
     if is_sick:
@@ -87,6 +93,7 @@ def animal_income(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
         habitat_matches=bool(locality_habitat) and locality_habitat == animal.habitat,
         is_sick=animal.sick_since is not None,
         species_multiplier=bonuses.species_income_multiplier(animal.species_id),
+        species_rarity=SPECIES_BY_ID[animal.species_id]["rarity"],
     )
 
 
@@ -102,6 +109,7 @@ def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
         habitat_matches=bool(locality_habitat) and locality_habitat == animal.habitat,
         is_sick=False,
         species_multiplier=bonuses.species_income_multiplier(animal.species_id),
+        species_rarity=SPECIES_BY_ID[animal.species_id]["rarity"],
     )
     cost_rub = healthy_rub_per_min * 60 * CURE_INCOME_HOURS
     clinic_discount = development_effect_percent(vet_level)
