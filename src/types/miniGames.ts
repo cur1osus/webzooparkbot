@@ -65,6 +65,8 @@ export interface SoloStats {
   lost_rub: number;
 }
 
+export type SoloBetPercent = 5 | 10 | 15;
+
 export interface SoloThrowRound {
   round: number;
   player_roll: number;
@@ -75,6 +77,7 @@ export interface SoloThrowRound {
 export interface SoloGameResult {
   ok: boolean;
   won: boolean;
+  stake_rub: number;
   rub_delta: number;
   new_rub: number;
   player_score: number;

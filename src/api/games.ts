@@ -5,6 +5,7 @@ import type {
   DuelResponse,
   DuelsResponse,
   DuelResolveResponse,
+  SoloBetPercent,
   SoloGameResult,
   SoloStats,
 } from '@/types';
@@ -25,10 +26,10 @@ export const apiResolveDuel = (duel_id: number) =>
 export const apiCancelDuel = (duel_id: number) =>
   req<DuelCancelResponse>(`/duels/${duel_id}/cancel`, { method: 'POST' });
 
-export const apiStartSoloGame = (kind: string, stake_rub: number) =>
+export const apiStartSoloGame = (kind: string, stake_pct: SoloBetPercent) =>
   req<SoloGameResult>('/solo', {
     method: 'POST',
-    body: JSON.stringify({ kind, stake_rub: Math.floor(stake_rub) }),
+    body: JSON.stringify({ kind, stake_pct }),
   });
 export const apiGetSoloStats = () => req<SoloStats>('/solo/stats');
 

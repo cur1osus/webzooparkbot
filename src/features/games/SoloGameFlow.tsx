@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import type { GameDef } from '@/data/games';
+import type { SoloBetPercent } from '@/types';
 import { fmt } from '@/utils/format';
 import { BasketballSoloPanel } from './BasketballSoloPanel';
 
-type BetAmount = 1 | 10 | 100;
 type SoloFlowScreen = 'setup' | 'match';
 
-const BET_OPTIONS: readonly BetAmount[] = [1, 10, 100];
+const BET_OPTIONS: readonly SoloBetPercent[] = [5, 10, 15];
+
+function getBetAmount(balance: number, percent: SoloBetPercent) {
+  if (balance <= 0) return 0;
+  return Math.max(1, Math.floor(balance * percent / 100));
+}
 
 const GAME_ACCENTS: Record<string, { border: string; from: string; to: string; glow: string }> = {
   basketball: { border: 'rgba(var(--c-orange-rgb),0.25)', from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
@@ -43,21 +48,22 @@ function FlowHeader({ title, subtitle, onBack }: { title: string; subtitle: stri
 }
 
 export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGameFlowProps) {
-  const [bet, setBet] = useState<BetAmount>(1);
+  const [betPercent, setBetPercent] = useState<SoloBetPercent>(5);
   const [screen, setScreen] = useState<SoloFlowScreen>('setup');
 
   const accents = GAME_ACCENTS[game.id] ?? GAME_ACCENTS.dice;
-  const canStart = availableRub >= bet;
+  const bet = getBetAmount(availableRub, betPercent);
+  const canStart = bet > 0 && availableRub >= bet;
 
   if (screen === 'match') {
     return (
       <div className="p-[14px] flex flex-col gap-3">
         <FlowHeader
           title={game.name}
-          subtitle={`Матч со ставкой ₽${fmt(bet)}`}
+          subtitle={`Матч со ставкой ${betPercent}%`}
           onBack={() => setScreen('setup')}
         />
-        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} canStart={canStart} onRefresh={onRefresh} />
+        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} betPercent={betPercent} canStart={canStart} onRefresh={onRefresh} />
       </div>
     );
   }
@@ -105,30 +111,36 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
 
       <div className="card flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="m-0 font-bold text-[15px]">Ставка игры</p>
-          <span className="text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Выбрано: ₽{fmt(bet)}</span>
+          <p className="m-0 font-bold text-[15px]">Процент ставки</p>
+          <span className="text-[12px] tabular-nums" style={{ color: 'var(--tg-theme-hint-color)' }}>Выбрано: {betPercent}% · ₽{fmt(bet)}</span>
         </div>
 
-        <div className="flex gap-2">
-          {BET_OPTIONS.map((amount) => {
-            const active = amount === bet;
+        <div className="grid grid-cols-3 gap-2">
+          {BET_OPTIONS.map((percent) => {
+            const amount = getBetAmount(availableRub, percent);
+            const active = percent === betPercent;
             return (
               <button
-                key={amount}
+                key={percent}
                 type="button"
-                onClick={() => setBet(amount)}
-                className="flex-1 py-2 rounded-xl border-none font-bold text-[13px]"
+                onClick={() => setBetPercent(percent)}
+                className="min-h-[64px] rounded-xl border-none font-bold text-[13px] flex flex-col items-center justify-center gap-1"
                 style={{
-                  background: active ? 'rgba(var(--c-gold-rgb),0.18)' : 'var(--surface-subtle)',
-                  color: active ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
-                  border: `1px solid ${active ? 'rgba(var(--c-gold-rgb),0.3)' : 'var(--surface-overlay-border)'}`,
+                  background: active ? `color-mix(in srgb, ${accents.from} 16%, transparent)` : 'var(--surface-subtle)',
+                  color: active ? accents.from : 'var(--tg-theme-hint-color)',
+                  border: `1px solid ${active ? `color-mix(in srgb, ${accents.from} 42%, transparent)` : 'var(--surface-overlay-border)'}`,
                 }}
               >
-                ₽{fmt(amount)}
+                <span className="text-[16px] leading-none">{percent}%</span>
+                <span className="text-[11px] font-semibold tabular-nums">₽{fmt(amount)}</span>
               </button>
             );
           })}
         </div>
+
+        <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+          Сумма рассчитывается от текущего баланса. Для маленького баланса действует минимальная ставка ₽1.
+        </p>
 
         {!canStart && (
           <p className="m-0 text-[13px]" style={{ color: 'var(--c-red-soft)' }}>

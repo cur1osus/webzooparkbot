@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -14,7 +16,7 @@ class DuelCreateBody(BaseModel):
 
 class SoloStartBody(BaseModel):
     kind: str
-    stake_rub: int = Field(ge=1)
+    stake_pct: Literal[5, 10, 15] = 5
 
 
 class CocktailGuessBody(BaseModel):

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { apiStartSoloGame } from '@/api';
-import type { SoloGameResult, SoloThrowRound } from '@/types';
+import type { SoloBetPercent, SoloGameResult, SoloThrowRound } from '@/types';
 import { fmt } from '@/utils/format';
 import { TgsPlayer, type TgsHandle } from '@/components/TgsPlayer';
 
@@ -80,6 +80,7 @@ interface BasketballSoloPanelProps {
   gameId: string;
   gameEmoji: string;
   bet: number;
+  betPercent: SoloBetPercent;
   canStart: boolean;
   onRefresh: () => void;
 }
@@ -94,7 +95,7 @@ function getVisibleScore(gameId: string, history: SoloThrowRound[]) {
   );
 }
 
-export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefresh }: BasketballSoloPanelProps) {
+export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canStart, onRefresh }: BasketballSoloPanelProps) {
   const [phase, setPhase] = useState<BasketballPhase>('idle');
   const [animLabel, setAnimLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -144,13 +145,13 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, canStart, onRefres
     setPhase('loading');
 
     try {
-      const result = await apiStartSoloGame(gameId, bet);
+      const result = await apiStartSoloGame(gameId, betPercent);
       if (!result.history?.length) {
         throw new Error('Сервер не вернул историю матча');
       }
 
       setSession(result);
-      setSessionBet(bet);
+      setSessionBet(result.stake_rub);
       setVisibleHistory([]);
       onRefresh();
 

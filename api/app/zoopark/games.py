@@ -37,6 +37,7 @@ from api.app.zoopark.catalog import (
     MAX_STAKE_RUB,
     SOLO_MATCH_MAX_ROUNDS,
     SOLO_MATCH_MIN_ROUNDS,
+    SOLO_STAKE_PCTS,
     SOLO_WIN_CHANCE_PCT,
     STARS_TO_PAW,
 )
@@ -360,6 +361,14 @@ def _solo_roll_score(kind: str, roll: int) -> int:
     return roll
 
 
+def _solo_stake_from_balance(balance_rub: int, stake_pct: int) -> int:
+    if stake_pct not in SOLO_STAKE_PCTS:
+        raise HTTPException(400, "Недопустимый процент ставки")
+    if balance_rub <= 0:
+        return 0
+    return max(1, int(balance_rub) * stake_pct // 100)
+
+
 def simulate_solo_match(kind: str) -> tuple[list[dict[str, int]], int, int]:
     history: list[dict[str, int]] = []
     player_score = 0
@@ -380,7 +389,6 @@ def simulate_solo_match(kind: str) -> tuple[list[dict[str, int]], int, int]:
 
 
 def start_solo_game(tg_id: int, body: SoloStartBody) -> dict:
-    stake = _validate_stake(body.stake_rub)
     kind = _validate_kind(body.kind)
 
     with get_session() as session:
@@ -388,6 +396,7 @@ def start_solo_game(tg_id: int, body: SoloStartBody) -> dict:
         if not player:
             raise HTTPException(404, "Нет игрока")
         sync_player_income(session, player)
+        stake = _validate_stake(_solo_stake_from_balance(ledger.balance(player, "rub"), body.stake_pct))
 
         # The stake leaves the balance first, so an insufficient balance fails before the
         # dice are rolled rather than after.
@@ -416,6 +425,7 @@ def start_solo_game(tg_id: int, body: SoloStartBody) -> dict:
         result = {
             "ok": True,
             "won": won,
+            "stake_rub": stake,
             "rub_delta": stake if won else -stake,
             "new_rub": ledger.balance(player, "rub"),
             "history": history,

@@ -701,6 +701,7 @@ PROPERTY_KINDS: tuple[PropertyKind, ...] = tuple(ITEM_PROPERTIES)
 
 GAME_KINDS = ("basketball", "darts", "bowling", "dice", "football")
 MAX_STAKE_RUB = 10_000_000_000
+SOLO_STAKE_PCTS = (5, 10, 15)
 DUEL_BASE_MOVES = 5
 DUEL_MAX_PLAYERS = 3
 DUEL_DURATION_MINUTES = 10

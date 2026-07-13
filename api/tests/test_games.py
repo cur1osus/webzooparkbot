@@ -5,7 +5,7 @@ from datetime import timedelta
 from api.app.db.connection import get_session
 from api.app.db.models import Player, utcnow
 from api.app.schemas.core import RegisterBody
-from api.app.schemas.games import DuelCreateBody
+from api.app.schemas.games import DuelCreateBody, SoloStartBody
 from api.app.zoopark import games, ledger
 from api.app.zoopark.core import register
 
@@ -71,3 +71,16 @@ def test_expired_two_player_lobby_uses_70_30_and_timer_resolves(db):
     resolved = games.resolve_duel(1001, game_id)
     assert resolved["game"]["status"] == "finished"
     assert sorted(participant["reward_rub"] for participant in resolved["game"]["participants"]) == [6, 14]
+
+
+def test_solo_stake_is_calculated_from_locked_balance_percentage(db):
+    register(1001, RegisterBody(nickname="solo-player"))
+    _grant_rub(1001, 1000)
+
+    result = games.start_solo_game(1001, SoloStartBody(kind="dice", stake_pct=15))
+
+    assert result["stake_rub"] == 150
+    assert abs(result["rub_delta"]) == 150
+    with get_session() as session:
+        balance = session.query(Player).filter_by(telegram_id=1001).one().balance_rub
+        assert balance == 1000 + result["rub_delta"]
