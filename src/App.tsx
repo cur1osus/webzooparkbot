@@ -81,6 +81,7 @@ export default function App() {
   const { state, loading, error, errorStatus, loadFromServer, setGameState, patchState } = useZooStore();
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useHashTab();
+  const [tabResetSignal, setTabResetSignal] = useState(0);
   const [inviteGameId] = useState<number | null>(() => getInviteGameId());
   const [transferCode] = useState<string | null>(() => getTransferCode());
   const transferClaimStartedRef = useRef<string | null>(null);
@@ -172,6 +173,14 @@ export default function App() {
     void loadFromServer();
   };
 
+  const handleTabChange = useCallback((nextTab: typeof tab) => {
+    if (nextTab === tab) {
+      setTabResetSignal(signal => signal + 1);
+      return;
+    }
+    setTab(nextTab);
+  }, [setTab, tab]);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -237,7 +246,7 @@ export default function App() {
               <span>{transferNotice.message}</span>
             </div>
           )}
-          <div key={tab} className="page-enter page-scroll-area">
+          <div key={`${tab}-${tabResetSignal}`} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
                 <ZooPage gs={displayState} onRefresh={reloadFromServer} />
@@ -260,7 +269,7 @@ export default function App() {
             </Suspense>
           </div>
 
-          <TabBar active={tab} onChange={setTab} />
+          <TabBar active={tab} onChange={handleTabChange} />
         </div>
       )}
     </div>
