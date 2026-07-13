@@ -13,7 +13,7 @@ export const ACHIEVEMENT_TGS: Record<string, string> = {
   arena_winner: '/nft_UFCStrike-2254.tgs',
   endgame_zoo: '/nft_BigYear-9228.tgs',
   endgame_collector: '/nft_TimelessBook-56334.tgs',
-  endgame_geneticist: '/nft_MagicPotion-62.tgs',
+  endgame_geneticist: '/nft_IonGem-2553.tgs',
   endgame_explorer: '/nft_VictoryMedal-10059.tgs',
   endgame_empire: '/nft_MoneyPot-1.tgs',
 };
