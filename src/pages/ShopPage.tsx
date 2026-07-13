@@ -93,7 +93,6 @@ function ColorSection({ gs, onRefresh }: { gs: GameState; onRefresh: () => void 
             name={gs.nickname}
             color={active.id}
             className="m-0 mt-2 text-[25px] leading-none font-extrabold"
-            style={{ textShadow: `0 0 18px ${active.glow}` }}
           />
           <p className="m-0 mt-3 max-w-[270px] text-[13px] leading-[1.35] text-tg-hint">
             Цвет имени будет виден в таблице лидеров. Открытые оттенки остаются навсегда.
