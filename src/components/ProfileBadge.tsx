@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { ACHIEVEMENT_TGS, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
 import { TgsPlayer } from '@/components/TgsPlayer';
 
@@ -25,7 +26,11 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
   return (
     <div
       className={`profile-badge ${toneClass} ${className}`}
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        '--profile-badge-size': `${size}px`,
+      } as CSSProperties}
       aria-hidden="true"
     >
       {achievementTgs ? (
