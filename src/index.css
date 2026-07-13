@@ -790,9 +790,9 @@ button[aria-pressed]:focus-visible {
   button:hover:not(:disabled),
   .card-pressable:hover { transform: none !important; }
   .income-glow { animation: none !important; }
-  .nickname-color-aurora, .nickname-color-embers, .nickname-color-spectrum, .nickname-color-neon, .nickname-color-wave, .nickname-color-google,
-  .nickname-preview-aurora, .nickname-preview-embers, .nickname-preview-spectrum, .nickname-preview-neon, .nickname-preview-wave, .nickname-preview-google,
-  .nickname-swatch-aurora, .nickname-swatch-embers, .nickname-swatch-spectrum, .nickname-swatch-neon, .nickname-swatch-wave, .nickname-swatch-google { animation: none !important; }
+  .nickname-color-aurora, .nickname-color-embers, .nickname-color-spectrum, .nickname-color-neon, .nickname-color-wave, .nickname-color-glitch, .nickname-color-google,
+  .nickname-preview-aurora, .nickname-preview-embers, .nickname-preview-spectrum, .nickname-preview-neon, .nickname-preview-wave, .nickname-preview-glitch, .nickname-preview-google,
+  .nickname-swatch-aurora, .nickname-swatch-embers, .nickname-swatch-spectrum, .nickname-swatch-neon, .nickname-swatch-wave, .nickname-swatch-glitch, .nickname-swatch-google { animation: none !important; }
 }
 
 button:disabled {
@@ -1400,8 +1400,7 @@ button:disabled {
 .nickname-color-aurora,
 .nickname-color-embers,
 .nickname-color-spectrum,
-.nickname-color-neon,
-.nickname-color-google {
+.nickname-color-neon {
   background-size: 260% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -1528,16 +1527,34 @@ button:disabled {
     animation: g-b 0.4s steps(2) infinite;
   }
 }
+/* Google isn't a gradient sweep — each glyph is a fixed brand colour (see GoogleText).
+   The container must therefore NOT clip its background to the text, or it would paint
+   the per-letter spans transparent. */
 .nickname-color-google {
-  background-image: linear-gradient(100deg, #4285f4, #ea4335, #fbbc05, #34a853, #4285f4);
-  text-shadow: 0 0 10px rgba(66, 133, 244, 0.55), 0 0 24px rgba(234, 67, 53, 0.3);
-  animation-duration: 1.9s;
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: initial;
+  animation: none;
+}
+.google-name { font-family: 'Product Sans', 'Segoe UI', Roboto, Arial, sans-serif; letter-spacing: -0.01em; }
+
+/* Glitch is its own premium effect (the neon style is now a plain neon glow again).
+   GlitchText supplies the shimmer + chromatic layers; the container only needs to let
+   the offset layers spill out and add a faint chromatic halo. */
+.nickname-color-glitch {
+  overflow: visible;
+  background: transparent;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  text-shadow: 0 0 12px rgba(120, 130, 255, 0.35);
 }
 .nickname-preview-aurora,
 .nickname-preview-embers,
 .nickname-preview-spectrum,
 .nickname-preview-neon,
 .nickname-preview-wave,
+.nickname-preview-glitch,
 .nickname-preview-google {
   border-radius: 16px;
   background-size: 260% 260%;
@@ -1558,6 +1575,9 @@ button:disabled {
 .nickname-preview-wave {
   background-image: linear-gradient(125deg, rgba(255, 138, 0, 0.3), rgba(110, 108, 104, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
+.nickname-preview-glitch {
+  background-image: linear-gradient(125deg, rgba(255, 92, 92, 0.26), rgba(91, 141, 239, 0.24), rgba(120, 130, 255, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
 .nickname-preview-google {
   background-image: linear-gradient(125deg, rgba(66, 133, 244, 0.3), rgba(234, 67, 53, 0.25), rgba(251, 188, 5, 0.22), rgba(52, 168, 83, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
@@ -1566,6 +1586,7 @@ button:disabled {
 .nickname-swatch-spectrum,
 .nickname-swatch-neon,
 .nickname-swatch-wave,
+.nickname-swatch-glitch,
 .nickname-swatch-google {
   border-radius: 9999px;
   background-size: 220% auto;
@@ -1576,6 +1597,7 @@ button:disabled {
 .nickname-swatch-spectrum { background-image: linear-gradient(90deg, #ff8ed8, #a48cff, #70ddff, #d6ff78, #ff8ed8); }
 .nickname-swatch-neon { background-image: linear-gradient(90deg, #5dffbd, #6efff5, #9f82ff, #ff6ed3, #5dffbd); }
 .nickname-swatch-wave { background-image: linear-gradient(90deg, #6e6c68, #ff8a00, #6e6c68); }
+.nickname-swatch-glitch { background-image: linear-gradient(90deg, #ff5c5c, #5b8def, #7882ff, #ff5c5c); }
 .nickname-swatch-google { background-image: linear-gradient(90deg, #4285f4, #ea4335, #fbbc05, #34a853, #4285f4); }
 @keyframes nickname-color-flow {
   to { background-position: 100% center; }

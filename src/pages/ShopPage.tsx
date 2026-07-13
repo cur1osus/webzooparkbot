@@ -8,7 +8,7 @@ import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
 import { PageHeader } from '@/components/PageHeader';
-import { GlitchText, TextWave } from '@/components/NicknameEffects';
+import { Nickname } from '@/components/NicknameEffects';
 
 const RARITY_LABEL = { standard: null, rare: 'Редкий', legendary: 'Легендарный' } as const;
 
@@ -85,9 +85,13 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         <div className="absolute -right-3 -top-8 text-[100px] opacity-[0.07] leading-none pointer-events-none">✦</div>
         <div className="relative">
           <p className="m-0 text-[11px] font-extrabold tracking-[0.7px] uppercase text-tg-hint">Подпись владельца</p>
-          <p className={`m-0 mt-2 text-[25px] leading-none font-extrabold ${active.animated ? `nickname-color-${active.id}` : ''}`} style={{ color: active.value, textShadow: `0 0 18px ${active.glow}` }}>
-            {active.id === 'neon' ? <GlitchText>{gs.nickname}</GlitchText> : active.id === 'wave' ? <TextWave text={gs.nickname} /> : gs.nickname}
-          </p>
+          <Nickname
+            as="p"
+            name={gs.nickname}
+            color={active.id}
+            className="m-0 mt-2 text-[25px] leading-none font-extrabold"
+            style={{ textShadow: `0 0 18px ${active.glow}` }}
+          />
           <p className="m-0 mt-3 max-w-[270px] text-[13px] leading-[1.35] text-tg-hint">
             Цвет имени будет виден в таблице лидеров. Открытые оттенки остаются навсегда.
           </p>
@@ -126,7 +130,7 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
                     style={option.animated ? { boxShadow: `0 0 12px ${option.glow}` } : { background: option.value, boxShadow: `0 0 10px ${option.glow}` }}
                   />
                   <span className="min-w-0">
-                    <span className={`block text-[13px] font-extrabold truncate ${option.animated ? `nickname-color-${option.id}` : ''}`} style={{ color: option.value }}>{option.label}</span>
+                    <Nickname as="span" name={option.label} color={option.id} className="block text-[13px] font-extrabold truncate" />
                     <span className="block mt-[1px] text-[10px] text-tg-hint">
                       {isSelected ? 'Выбрано' : owned ? 'Надеть' : `${price} 🐾`}{RARITY_LABEL[rarity] ? ` · ${RARITY_LABEL[rarity]}` : ''}
                     </span>

@@ -44,6 +44,7 @@ NICKNAME_COLORS: dict[str, NicknameColorDef] = {
     "spectrum": {"price_paw": 350, "animated": True, "rarity": "rare"},
     "neon": {"price_paw": 250, "animated": True, "rarity": "rare"},
     "wave": {"price_paw": 250, "animated": True, "rarity": "rare"},
+    "glitch": {"price_paw": 500, "animated": True, "rarity": "legendary"},
     "google": {"price_paw": 700, "animated": True, "rarity": "legendary"},
 }
 
