@@ -121,6 +121,7 @@ export default function App() {
   const transferClaimStartedRef = useRef<string | null>(null);
   const [transferNotice, setTransferNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const hiddenAtRef = useRef<number | null>(null);
+  const showDevBar = import.meta.env.DEV || !inTma;
 
   const reloadFromServer = useCallback(() => {
     void loadFromServer();
@@ -252,7 +253,7 @@ export default function App() {
 
   return (
     <div className="h-full bg-tg-bg overflow-hidden">
-      {!inTma && <DevBar onLogin={handleLogin} />}
+      {showDevBar && <DevBar onLogin={handleLogin} />}
 
       {/* Loading */}
       {loading && !state && (
