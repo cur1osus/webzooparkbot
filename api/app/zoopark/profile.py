@@ -18,6 +18,7 @@ from api.app.zoopark.catalog import (
     ITEM_PROPERTIES,
     NICKNAME_COLORS,
     PROFILE_FRAMES,
+    PROFILE_WALLPAPERS,
     SPECIES_BY_ID,
     PropertyKind,
     item_sell_price_usd,
@@ -202,6 +203,22 @@ def profile_frames_payload(session: Session, player_id: int) -> list[dict]:
     ]
 
 
+def profile_wallpapers_payload(session: Session, player_id: int) -> list[dict]:
+    owned = set(session.scalars(
+        select(PlayerCosmetic.cosmetic_id).where(PlayerCosmetic.player_id == player_id)
+    ).all())
+    return [
+        {
+            "id": wallpaper_id,
+            "price_paw": spec["price_paw"],
+            "animated": spec["animated"],
+            "rarity": spec["rarity"],
+            "owned": wallpaper_id == "none" or f"wall:{wallpaper_id}" in owned,
+        }
+        for wallpaper_id, spec in PROFILE_WALLPAPERS.items()
+    ]
+
+
 def build_state(session: Session, player: Player) -> dict:
     season: Season = ensure_player_season(session, player)
     bonuses = bonuses_module.load(session, player.id)
@@ -231,6 +248,8 @@ def build_state(session: Session, player: Player) -> dict:
         "nickname_colors": nickname_colors_payload(session, player.id),
         "profile_frame": player.profile_frame,
         "profile_frames": profile_frames_payload(session, player.id),
+        "profile_wallpaper": player.profile_wallpaper,
+        "profile_wallpapers": profile_wallpapers_payload(session, player.id),
         "registered_at": _iso(player.registered_at),
         "profile_emoji": player.profile_emoji,
         "rub": player.balance_rub,

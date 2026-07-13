@@ -33,6 +33,15 @@ export const apiBuyProfileFrame = (frame: string) =>
   req<{ ok: true; profile_frame: string; new_paw_coins: number }>(`/profile/frames/${frame}`, {
     method: 'POST',
   });
+export const apiSetProfileWallpaper = (wallpaper: string) =>
+  req<{ ok: true; profile_wallpaper: string }>('/profile/wallpaper', {
+    method: 'POST',
+    body: JSON.stringify({ wallpaper }),
+  });
+export const apiBuyProfileWallpaper = (wallpaper: string) =>
+  req<{ ok: true; profile_wallpaper: string; new_paw_coins: number }>(`/profile/wallpapers/${wallpaper}`, {
+    method: 'POST',
+  });
 
 export const apiAdminOverview = (search = '') =>
   req<AdminOverview>(`/admin/overview${search ? `?search=${encodeURIComponent(search)}` : ''}`);

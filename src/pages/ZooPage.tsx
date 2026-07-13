@@ -18,6 +18,7 @@ import { DevelopmentTab } from '@/features/development/DevelopmentTab';
 import { AchievementsTab } from '@/features/achievements/AchievementsTab';
 import { Nickname } from '@/components/NicknameEffects';
 import { profileFrameClass } from '@/data/profileFrames';
+import { wallpaperClass } from '@/data/profileWallpapers';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -198,8 +199,11 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
     <div className="page-content-safe">
       {/* ── Header HUD — one grid, one font, left-aligned (idle-tycoon convention) ── */}
       <div className="relative overflow-hidden" style={{ paddingTop: '16px' }}>
+        {gs.profile_wallpaper && gs.profile_wallpaper !== 'none' && (
+          <div className={`profile-wallpaper ${wallpaperClass(gs.profile_wallpaper)}`} aria-hidden="true" />
+        )}
         {/* Identity row: avatar + name (left), premium currencies (right) */}
-        <div className="relative px-[14px] flex items-center gap-3">
+        <div className="relative z-[1] px-[14px] flex items-center gap-3">
           <div className={`profile-badge-frame shrink-0 ${profileFrameClass(gs.profile_frame)}`} style={{ '--frame-w': '3px' } as CSSProperties}>
             <div className="w-10 h-10 rounded-full overflow-hidden"
               style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
@@ -231,7 +235,7 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
         </div>
 
         {/* Primary balance = the number that grows; income rate is its subordinate line */}
-        <div className="relative mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
+        <div className="relative z-[1] mx-[14px] mt-3 rounded-2xl px-[16px] py-[13px]"
           style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
           <p className="m-0 text-[10px] font-extrabold uppercase tracking-[1.5px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Касса зоопарка

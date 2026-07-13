@@ -140,6 +140,7 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
             "nickname_color": target.nickname_color,
             "profile_emoji": target.profile_emoji,
             "profile_frame": target.profile_frame,
+            "profile_wallpaper": target.profile_wallpaper,
             "rank": rank,
             "income_rub_per_min": target.income_rub_per_min,
             "upkeep_rub_per_min": target.upkeep_rub_per_min,

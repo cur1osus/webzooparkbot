@@ -75,6 +75,28 @@ PROFILE_FRAMES: dict[str, ProfileFrameDef] = {
     "royal": {"price_paw": 480, "animated": True, "rarity": "legendary"},
 }
 
+
+class ProfileWallpaperDef(TypedDict):
+    price_paw: int
+    animated: bool
+    rarity: str
+
+
+# Profile wallpapers back the identity header on the player card and the home HUD. Same
+# server-catalogue pattern as frames; ownership lives in player_cosmetics under a "wall:"
+# prefix. The visuals are original CSS/SVG fills, not third-party assets.
+PROFILE_WALLPAPERS: dict[str, ProfileWallpaperDef] = {
+    "none": {"price_paw": 0, "animated": False, "rarity": "standard"},
+    "dusk": {"price_paw": 150, "animated": False, "rarity": "standard"},
+    "sunrise": {"price_paw": 150, "animated": False, "rarity": "standard"},
+    "meadow": {"price_paw": 150, "animated": False, "rarity": "standard"},
+    "ocean": {"price_paw": 150, "animated": False, "rarity": "standard"},
+    "bubbles": {"price_paw": 280, "animated": False, "rarity": "rare"},
+    "grid": {"price_paw": 280, "animated": False, "rarity": "rare"},
+    "paws": {"price_paw": 360, "animated": False, "rarity": "legendary"},
+    "stars": {"price_paw": 360, "animated": False, "rarity": "legendary"},
+}
+
 # GDD §2: "Среда обитания — равномерно: 20% на каждую из 5 местностей."
 # GDD §1: "Низкое: 40%, Среднее: 40%, Высокое: 20%" for each of the four genes.
 GENE_ROLL_WEIGHTS: tuple[float, float, float] = (0.40, 0.40, 0.20)

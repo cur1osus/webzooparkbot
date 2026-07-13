@@ -3,7 +3,13 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, ProfileFrameBody, RegisterBody
+from api.app.schemas.core import (
+    NicknameColorBody,
+    ProfileAvatarBody,
+    ProfileFrameBody,
+    ProfileWallpaperBody,
+    RegisterBody,
+)
 from api.app.zoopark import core as core_service
 
 router = APIRouter(tags=["core"])
@@ -47,6 +53,16 @@ def set_profile_frame(body: ProfileFrameBody, tg_id: TelegramId):
 @router.post("/api/profile/frames/{frame}")
 def buy_profile_frame(frame: str, tg_id: TelegramId):
     return core_service.buy_profile_frame(tg_id, frame)
+
+
+@router.post("/api/profile/wallpaper")
+def set_profile_wallpaper(body: ProfileWallpaperBody, tg_id: TelegramId):
+    return core_service.set_profile_wallpaper(tg_id, body)
+
+
+@router.post("/api/profile/wallpapers/{wallpaper}")
+def buy_profile_wallpaper(wallpaper: str, tg_id: TelegramId):
+    return core_service.buy_profile_wallpaper(tg_id, wallpaper)
 
 
 @router.post("/api/register")

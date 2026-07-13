@@ -1,10 +1,18 @@
 import { useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
-import type { GameState, NicknameColor, ProfileFrame } from '@/types';
-import { apiBuyNicknameColor, apiSetNicknameColor, apiBuyProfileFrame, apiSetProfileFrame } from '@/api';
+import type { GameState, NicknameColor, ProfileFrame, ProfileWallpaper } from '@/types';
+import {
+  apiBuyNicknameColor,
+  apiSetNicknameColor,
+  apiBuyProfileFrame,
+  apiSetProfileFrame,
+  apiBuyProfileWallpaper,
+  apiSetProfileWallpaper,
+} from '@/api';
 import { NICKNAME_COLORS } from '@/data/nicknameColors';
 import { PROFILE_FRAMES } from '@/data/profileFrames';
+import { PROFILE_WALLPAPERS, wallpaperClass } from '@/data/profileWallpapers';
 import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
@@ -280,7 +288,129 @@ function FrameSection({ gs, onRefresh }: { gs: GameState; onRefresh: () => void 
   );
 }
 
-type StyleSection = 'color' | 'frame';
+function WallpaperSection({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<ProfileWallpaper>(gs.profile_wallpaper ?? 'none');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const states = gs.profile_wallpapers ?? [];
+
+  const refresh = () => refreshCosmeticsEverywhere(queryClient, onRefresh);
+
+  const equip = async (wallpaper: ProfileWallpaper) => {
+    if (saving || wallpaper === gs.profile_wallpaper) return;
+    setSelected(wallpaper);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSetProfileWallpaper(wallpaper);
+      refresh();
+    } catch (cause) {
+      setSelected(gs.profile_wallpaper ?? 'none');
+      setError(cause instanceof Error ? cause.message : 'Не удалось сохранить обои');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buy = async (wallpaper: ProfileWallpaper) => {
+    if (saving) return;
+    setSelected(wallpaper);
+    setSaving(true);
+    setError(null);
+    try {
+      await apiBuyProfileWallpaper(wallpaper);
+      refresh();
+    } catch (cause) {
+      setSelected(gs.profile_wallpaper ?? 'none');
+      setError(cause instanceof Error ? cause.message : 'Не удалось купить обои');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const active = PROFILE_WALLPAPERS.find(option => option.id === selected) ?? PROFILE_WALLPAPERS[0];
+  const activeState = states.find(wallpaper => wallpaper.id === selected);
+  const activeOwned = activeState?.owned ?? selected === 'none';
+  const activePrice = activeState?.price_paw ?? 0;
+  const isCurrent = selected === gs.profile_wallpaper;
+
+  return (
+    <div className="px-[14px] pt-3 flex flex-col gap-3">
+      <div
+        className="relative overflow-hidden rounded-2xl px-4 py-5 flex items-center gap-4"
+        style={{ background: 'var(--tg-theme-secondary-bg-color)', border: `1px solid ${active.accent}52` }}
+      >
+        {active.id !== 'none' && <div className={`profile-wallpaper ${wallpaperClass(active.id)}`} aria-hidden="true" />}
+        <div className="relative z-[1] flex items-center gap-3 min-w-0">
+          <ProfileBadge profileEmoji={gs.profile_emoji} size={54} frame={gs.profile_frame} />
+          <div className="min-w-0">
+            <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[18px] leading-none font-extrabold" />
+            <p className="m-0 mt-1 text-[12px]" style={{ color: active.id === 'none' ? 'var(--tg-theme-hint-color)' : 'rgba(255,255,255,0.82)' }}>
+              Так выглядит твоя карточка
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <p className="m-0 font-extrabold text-[15px]">Обои профиля</p>
+          {saving && <span className="text-[11px] font-bold text-tg-hint">Сохраняем...</span>}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {PROFILE_WALLPAPERS.map(option => {
+            const isSelected = option.id === selected;
+            const state = states.find(wallpaper => wallpaper.id === option.id);
+            const owned = state?.owned ?? option.id === 'none';
+            const price = state?.price_paw ?? 0;
+            const rarity = state?.rarity ?? 'standard';
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setSelected(option.id)}
+                aria-pressed={isSelected}
+                className="min-h-[58px] rounded-xl px-3 text-left flex items-center gap-2"
+                style={{
+                  background: isSelected ? `${option.accent}22` : 'var(--surface-subtle)',
+                  border: `1px solid ${isSelected ? option.accent : 'var(--surface-overlay-border)'}`,
+                  borderRadius: '12px',
+                }}
+              >
+                <span
+                  className={`shrink-0 ${option.id === 'none' ? '' : `wallpaper-swatch ${wallpaperClass(option.id)}`}`}
+                  style={{ width: 40, height: 30, borderRadius: 8, border: option.id === 'none' ? '1px dashed var(--surface-overlay-border)' : 'none' }}
+                />
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-extrabold truncate">{option.label}</span>
+                  <span className="block mt-[1px] text-[10px] text-tg-hint">
+                    {isSelected ? 'Выбрано' : owned ? 'Надеть' : `${price} 🐾`}{RARITY_LABEL[rarity] ? ` · ${RARITY_LABEL[rarity]}` : ''}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => void (activeOwned ? equip(selected) : buy(selected))}
+          disabled={saving || isCurrent}
+          className="w-full mt-3 min-h-[46px] rounded-xl border-none font-extrabold text-[14px] disabled:opacity-55"
+          style={{
+            background: activeOwned ? 'var(--c-blue)' : 'var(--c-purple)',
+            color: 'var(--tg-theme-button-text-color)',
+          }}
+        >
+          {saving ? 'Сохраняем...' : isCurrent ? 'Сейчас используется' : activeOwned ? `Надеть «${active.label}»` : `Купить за ${activePrice} 🐾`}
+        </button>
+        {error && <p className="m-0 mt-3 text-[12px] text-[var(--c-red-soft)]">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+type StyleSection = 'color' | 'frame' | 'wallpaper';
 
 function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [section, setSection] = useState<StyleSection>('color');
@@ -292,7 +422,7 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
           className="flex rounded-2xl p-1"
           style={{ background: 'var(--tg-theme-secondary-bg-color)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 18%, transparent)' }}
         >
-          {([['color', 'Цвет ника'], ['frame', 'Рамка']] as const).map(([id, label]) => {
+          {([['color', 'Цвет ника'], ['frame', 'Рамка'], ['wallpaper', 'Обои']] as const).map(([id, label]) => {
             const isActive = section === id;
             return (
               <button
@@ -313,7 +443,9 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         </div>
       </div>
 
-      {section === 'color' ? <ColorSection gs={gs} onRefresh={onRefresh} /> : <FrameSection gs={gs} onRefresh={onRefresh} />}
+      {section === 'color' ? <ColorSection gs={gs} onRefresh={onRefresh} />
+        : section === 'frame' ? <FrameSection gs={gs} onRefresh={onRefresh} />
+        : <WallpaperSection gs={gs} onRefresh={onRefresh} />}
     </div>
   );
 }

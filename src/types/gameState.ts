@@ -67,6 +67,8 @@ export interface GameState {
   nickname_colors: NicknameColorOption[];
   profile_frame: ProfileFrame;
   profile_frames: ProfileFrameOption[];
+  profile_wallpaper: ProfileWallpaper;
+  profile_wallpapers: ProfileWallpaperOption[];
   registered_at: string;
   profile_emoji: string | null;
 
@@ -118,6 +120,16 @@ export type ProfileFrame = 'none' | 'brass' | 'jade' | 'coral' | 'azure' | 'auro
 
 export interface ProfileFrameOption {
   id: ProfileFrame;
+  price_paw: number;
+  animated: boolean;
+  rarity: NicknameColorRarity;
+  owned: boolean;
+}
+
+export type ProfileWallpaper = 'none' | 'dusk' | 'sunrise' | 'meadow' | 'ocean' | 'bubbles' | 'grid' | 'paws' | 'stars';
+
+export interface ProfileWallpaperOption {
+  id: ProfileWallpaper;
   price_paw: number;
   animated: boolean;
   rarity: NicknameColorRarity;

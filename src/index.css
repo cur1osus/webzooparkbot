@@ -311,6 +311,60 @@ button, input, select, textarea { font: inherit; }
 }
 @keyframes profile-frame-spin { to { transform: rotate(360deg); } }
 
+/* ─── Profile wallpapers ────────────────────────────────────────────────────── */
+/* An original CSS/SVG fill behind the identity card (player card) and the home HUD.
+   `.profile-wallpaper` is an absolute layer; a scrim keeps overlaid text readable. */
+.profile-wallpaper {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: var(--tg-theme-secondary-bg-color);
+  background-repeat: repeat, no-repeat;
+}
+.profile-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(8, 10, 18, 0.12), rgba(8, 10, 18, 0.34));
+}
+.wallpaper-dusk    { background-image: linear-gradient(150deg, #3a2a6a, #5b3aa6 55%, #7b4fd0); }
+.wallpaper-sunrise { background-image: linear-gradient(150deg, #ff7a5c, #ff5c8a 55%, #ffb14e); }
+.wallpaper-meadow  { background-image: linear-gradient(150deg, #1f9e6e, #2fb98a 55%, #6fe0a0); }
+.wallpaper-ocean   { background-image: linear-gradient(150deg, #1f6ea6, #2f9fd0 55%, #5fd0e6); }
+.wallpaper-bubbles {
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.16) 2.5px, transparent 3px),
+    linear-gradient(150deg, #17998f, #22b0a2 60%, #4fd8c4);
+  background-size: 26px 26px, cover;
+}
+.wallpaper-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px),
+    linear-gradient(150deg, #2b3550, #38476e 60%, #52658f);
+  background-size: 24px 24px, 24px 24px, cover;
+  background-repeat: repeat, repeat, no-repeat;
+}
+.wallpaper-paws {
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2746%27%20height%3D%2746%27%20viewBox%3D%270%200%2046%2046%27%3E%3Cg%20fill%3D%27rgba%28255%2C255%2C255%2C0.14%29%27%3E%3Cellipse%20cx%3D%2723%27%20cy%3D%2728%27%20rx%3D%277%27%20ry%3D%276%27%2F%3E%3Ccircle%20cx%3D%2714%27%20cy%3D%2719%27%20r%3D%272.6%27%2F%3E%3Ccircle%20cx%3D%2720%27%20cy%3D%2715%27%20r%3D%272.8%27%2F%3E%3Ccircle%20cx%3D%2727%27%20cy%3D%2715%27%20r%3D%272.8%27%2F%3E%3Ccircle%20cx%3D%2733%27%20cy%3D%2719%27%20r%3D%272.6%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
+    linear-gradient(150deg, #a6642f, #c47c46 60%, #e0a06f);
+  background-size: 46px 46px, cover;
+}
+.wallpaper-stars {
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2742%27%20height%3D%2742%27%20viewBox%3D%270%200%2042%2042%27%3E%3Cpath%20fill%3D%27rgba%28255%2C255%2C255%2C0.16%29%27%20d%3D%27M21%206%20C22%2015%2027%2020%2036%2021%20C27%2022%2022%2027%2021%2036%20C20%2027%2015%2022%206%2021%20C15%2020%2020%2015%2021%206%20Z%27%2F%3E%3Ccircle%20cx%3D%2734%27%20cy%3D%279%27%20r%3D%271.6%27%20fill%3D%27rgba%28255%2C255%2C255%2C0.12%29%27%2F%3E%3Ccircle%20cx%3D%278%27%20cy%3D%2733%27%20r%3D%271.6%27%20fill%3D%27rgba%28255%2C255%2C255%2C0.12%29%27%2F%3E%3C%2Fsvg%3E"),
+    linear-gradient(150deg, #2b2a6a, #43379a 60%, #6a57c8);
+  background-size: 42px 42px, cover;
+}
+/* Small non-layered preview swatch for the shop grid: no scrim, rounded tile. */
+.wallpaper-swatch { border-radius: 8px; background-size: cover; }
+.wallpaper-swatch.wallpaper-bubbles { background-size: 16px 16px, cover; }
+.wallpaper-swatch.wallpaper-grid { background-size: 12px 12px, 12px 12px, cover; }
+.wallpaper-swatch.wallpaper-paws { background-size: 28px 28px, cover; }
+.wallpaper-swatch.wallpaper-stars { background-size: 26px 26px, cover; }
+
 .top-page {
   display: flex;
   flex-direction: column;
@@ -655,6 +709,8 @@ button, input, select, textarea { font: inherit; }
 }
 .top-profile-content { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
 .top-profile-identity {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   gap: 13px;

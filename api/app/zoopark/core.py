@@ -18,10 +18,21 @@ from api.app.core.config import BOT_USERNAME, IS_PRODUCTION
 from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import Player, PlayerCosmetic, utcnow
-from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, ProfileFrameBody, RegisterBody
+from api.app.schemas.core import (
+    NicknameColorBody,
+    ProfileAvatarBody,
+    ProfileFrameBody,
+    ProfileWallpaperBody,
+    RegisterBody,
+)
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import ledger
-from api.app.zoopark.catalog import NICKNAME_COLORS, PROFILE_FRAMES, REFERRAL_SIGNUP_REWARD_USD
+from api.app.zoopark.catalog import (
+    NICKNAME_COLORS,
+    PROFILE_FRAMES,
+    PROFILE_WALLPAPERS,
+    REFERRAL_SIGNUP_REWARD_USD,
+)
 from api.app.zoopark.income import sync_player_income
 from api.app.zoopark.progression import ensure_first_locality
 from api.app.zoopark.profile import build_state, get_player
@@ -179,6 +190,45 @@ def buy_profile_frame(tg_id: int, frame: str) -> dict:
         return {
             "ok": True,
             "profile_frame": player.profile_frame,
+            "new_paw_coins": ledger.balance(player, "paw"),
+        }
+
+
+def set_profile_wallpaper(tg_id: int, body: ProfileWallpaperBody) -> dict:
+    if body.wallpaper not in PROFILE_WALLPAPERS:
+        raise HTTPException(400, "Неизвестные обои")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+        if body.wallpaper != "none" and session.get(PlayerCosmetic, (player.id, f"wall:{body.wallpaper}")) is None:
+            raise HTTPException(400, "Сначала открой эти обои за PawCoins")
+        player.profile_wallpaper = body.wallpaper
+        session.commit()
+        return {"ok": True, "profile_wallpaper": player.profile_wallpaper}
+
+
+def buy_profile_wallpaper(tg_id: int, wallpaper: str) -> dict:
+    wallpaper_def = PROFILE_WALLPAPERS.get(wallpaper)
+    if wallpaper_def is None:
+        raise HTTPException(404, "Обои не найдены")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+
+        cosmetic_id = f"wall:{wallpaper}"
+        cosmetic = session.get(PlayerCosmetic, (player.id, cosmetic_id))
+        if cosmetic is None and wallpaper_def["price_paw"] > 0:
+            ledger.spend(session, player, "paw", wallpaper_def["price_paw"], "cosmetic_purchase")
+            session.add(PlayerCosmetic(player_id=player.id, cosmetic_id=cosmetic_id))
+        player.profile_wallpaper = wallpaper
+        session.commit()
+        return {
+            "ok": True,
+            "profile_wallpaper": player.profile_wallpaper,
             "new_paw_coins": ledger.balance(player, "paw"),
         }
 

@@ -18,3 +18,7 @@ class ProfileAvatarBody(BaseModel):
 
 class ProfileFrameBody(BaseModel):
     frame: str = Field(min_length=1, max_length=24)
+
+
+class ProfileWallpaperBody(BaseModel):
+    wallpaper: str = Field(min_length=1, max_length=24)

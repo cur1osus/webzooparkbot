@@ -6,6 +6,7 @@ import { apiGetPublicProfile, apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
 import { ProfileBadge, type ProfileBadgeTone } from '@/components/ProfileBadge';
 import { Nickname } from '@/components/NicknameEffects';
+import { wallpaperClass } from '@/data/profileWallpapers';
 
 function rankTone(rank: number): ProfileBadgeTone {
   if (rank === 1) return 'gold';
@@ -68,15 +69,20 @@ function PublicProfileSheet({
         {profile && (
           <div className="top-profile-content">
             <div className="top-profile-identity">
-              <ProfileBadge profileEmoji={profile.profile_emoji} size={86} tone={rankTone(profile.rank)} frame={profile.profile_frame} />
-              <div className="min-w-0 flex-1">
-                <PlayerName entry={{ ...profile, is_me: entry.is_me }} size="large" />
-                <p className="m-0 mt-1 text-[12px] text-tg-hint">#{profile.rank} место в рейтинге</p>
-                {profile.clan && (
-                  <p className="m-0 mt-2 text-[11px] font-bold" style={{ color: 'var(--c-purple)' }}>
-                    🏰 {profile.clan.name} · уровень {profile.clan.level}
-                  </p>
-                )}
+              {profile.profile_wallpaper && profile.profile_wallpaper !== 'none' && (
+                <div className={`profile-wallpaper ${wallpaperClass(profile.profile_wallpaper)}`} aria-hidden="true" />
+              )}
+              <div className="relative z-[1] flex items-center gap-[13px] w-full min-w-0">
+                <ProfileBadge profileEmoji={profile.profile_emoji} size={86} tone={rankTone(profile.rank)} frame={profile.profile_frame} />
+                <div className="min-w-0 flex-1">
+                  <PlayerName entry={{ ...profile, is_me: entry.is_me }} size="large" />
+                  <p className="m-0 mt-1 text-[12px] text-tg-hint">#{profile.rank} место в рейтинге</p>
+                  {profile.clan && (
+                    <p className="m-0 mt-2 text-[11px] font-bold" style={{ color: 'var(--c-purple)' }}>
+                      🏰 {profile.clan.name} · уровень {profile.clan.level}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 

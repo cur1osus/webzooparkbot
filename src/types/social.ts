@@ -26,6 +26,7 @@ export interface PublicProfile {
   nickname_color: string;
   profile_emoji: string | null;
   profile_frame: string;
+  profile_wallpaper: string;
   rank: number;
   income_rub_per_min: number;
   upkeep_rub_per_min: number;
