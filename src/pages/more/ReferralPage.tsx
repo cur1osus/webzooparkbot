@@ -59,8 +59,10 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                 </p>
               </div>
               <div className="referral-reward" aria-label={`$ ${fmt(data.signup_reward_usd)} за каждого друга`}>
-                <span className="referral-reward-sign">$</span>
-                <strong>{fmt(data.signup_reward_usd)}</strong>
+                <div className="referral-reward-amount">
+                  <span className="referral-reward-sign">$</span>
+                  <strong>{fmt(data.signup_reward_usd)}</strong>
+                </div>
                 <span>за друга</span>
               </div>
             </div>

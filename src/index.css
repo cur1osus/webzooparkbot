@@ -889,13 +889,20 @@ button:disabled {
 
 .referral-reward-sign {
   color: #ffdc86;
-  font-size: 12px;
+  font-size: 18px;
   font-weight: 900;
+  line-height: 0.95;
+}
+
+.referral-reward-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
   line-height: 1;
 }
 
-.referral-reward strong {
-  margin-top: 2px;
+.referral-reward-amount strong {
   color: #fff5c9;
   font-size: 30px;
   font-weight: 900;
@@ -925,7 +932,8 @@ button:disabled {
 .referral-steps {
   position: relative;
   z-index: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px minmax(0, 1fr) 14px minmax(0, 1fr);
   align-items: center;
   margin-top: 20px;
   padding: 10px 9px;
@@ -937,8 +945,8 @@ button:disabled {
 .referral-step {
   display: flex;
   min-width: 0;
-  flex: 1;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   color: rgba(255, 248, 236, 0.76);
   font-size: 10px;
@@ -962,10 +970,8 @@ button:disabled {
 .referral-step-mark-gold { border-color: rgba(255, 237, 172, 0.72); background: rgba(var(--c-gold-rgb), 0.28); color: #ffe19a; }
 
 .referral-step-line {
-  width: 14px;
+  width: 100%;
   height: 1px;
-  flex-shrink: 0;
-  margin: 0 5px;
   background: rgba(255, 237, 172, 0.22);
 }
 
@@ -1022,7 +1028,7 @@ button:disabled {
   .referral-hero h3 { font-size: 20px; }
   .referral-reward { min-width: 84px; }
   .referral-step { gap: 4px; font-size: 9px; }
-  .referral-step-line { width: 8px; margin: 0 3px; }
+  .referral-steps { grid-template-columns: minmax(0, 1fr) 8px minmax(0, 1fr) 8px minmax(0, 1fr); }
 }
 
 .modal-backdrop {
