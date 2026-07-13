@@ -9,6 +9,8 @@ const CURRENCY: Record<BonusCurrency, { icon: string; name: string; color: strin
   rub: { icon: '₽', name: 'Рубли', color: 'var(--c-green)' },
   usd: { icon: '$', name: 'Доллары', color: 'var(--c-blue)' },
   paw: { icon: '🐾', name: 'PawCoins', color: 'var(--c-orange)' },
+  animal: { icon: '🐾', name: 'Животное', color: 'var(--c-purple)' },
+  locality: { icon: '🗺️', name: 'Местность', color: 'var(--c-teal)' },
 };
 
 /**
@@ -35,8 +37,10 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
       } else {
         const res = await apiClaimBonus();
         const meta = CURRENCY[res.currency];
-        setClaimed(`Получено ${fmt(res.amount)} ${meta.icon}`);
-        setBurst({ glyph: meta.icon, amount: res.amount, color: meta.color, label: meta.name });
+        const rewardIcon = res.reward_emoji ?? meta.icon;
+        const rewardLabel = res.reward_name ?? meta.name;
+        setClaimed(res.reward_name ? `Получено ${rewardIcon} ${rewardLabel}` : `Получено ${fmt(res.amount)} ${rewardIcon}`);
+        setBurst({ glyph: rewardIcon, amount: res.amount, color: meta.color, label: rewardLabel });
         await queryClient.invalidateQueries({ queryKey: ['bonus'] });
         onClaim();
       }
@@ -48,6 +52,7 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
   };
 
   const meta = offer ? CURRENCY[offer.currency] : null;
+  const offerIsObject = Boolean(offer?.reward_name);
   const canClaim = offer != null && !offer.claimed;
   const canReroll = canClaim && offer.rerolls_left > 0;
 
@@ -75,8 +80,8 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
           <div className="bonus-offer-reward">
             <span className="bonus-offer-icon" style={{ color: meta.color }}>{meta.icon}</span>
             <div>
-              <strong style={{ color: meta.color }}>{fmt(offer.amount)}</strong>
-              <span>{meta.name}</span>
+              <strong style={{ color: meta.color }}>{offerIsObject ? offer.reward_emoji : fmt(offer.amount)}</strong>
+              <span>{offerIsObject ? offer.reward_name : meta.name}</span>
             </div>
           </div>
           <p className="m-0 mt-2 text-[12px] text-tg-hint">Забери сейчас или попробуй другой вариант.</p>

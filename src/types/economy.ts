@@ -33,12 +33,15 @@ export interface ExchangeResult {
   new_usd: number;
 }
 
-export type BonusCurrency = 'rub' | 'usd' | 'paw';
+export type BonusCurrency = 'rub' | 'usd' | 'paw' | 'animal' | 'locality';
 
 /** Generated and stored server-side, so a reroll cannot be replayed. */
 export interface BonusOffer {
   currency: BonusCurrency;
   amount: number;
+  reward_code?: string | null;
+  reward_name?: string | null;
+  reward_emoji?: string | null;
   claimed: boolean;
   rerolls_left: number;
 }
@@ -47,6 +50,9 @@ export interface BonusClaimResult {
   ok: boolean;
   currency: BonusCurrency;
   amount: number;
+  reward_code?: string | null;
+  reward_name?: string | null;
+  reward_emoji?: string | null;
   new_rub?: number;
   new_usd?: number;
   new_paw_coins?: number;

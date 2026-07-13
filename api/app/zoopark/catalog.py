@@ -724,11 +724,30 @@ COCKTAIL_REWARD_PAW = 150
 
 # ─── Daily bonus ──────────────────────────────────────────────────────────────
 
-BONUS_KINDS: tuple[Currency, ...] = ("rub", "rub", "usd", "paw")
-BONUS_RANGES: dict[Currency, tuple[int, int]] = {
-    "rub": (1, 100),
-    "usd": (1, 10),
-    "paw": (1, 5),
+BONUS_KINDS: tuple[str, ...] = ("rub", "usd", "paw", "locality", "animal")
+# 46% rubles, 23% dollars, 23% PawCoins, 4% locality, 4% animal.
+BONUS_KIND_WEIGHTS: dict[str, int] = {
+    "rub": 46,
+    "usd": 23,
+    "paw": 23,
+    "locality": 4,
+    "animal": 4,
+}
+# The old bot used a weighted jackpot table rather than a uniform range. The top
+# rewards are intentionally rare: they add excitement without turning a daily claim
+# into a reliable source of dollars or millions of rubles.
+BONUS_REWARD_VALUES: dict[Currency, tuple[int, ...]] = {
+    "rub": (100, 1_000, 5_000, 1_000_000),
+    "usd": (5, 50, 200, 1_000, 1_000_000),
+    "paw": tuple(range(10, 51)),
+}
+BONUS_REWARD_WEIGHTS: dict[Currency, tuple[int, ...]] = {
+    # 94% / 5% / 0.99% / 0.01%
+    "rub": (9_400, 500, 99, 1),
+    # 97% / 2.5% / 0.45% / 0.04% / 0.01%
+    "usd": (9_700, 250, 45, 4, 1),
+    # Uniform 10–50 PawCoins.
+    "paw": (1,) * 41,
 }
 
 # ─── Season, clans, transfers, donations ──────────────────────────────────────

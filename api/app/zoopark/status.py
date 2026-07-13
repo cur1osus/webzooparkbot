@@ -8,8 +8,6 @@ reroll count can be forged by the client.
 
 from __future__ import annotations
 
-from random import SystemRandom
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,19 +17,21 @@ from api.app.db.models import Animal, DailyBonus, Locality, Player, utcnow
 from api.app.schemas.status import CureBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
-from api.app.zoopark.catalog import BONUS_KINDS, BONUS_RANGES, Currency
+from api.app.zoopark.catalog import HABITATS, SPECIES_BY_CODE, SPECIES_ID_BY_CODE, Currency
+from api.app.zoopark.daily_bonus import roll_daily_bonus_offer
 from api.app.zoopark.income import alive_clause, cure_cost_usd, sync_player_income
 from api.app.zoopark.profile import get_player
-
-random = SystemRandom()
+from api.app.zoopark.progression import create_animal, roll_genes, roll_habitat
+from api.app.zoopark.season import ensure_player_season
 
 _CURRENCY_FIELD: dict[Currency, str] = {"rub": "new_rub", "usd": "new_usd", "paw": "new_paw_coins"}
-
-
-def _roll_offer() -> tuple[Currency, int]:
-    currency = random.choice(BONUS_KINDS)
-    low, high = BONUS_RANGES[currency]
-    return currency, random.randint(low, high)
+_HABITAT_REWARD_META = {
+    "desert": ("Пустыня", "🏜️"),
+    "mountains": ("Горы", "⛰️"),
+    "forest": ("Лес", "🌲"),
+    "fields": ("Поля", "🌾"),
+    "antarctica": ("Антарктида", "🏔️"),
+}
 
 
 def _today_offer(session: Session, player: Player) -> DailyBonus:
@@ -42,8 +42,14 @@ def _today_offer(session: Session, player: Player) -> DailyBonus:
         .with_for_update()
     ).first()
     if offer is None:
-        currency, amount = _roll_offer()
-        offer = DailyBonus(player_id=player.id, bonus_date=today, currency=currency, amount=amount)
+        currency, amount, reward_code = roll_daily_bonus_offer(session, player)
+        offer = DailyBonus(
+            player_id=player.id,
+            bonus_date=today,
+            currency=currency,
+            amount=amount,
+            reward_code=reward_code,
+        )
         session.add(offer)
         session.flush()
     return offer
@@ -51,12 +57,20 @@ def _today_offer(session: Session, player: Player) -> DailyBonus:
 
 def _offer_payload(session: Session, player: Player, offer: DailyBonus) -> dict:
     rerolls = bonuses_module.load(session, player.id).total("bonus_rerolls")
-    return {
+    payload = {
         "currency": offer.currency,
         "amount": offer.amount,
+        "reward_code": offer.reward_code,
         "claimed": offer.claimed_at is not None,
         "rerolls_left": max(0, rerolls - offer.rerolls_used),
     }
+    if offer.currency == "animal" and offer.reward_code in SPECIES_BY_CODE:
+        species = SPECIES_BY_CODE[offer.reward_code]
+        payload.update(reward_name=species["name"], reward_emoji=species["emoji"])
+    elif offer.currency == "locality" and offer.reward_code in HABITATS:
+        name, emoji = _HABITAT_REWARD_META[offer.reward_code]
+        payload.update(reward_name=name, reward_emoji=emoji)
+    return payload
 
 
 def daily_bonus(tg_id: int) -> dict:
@@ -84,7 +98,7 @@ def reroll_daily_bonus(tg_id: int) -> dict:
         if offer.rerolls_used >= allowed:
             raise HTTPException(400, "Перебросы закончились")
 
-        offer.currency, offer.amount = _roll_offer()
+        offer.currency, offer.amount, offer.reward_code = roll_daily_bonus_offer(session, player)
         offer.rerolls_used += 1
 
         payload = _offer_payload(session, player, offer)
@@ -103,18 +117,58 @@ def claim_bonus(tg_id: int) -> dict:
         if offer.claimed_at is not None:
             raise HTTPException(400, "Бонус уже получен сегодня")
 
-        currency: Currency = offer.currency  # type: ignore[assignment]
-        new_balance = ledger.grant(
-            session, player, currency, offer.amount, "daily_bonus", ref_table="daily_bonuses", ref_id=offer.id
-        )
+        new_balance = None
+        reward_name = None
+        reward_emoji = None
+        if offer.currency in ("rub", "usd", "paw"):
+            currency: Currency = offer.currency  # type: ignore[assignment]
+            new_balance = ledger.grant(
+                session, player, currency, offer.amount, "daily_bonus", ref_table="daily_bonuses", ref_id=offer.id
+            )
+        elif offer.currency == "animal":
+            season = ensure_player_season(session, player)
+            species = SPECIES_BY_CODE.get(offer.reward_code or "")
+            if species is None:
+                raise HTTPException(500, "У ежедневного бонуса потерялся вид животного")
+            create_animal(
+                session,
+                player_id=player.id,
+                season_id=season.id,
+                origin="daily_bonus",
+                genes=roll_genes(),
+                habitat=roll_habitat(),
+                species_id=SPECIES_ID_BY_CODE[species["code"]],
+            )
+            reward_name, reward_emoji = species["name"], species["emoji"]
+        elif offer.currency == "locality":
+            season = ensure_player_season(session, player)
+            available = [
+                habitat for habitat in HABITATS
+                if session.scalar(select(Locality.id).where(
+                    Locality.player_id == player.id,
+                    Locality.season_id == season.id,
+                    Locality.habitat == habitat,
+                )) is None
+            ]
+            habitat = offer.reward_code if offer.reward_code in available else (available[0] if available else None)
+            if habitat is None:
+                raise HTTPException(400, "Все местности уже открыты")
+            session.add(Locality(player_id=player.id, season_id=season.id, habitat=habitat, price_paid_rub=0))
+            reward_name, reward_emoji = _HABITAT_REWARD_META[habitat]
+        else:
+            raise HTTPException(500, "Неизвестный тип ежедневного бонуса")
         offer.claimed_at = utcnow()
 
         result = {
             "ok": True,
-            "currency": currency,
+            "currency": offer.currency,
             "amount": offer.amount,
-            _CURRENCY_FIELD[currency]: new_balance,
+            "reward_code": offer.reward_code,
+            "reward_name": reward_name,
+            "reward_emoji": reward_emoji,
         }
+        if new_balance is not None:
+            result[_CURRENCY_FIELD[offer.currency]] = new_balance
         session.commit()
         return result
 

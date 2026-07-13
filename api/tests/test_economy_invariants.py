@@ -8,11 +8,13 @@ from __future__ import annotations
 import pytest
 
 from api.app.db.connection import get_session
-from api.app.db.models import Item, ItemProperty, Player
+from api.app.db.models import DailyBonus, Item, ItemProperty, Locality, Player, utcnow
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import economy, games, ledger
 from api.app.zoopark.catalog import (
     BANK_FEE_PERCENT,
+    BONUS_REWARD_VALUES,
+    BONUS_REWARD_WEIGHTS,
     ITEM_PROPERTIES,
     ITEM_RARITY_DROP_WEIGHTS,
     RATE_MAX_RUB_PER_USD,
@@ -101,6 +103,59 @@ class TestBankIsOneWay:
         result = economy.exchange(player, BankExchangeBody(amount_rub=rate * 3 + rate - 1))
         assert result["spent_rub"] == rate * 3
         assert result["new_rub"] == 10_000_000 - rate * 3
+
+
+class TestDailyBonusRewards:
+    def test_reward_tables_have_matching_values_and_weights(self):
+        assert set(BONUS_REWARD_VALUES) == {"rub", "usd", "paw"}
+        for currency, values in BONUS_REWARD_VALUES.items():
+            assert len(values) == len(BONUS_REWARD_WEIGHTS[currency])
+            assert all(value > 0 for value in values)
+            assert all(weight > 0 for weight in BONUS_REWARD_WEIGHTS[currency])
+
+        assert BONUS_REWARD_VALUES["rub"] == (100, 1_000, 5_000, 1_000_000)
+        assert BONUS_REWARD_VALUES["usd"] == (5, 50, 200, 1_000, 1_000_000)
+        assert BONUS_REWARD_VALUES["paw"] == tuple(range(10, 51))
+
+    def test_animal_and_locality_rewards_are_claimable(self, db):
+        from api.app.schemas.core import RegisterBody
+        from api.app.zoopark.core import register
+        from api.app.zoopark.season import ensure_player_season
+        from api.app.zoopark.status import claim_bonus
+
+        register(7007, RegisterBody(nickname="animal-reward"))
+        register(8008, RegisterBody(nickname="locality-reward"))
+        with get_session() as session:
+            animal_player = session.query(Player).filter_by(telegram_id=7007).one()
+            animal_season = ensure_player_season(session, animal_player)
+            session.add(DailyBonus(
+                player_id=animal_player.id,
+                bonus_date=utcnow().date(),
+                currency="animal",
+                amount=1,
+                reward_code="rabbit",
+            ))
+
+            locality_player = session.query(Player).filter_by(telegram_id=8008).one()
+            locality_season = ensure_player_season(session, locality_player)
+            existing = {
+                row.habitat for row in session.query(Locality).filter_by(
+                    player_id=locality_player.id,
+                    season_id=locality_season.id,
+                )
+            }
+            reward_habitat = next(habitat for habitat in ("desert", "mountains", "forest", "fields", "antarctica") if habitat not in existing)
+            session.add(DailyBonus(
+                player_id=locality_player.id,
+                bonus_date=utcnow().date(),
+                currency="locality",
+                amount=1,
+                reward_code=reward_habitat,
+            ))
+            session.commit()
+
+        assert claim_bonus(7007)["reward_name"] == "Кролик"
+        assert claim_bonus(8008)["reward_code"] == reward_habitat
 
 
 class TestForgeCannotPrintMoney:

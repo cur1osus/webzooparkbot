@@ -9,21 +9,16 @@ from __future__ import annotations
 
 import json
 from datetime import date, datetime
-from random import SystemRandom
-
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.models import Animal, DailyBonus, Expedition, NotificationOutbox, Player, utcnow
-from api.app.zoopark.catalog import BONUS_KINDS, BONUS_RANGES, Currency
+from api.app.zoopark.daily_bonus import roll_daily_bonus_offer
 
 KIND_EXPEDITION_FINISHED = "expedition_finished"
 KIND_ANIMAL_DEATH = "animal_death"
 KIND_DAILY_BONUS_READY = "daily_bonus_ready"
-_random = SystemRandom()
-
-
 def enqueue(
     session: Session,
     *,
@@ -99,8 +94,7 @@ def enqueue_unclaimed_daily_bonuses(session: Session, *, limit: int = 500) -> in
     for player in players:
         if player.id in existing_ids:
             continue
-        currency: Currency = _random.choice(BONUS_KINDS)
-        low, high = BONUS_RANGES[currency]
+        currency, amount, reward_code = roll_daily_bonus_offer(session, player)
         try:
             with session.begin_nested():
                 session.add(
@@ -108,7 +102,8 @@ def enqueue_unclaimed_daily_bonuses(session: Session, *, limit: int = 500) -> in
                         player_id=player.id,
                         bonus_date=today,
                         currency=currency,
-                        amount=_random.randint(low, high),
+                        amount=amount,
+                        reward_code=reward_code,
                     )
                 )
                 session.flush()

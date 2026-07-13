@@ -41,6 +41,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from api.app.zoopark.catalog import (
+    BONUS_KINDS,
     CURRENCIES,
     GAME_KINDS,
     GENE_TIERS,
@@ -279,7 +280,7 @@ class Animal(Base):
         CheckConstraint(_one_of("gene_size", GENE_TIERS), name="ck_animals_gene_size"),
         CheckConstraint(_one_of("habitat", HABITATS), name="ck_animals_habitat"),
         CheckConstraint(
-            _one_of("origin", ("pack", "merchant", "breeding", "expedition")),
+            _one_of("origin", ("pack", "merchant", "breeding", "expedition", "daily_bonus")),
             name="ck_animals_origin",
         ),
         CheckConstraint(
@@ -662,7 +663,7 @@ class DailyBonus(Base):
     __tablename__ = "daily_bonuses"
     __table_args__ = (
         UniqueConstraint("player_id", "bonus_date", name="uq_daily_bonuses_player_date"),
-        CheckConstraint(_one_of("currency", CURRENCIES), name="ck_daily_bonuses_currency"),
+        CheckConstraint(_one_of("currency", BONUS_KINDS), name="ck_daily_bonuses_currency"),
         CheckConstraint("amount > 0", name="ck_daily_bonuses_amount"),
         MYSQL,
     )
@@ -672,6 +673,7 @@ class DailyBonus(Base):
     bonus_date: Mapped[date] = mapped_column(Date, nullable=False)
     currency: Mapped[str] = mapped_column(String(8), nullable=False)
     amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reward_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     rerolls_used: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     claimed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
