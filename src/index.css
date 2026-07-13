@@ -236,9 +236,9 @@ button, input, select, textarea { font: inherit; }
 .profile-badge-glyph {
   position: relative;
   z-index: 1;
-  font-size: 72%;
+  font-size: 100%;
   line-height: 0.88;
-  transform: scale(1.12);
+  transform: scale(1.18);
   filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35));
 }
 .profile-badge-sheen {
