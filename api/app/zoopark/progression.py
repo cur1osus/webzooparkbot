@@ -177,6 +177,11 @@ def _paid_tiers_today(openings: list[PackOpening]) -> set[str]:
     return {o.tier for o in openings if int(o.price_paid_usd) > 0}
 
 
+def _paid_pack_count(openings: list[PackOpening]) -> int:
+    """Number of paid packs opened today; the free daily gift never raises prices."""
+    return sum(1 for opening in openings if int(opening.price_paid_usd) > 0)
+
+
 def _gift_claimed_today(openings: list[PackOpening]) -> bool:
     """The free daily gift is recorded as a price-0 opening."""
     return any(int(o.price_paid_usd) == 0 for o in openings)
@@ -215,12 +220,13 @@ def packs_info(tg_id: int) -> dict:
         season = ensure_player_season(session, player)
         openings = _openings_today(session, player.id, season.id)
         paid_tiers = _paid_tiers_today(openings)
+        paid_pack_count = _paid_pack_count(openings)
         pack_discount = bonuses_module.load(session, player.id).pack_discount_multiplier()
         session.commit()
         tiers = [
             {
                 "tier": tier,
-                "price": pack_price_usd_for_tier(tier, pack_discount),
+                "price": pack_price_usd_for_tier(tier, pack_discount, paid_pack_count),
                 "unlocked": tier_unlocked(tier, paid_tiers),
                 "reward_range": pack_reward_range(tier),
             }
@@ -235,7 +241,8 @@ def packs_info(tg_id: int) -> dict:
 
 def open_pack(tg_id: int, tier: str | None = None) -> dict:
     """Open a pack. `tier=None` opens the free daily gift (random tier, once a day); a tier
-    name buys that tier — allowed only if it is unlocked, and repeatable at a fixed price."""
+    name buys that tier — allowed only if it is unlocked, and repeatable with a 5% daily
+    price increase after every paid opening."""
     with get_session() as session:
         # The row lock serialises opening so the daily-gift / unlock checks can't race.
         player = get_player(session, tg_id, for_update=True)
@@ -257,7 +264,11 @@ def open_pack(tg_id: int, tier: str | None = None) -> dict:
                 raise HTTPException(400, "Неизвестный тир пака")
             if not tier_unlocked(tier, _paid_tiers_today(openings)):
                 raise HTTPException(400, "Этот тир ещё не открыт — сначала открой предыдущий")
-            price = pack_price_usd_for_tier(tier, bonuses.pack_discount_multiplier())
+            price = pack_price_usd_for_tier(
+                tier,
+                bonuses.pack_discount_multiplier(),
+                _paid_pack_count(openings),
+            )
         tier = cast(PackTier, tier)
         rewards = pack_reward_range(tier)
 

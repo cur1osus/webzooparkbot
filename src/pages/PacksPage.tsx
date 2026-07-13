@@ -515,12 +515,14 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
   }, []);
 
   const handleSuccess = (res: PackOpenResult) => {
-    // Reflect the new unlocks / gift state without a round trip.
+    // Reflect unlocks immediately, then refresh prices because every paid opening raises
+    // the next pack price by 5% for the current day.
     setInfo(prev => prev && {
       ...prev,
       gift_available: res.gift_available,
       tiers: prev.tiers.map(t => ({ ...t, unlocked: res.unlocked_tiers.includes(t.tier) })),
     });
+    void apiGetPacksInfo().then(setInfo).catch(() => undefined);
     onRefresh();
   };
 
@@ -538,7 +540,7 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       <div>
         <p className="m-0 font-extrabold text-[17px]">🎁 Паки с животными</p>
         <p className="m-0 mt-[2px] text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Открой тир по лестнице — дальше открывай сколько хочешь
+          Открой тир по лестнице · каждая следующая покупка сегодня дороже на 5%
         </p>
       </div>
 

@@ -390,6 +390,8 @@ PACK_REWARD_RANGES: dict[PackTier, PackRewardRange] = {
 
 # Price doubles per tier: rare is the cheap entry rung, each tier above costs twice as much.
 PACK_TIER_PRICE_MULTIPLIER: dict[PackTier, int] = {"rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
+# Each paid opening makes the next paid pack 5% more expensive for that player today.
+PACK_PRICE_GROWTH_PER_PURCHASE = 1.05
 # The rare (cheapest paid) pack costs this share of what a pack animal earns over its whole
 # life — the main early-game tuning knob.
 PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = 0.005
@@ -407,12 +409,21 @@ def pack_reward_range(tier: PackTier) -> PackRewardRange:
     return PACK_REWARD_RANGES[tier]
 
 
-def pack_price_usd_for_tier(tier: PackTier, discount_mult: float = 1.0) -> int:
-    """Fixed dollar price of a tier (rare base, ×2 per tier up). Paying in dollars is what
-    gives the bank (rub → usd) a purpose. `discount_mult` (<1) applies the player's
-    `discount_packs` item bonus."""
+def pack_price_usd_for_tier(
+    tier: PackTier,
+    discount_mult: float = 1.0,
+    purchase_count: int = 0,
+) -> int:
+    """Return the current dollar price for a tier.
+
+    The tier ladder sets the starting price, then each paid opening made by this player
+    today compounds the next price by 5%. `discount_mult` is applied last so the forge's
+    pack discount continues to work on the dynamic price.
+    """
+    if purchase_count < 0:
+        raise ValueError("purchase_count cannot be negative")
     base_usd = max(1, round(PACK_BASE_PRICE_RUB / RATE_START_RUB_PER_USD))
-    raw = base_usd * PACK_TIER_PRICE_MULTIPLIER[tier]
+    raw = base_usd * PACK_TIER_PRICE_MULTIPLIER[tier] * (PACK_PRICE_GROWTH_PER_PURCHASE ** purchase_count)
     return max(1, round(raw * discount_mult))
 
 

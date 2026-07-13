@@ -95,6 +95,27 @@ class TestPackBundles:
         progression.open_pack(player, "epic")  # now unlocked
         progression.open_pack(player, "epic")  # reopenable
 
+    def test_paid_pack_price_grows_by_five_percent_after_each_purchase(self, db, player, grant):
+        grant(player, "usd", 10 ** 9)
+
+        before = progression.packs_info(player)
+        rare_before = next(t["price"] for t in before["tiers"] if t["tier"] == "rare")
+        epic_before = next(t["price"] for t in before["tiers"] if t["tier"] == "epic")
+
+        first = progression.open_pack(player, "rare")
+        assert first["price_paid"] == rare_before
+        after_first = progression.packs_info(player)
+        rare_after_first = next(t["price"] for t in after_first["tiers"] if t["tier"] == "rare")
+        epic_after_first = next(t["price"] for t in after_first["tiers"] if t["tier"] == "epic")
+        assert rare_after_first > rare_before
+        assert epic_after_first > epic_before
+
+        second = progression.open_pack(player, "rare")
+        after_second = progression.packs_info(player)
+        rare_after_second = next(t["price"] for t in after_second["tiers"] if t["tier"] == "rare")
+        assert second["price_paid"] == rare_after_first
+        assert rare_after_second > rare_after_first
+
 
 class TestExpeditionsCanBeLost:
     """C-2: `squad_power >= wild_power` with a summed squad of three-to-five animals and a
