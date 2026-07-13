@@ -55,7 +55,7 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                   Зови друзей.<br />Получай больше.
                 </h3>
                 <p className="m-0 mt-2 max-w-[210px] text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
-                  Друг зарегистрируется — ты получишь награду.
+                  Друг получит ${fmt(data.new_player_reward_usd)}, а ты — ${fmt(data.signup_reward_usd)}.
                 </p>
               </div>
               <div className="referral-reward" aria-label={`${fmt(data.signup_reward_usd)}$ за каждого друга`}>

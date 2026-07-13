@@ -743,6 +743,8 @@ STARS_TO_PAW = 10
 # A referral should feel like a meaningful milestone, while still being paid only once
 # for a genuinely new player. It is intentionally close to the price of an epic pack.
 REFERRAL_SIGNUP_REWARD_USD = 50
+# A new player who joins through a valid referral link starts with a larger balance.
+REFERRAL_NEW_PLAYER_REWARD_USD = 25
 
 
 # ─── Animal names ─────────────────────────────────────────────────────────────

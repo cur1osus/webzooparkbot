@@ -36,6 +36,7 @@ from api.app.zoopark.catalog import (
     NICKNAME_COLORS,
     PROFILE_FRAMES,
     PROFILE_WALLPAPERS,
+    REFERRAL_NEW_PLAYER_REWARD_USD,
     REFERRAL_SIGNUP_REWARD_USD,
 )
 from api.app.zoopark.income import sync_player_income
@@ -319,18 +320,19 @@ def _parse_ref_code(raw: str | None) -> int | None:
         return None
 
 
-def _link_referrer(session: Session, new_player: Player, referrer_tg_id: int) -> None:
+def _link_referrer(session: Session, new_player: Player, referrer_tg_id: int) -> bool:
     if referrer_tg_id == new_player.telegram_id:
-        return
+        return False
     referrer = get_player(session, referrer_tg_id, for_update=True)
     if referrer is None:
         logger.info("Referral code %s does not match any player", referrer_tg_id)
-        return
+        return False
     new_player.referred_by_id = referrer.id
     ledger.grant(
         session, referrer, "usd", REFERRAL_SIGNUP_REWARD_USD, "referral_signup",
         ref_table="players", ref_id=new_player.id,
     )
+    return True
 
 
 def register(tg_id: int, body: RegisterBody) -> dict:
@@ -352,11 +354,10 @@ def register(tg_id: int, body: RegisterBody) -> dict:
             session.rollback()
             raise HTTPException(400, _registration_conflict(exc, tg_id, nickname)) from exc
 
-        ledger.grant(session, player, "usd", 1, "register")
-
         referrer_tg_id = _parse_ref_code(body.ref_code)
-        if referrer_tg_id is not None:
-            _link_referrer(session, player, referrer_tg_id)
+        referred_by_link = referrer_tg_id is not None and _link_referrer(session, player, referrer_tg_id)
+        starting_usd = REFERRAL_NEW_PLAYER_REWARD_USD if referred_by_link else 1
+        ledger.grant(session, player, "usd", starting_usd, "register")
 
         season = ensure_player_season(session, player)
         # GDD §5: the first locality is free. Granted here rather than lazily on the first

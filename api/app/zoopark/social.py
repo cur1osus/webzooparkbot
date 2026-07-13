@@ -22,6 +22,7 @@ from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
     CLAN_CREATE_COST_USD,
     CLAN_MAX_MEMBERS,
+    REFERRAL_NEW_PLAYER_REWARD_USD,
     REFERRAL_SIGNUP_REWARD_USD,
     TOP_LIMIT,
     TRANSFER_MAX_CLAIMS,
@@ -324,6 +325,7 @@ def referrals(tg_id: int) -> dict:
             "code": str(tg_id),
             "total": len(referred),
             "signup_reward_usd": REFERRAL_SIGNUP_REWARD_USD,
+            "new_player_reward_usd": REFERRAL_NEW_PLAYER_REWARD_USD,
             "referred": list(referred),
         }
 

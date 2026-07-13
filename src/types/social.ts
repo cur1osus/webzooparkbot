@@ -78,6 +78,7 @@ export interface ReferralResponse {
   code: string;
   total: number;
   signup_reward_usd: number;
+  new_player_reward_usd: number;
   referred: string[];
 }
 
