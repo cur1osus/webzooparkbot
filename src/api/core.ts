@@ -1,4 +1,4 @@
-import type { AdminGrantResult, AdminOverview, AppConfig, GameState, MaintenanceStatus, RegisterResponse } from '@/types';
+import type { AdminGrantResult, AdminOverview, AppConfig, GameState, MaintenancePollStatus, MaintenanceStatus, RegisterResponse } from '@/types';
 import { req } from './client';
 
 /**
@@ -7,7 +7,7 @@ import { req } from './client';
  * far longer. A fresh balance is what `/api/me` returns.
  */
 export const apiMe = () => req<GameState>('/me');
-export const apiMaintenanceStatus = () => req<MaintenanceStatus>('/maintenance');
+export const apiMaintenanceStatus = () => req<MaintenancePollStatus>('/maintenance');
 export const apiRegister = (nickname: string, ref_code?: string) =>
   req<RegisterResponse>('/register', { method: 'POST', body: JSON.stringify({ nickname, ref_code }) });
 export const apiConfig = () => req<AppConfig>('/config');

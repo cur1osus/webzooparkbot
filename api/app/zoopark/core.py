@@ -11,9 +11,10 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -50,6 +51,9 @@ _bot_username_cache: str | None = None
 _bot_username_cache_at = 0.0
 
 PROFILE_ACHIEVEMENT_PREFIX = "achievement:"
+ONLINE_WINDOW = timedelta(seconds=30)
+ONLINE_HEARTBEAT_INTERVAL = timedelta(seconds=10)
+ONLINE_LIST_LIMIT = 15
 
 
 def health() -> dict:
@@ -62,10 +66,47 @@ def health() -> dict:
     return {"ok": True}
 
 
-def maintenance_status(_tg_id: int) -> dict:
-    """Return only the global break state for the client's fast safety poll."""
+def maintenance_status(tg_id: int) -> dict:
+    """Return the break state and current online players for the fast client poll."""
+    now = utcnow()
     with get_session() as session:
-        return maintenance.status(session)
+        player = get_player(session, tg_id)
+        if player and player.status == "active":
+            if player.last_seen_at is None or now - player.last_seen_at >= ONLINE_HEARTBEAT_INTERVAL:
+                player.last_seen_at = now
+
+        online_since = now - ONLINE_WINDOW
+        online_filter = (
+            Player.status == "active",
+            Player.last_seen_at >= online_since,
+        )
+        online_count = int(session.scalar(select(func.count(Player.id)).where(*online_filter)) or 0)
+        online_players = session.scalars(
+            select(Player)
+            .where(*online_filter)
+            .order_by(Player.last_seen_at.desc(), Player.id.desc())
+            .limit(ONLINE_LIST_LIMIT)
+        ).all()
+
+        result = maintenance.status(session, now)
+        result.update(
+            {
+                "online_count": online_count,
+                "online_players": [
+                    {
+                        "id": player.id,
+                        "nickname": player.nickname,
+                        "nickname_color": player.nickname_color,
+                        "profile_emoji": player.profile_emoji,
+                        "profile_frame": player.profile_frame,
+                        "is_me": player.telegram_id == tg_id,
+                    }
+                    for player in online_players
+                ],
+            }
+        )
+        session.commit()
+        return result
 
 
 def _normalise_bot_username(value: object) -> str | None:

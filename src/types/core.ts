@@ -18,6 +18,20 @@ export interface MaintenanceStatus {
   message: string;
 }
 
+export interface OnlinePlayer {
+  id: number;
+  nickname: string;
+  nickname_color: string;
+  profile_emoji: string | null;
+  profile_frame: string | null;
+  is_me: boolean;
+}
+
+export interface MaintenancePollStatus extends MaintenanceStatus {
+  online_count: number;
+  online_players: OnlinePlayer[];
+}
+
 export interface AdminPlayer {
   id: number;
   tg_id: number;

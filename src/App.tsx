@@ -10,7 +10,9 @@ import { getTelegramStartParam } from '@/lib/tmaEnv';
 import { fmt, formatCountdown } from '@/utils/format';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
+import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { RegisterScreen } from '@/pages/RegisterScreen';
+import type { MaintenancePollStatus } from '@/types';
 
 const HIDDEN_RELOAD_MS = 30_000;
 const TRANSFER_HANDLED_STORAGE_KEY = 'zoopark_transfer_claims_v1';
@@ -120,6 +122,14 @@ export default function App() {
   const [transferCode] = useState<string | null>(() => getTransferCode());
   const transferClaimStartedRef = useRef<string | null>(null);
   const [transferNotice, setTransferNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [onlinePresence, setOnlinePresence] = useState<MaintenancePollStatus>({
+    active: false,
+    started_at: null,
+    ends_at: null,
+    message: 'Технический перерыв',
+    online_count: 0,
+    online_players: [],
+  });
   const hiddenAtRef = useRef<number | null>(null);
   const showDevBar = import.meta.env.DEV || !inTma;
 
@@ -173,15 +183,17 @@ export default function App() {
 
   // Check the global break independently from the full game state. This is deliberately
   // lightweight and frequent: a player must lose access even while sitting on another tab,
-  // without waiting for a manual reload or a page-specific request.
+  // without waiting for a manual reload or a page-specific request. Admins poll too so they
+  // remain visible in the online counter while they operate the game.
   useEffect(() => {
-    if (!state || state.is_admin) return;
+    if (!state) return;
 
     let disposed = false;
     const syncMaintenance = async () => {
       try {
         const remote = await apiMaintenanceStatus();
         if (disposed) return;
+        setOnlinePresence(remote);
         const current = state.maintenance;
         if (
           current?.active !== remote.active ||
@@ -317,6 +329,7 @@ export default function App() {
           className={`app-shell max-w-[480px] mx-auto relative ${!inTma ? 'pt-12' : ''}`}
           style={inTma ? { paddingTop: 'var(--safe-top)' } : undefined}
         >
+          <OnlinePlayersIndicator data={onlinePresence} devBarVisible={showDevBar} />
           {transferNotice && (
             <div className={`transfer-claim-toast transfer-claim-toast-${transferNotice.kind}`} role="status">
               <span>{transferNotice.kind === 'success' ? '🎉' : '⚠️'}</span>
