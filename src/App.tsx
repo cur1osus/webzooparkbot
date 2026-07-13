@@ -330,7 +330,7 @@ export default function App() {
           style={inTma && !showDevBar ? { paddingTop: 'var(--safe-top)' } : undefined}
         >
           {tab !== 'zoo' && (
-            <div className="online-presence-app-header">
+            <div className={`online-presence-app-header${showDevBar ? ' online-presence-app-header-dev' : ''}`}>
               <OnlinePlayersIndicator data={onlinePresence} placement="inline" />
             </div>
           )}

@@ -1995,10 +1995,11 @@ button:disabled {
 .online-presence-app-header {
   position: absolute;
   /* Align with the 40px icon row inside PageHeader (16px top padding). */
-  top: 20px;
+  top: calc(var(--safe-top) + 20px);
   right: 14px;
   z-index: 150;
 }
+.online-presence-app-header-dev { top: 80px; }
 
 .online-presence-toggle {
   display: inline-flex;
