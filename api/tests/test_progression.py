@@ -229,12 +229,12 @@ class TestExpeditionLifecycle:
         from api.app.zoopark import development
         from api.app.zoopark.core import me
 
-        grant(player, "rub", 3_000)
+        grant(player, "rub", 60_000)
         vet = development.upgrade(player, UpgradeDevelopmentBody(kind="vet"))
         genetics = development.upgrade(player, UpgradeDevelopmentBody(kind="genetics"))
 
         assert vet["level"] == 1
-        assert vet["next_cost_rub"] == 5_000
+        assert vet["next_cost_rub"] == 100_000
         assert genetics["level"] == 1
         assert me(player)["vet_level"] == 1
         assert me(player)["genetics_level"] == 1

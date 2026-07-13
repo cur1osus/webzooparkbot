@@ -302,8 +302,8 @@ def development_effect_percent(level: int) -> int:
 # can erase the upkeep sink or turn breeding into a guaranteed jackpot.
 DEVELOPMENT_MAX_LEVEL = 5
 DEVELOPMENT_UPGRADE_COSTS_RUB: dict[str, tuple[int, ...]] = {
-    "vet": (0, 1_000, 5_000, 20_000, 75_000, 250_000),
-    "genetics": (0, 1_500, 7_500, 30_000, 100_000, 350_000),
+    "vet": (0, 20_000, 100_000, 400_000, 1_500_000, 5_000_000),
+    "genetics": (0, 30_000, 150_000, 600_000, 2_000_000, 7_000_000),
 }
 
 
