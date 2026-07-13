@@ -7,6 +7,7 @@ import { req } from './client';
  * far longer. A fresh balance is what `/api/me` returns.
  */
 export const apiMe = () => req<GameState>('/me');
+export const apiMaintenanceStatus = () => req<MaintenanceStatus>('/maintenance');
 export const apiRegister = (nickname: string, ref_code?: string) =>
   req<RegisterResponse>('/register', { method: 'POST', body: JSON.stringify({ nickname, ref_code }) });
 export const apiConfig = () => req<AppConfig>('/config');

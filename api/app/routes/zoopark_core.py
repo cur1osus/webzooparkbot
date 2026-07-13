@@ -31,6 +31,11 @@ def me(tg_id: TelegramId):
     return core_service.me(tg_id)
 
 
+@router.get("/api/maintenance")
+def maintenance_status(tg_id: TelegramId):
+    return core_service.maintenance_status(tg_id)
+
+
 @router.post("/api/profile/nickname-color")
 def set_nickname_color(body: NicknameColorBody, tg_id: TelegramId):
     return core_service.set_nickname_color(tg_id, body)

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useZooStore } from '@/store';
 import { TabBar } from '@/components/TabBar';
 import { PageSkeleton, Skeleton } from '@/components/Skeleton';
-import { ApiError, apiClaimTransfer, setDevUserId } from '@/api';
+import { ApiError, apiClaimTransfer, apiMaintenanceStatus, setDevUserId } from '@/api';
 import { useLiveGameState } from '@/hooks/useLiveGameState';
 import { useHashTab } from '@/lib/hashRoute';
 import { inTma, hapticImpact, readyTma } from '@/lib/tma';
@@ -170,13 +170,38 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [transferNotice]);
 
-  // Keep a player on the maintenance screen in sync if the administrator ends the
-  // break early. The server's absolute deadline remains the source of truth.
+  // Check the global break independently from the full game state. This is deliberately
+  // lightweight and frequent: a player must lose access even while sitting on another tab,
+  // without waiting for a manual reload or a page-specific request.
   useEffect(() => {
-    if (!state?.maintenance?.active || state.is_admin) return;
-    const timer = window.setInterval(() => void loadFromServer(), 10_000);
-    return () => window.clearInterval(timer);
-  }, [loadFromServer, state?.is_admin, state?.maintenance?.active]);
+    if (!state || state.is_admin) return;
+
+    let disposed = false;
+    const syncMaintenance = async () => {
+      try {
+        const remote = await apiMaintenanceStatus();
+        if (disposed) return;
+        const current = state.maintenance;
+        if (
+          current?.active !== remote.active ||
+          current?.started_at !== remote.started_at ||
+          current?.ends_at !== remote.ends_at ||
+          current?.message !== remote.message
+        ) {
+          patchState({ maintenance: remote });
+        }
+      } catch {
+        // A transient polling failure must not kick a player out of the game.
+      }
+    };
+
+    void syncMaintenance();
+    const timer = window.setInterval(() => void syncMaintenance(), 2_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+    };
+  }, [patchState, state]);
 
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {

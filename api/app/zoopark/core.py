@@ -30,6 +30,7 @@ from api.app.schemas.core import (
 )
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import ledger
+from api.app.zoopark import maintenance
 from api.app.zoopark.catalog import (
     NICKNAME_COLORS,
     PROFILE_FRAMES,
@@ -59,6 +60,12 @@ def health() -> dict:
         logger.exception("Health check database probe failed")
         raise HTTPException(503, "Database unavailable") from exc
     return {"ok": True}
+
+
+def maintenance_status(_tg_id: int) -> dict:
+    """Return only the global break state for the client's fast safety poll."""
+    with get_session() as session:
+        return maintenance.status(session)
 
 
 def _normalise_bot_username(value: object) -> str | None:
