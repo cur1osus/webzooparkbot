@@ -1225,6 +1225,87 @@ button:disabled {
 .wiki-article-open .wiki-article-chevron { transform: rotate(180deg); color: var(--c-blue); }
 .wiki-article-detail { margin: 0; padding: 0 13px 14px 58px; color: var(--tg-theme-hint-color); font-size: 12px; line-height: 1.55; }
 
+/* Each More page gets its own visual material; these deliberately do not share the
+   referral card's brass treatment. */
+.bonus-ticket {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  padding: 16px;
+  border: 1px solid rgba(var(--c-cyan-rgb), 0.3);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 0% 100%, rgba(var(--c-blue-rgb), 0.16), transparent 46%),
+    linear-gradient(135deg, rgba(var(--c-cyan-rgb), 0.1), rgba(var(--c-purple-rgb), 0.05) 62%, var(--card-bg));
+}
+
+.bonus-ticket-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border: 1px solid rgba(var(--c-cyan-rgb), 0.3);
+  border-radius: 17px;
+  background: rgba(var(--c-cyan-rgb), 0.12);
+  box-shadow: 0 0 20px rgba(var(--c-cyan-rgb), 0.12), inset 0 1px 0 rgba(255,255,255,0.1);
+  font-size: 30px;
+}
+
+.bonus-ticket .bonus-kicker { color: var(--c-cyan); }
+
+.merchant-stall {
+  padding: 14px 15px 16px;
+  border: 1px solid rgba(var(--c-purple-rgb), 0.32);
+  border-radius: 10px 10px 20px 20px;
+  background:
+    linear-gradient(180deg, rgba(var(--c-purple-rgb), 0.14), transparent 55%),
+    var(--card-bg);
+  box-shadow: 0 8px 20px rgba(var(--c-purple-rgb), 0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.merchant-stall-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed rgba(var(--c-purple-rgb), 0.3);
+  color: var(--c-purple);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+}
+
+.merchant-stall-top span:last-child { color: var(--tg-theme-hint-color); font-size: 10px; letter-spacing: 0; text-transform: none; }
+.merchant-stall-main { display: flex; align-items: center; gap: 12px; padding-top: 14px; }
+.merchant-stall-icon { display: grid; width: 50px; height: 50px; flex-shrink: 0; place-items: center; border: 1px solid rgba(var(--c-purple-rgb), 0.28); border-radius: 14px; background: rgba(var(--c-purple-rgb), 0.12); font-size: 28px; }
+.merchant-stall .merchant-kicker { color: var(--c-purple); }
+.merchant-refresh-bar strong { color: var(--c-teal); }
+.merchant-offer-card:not(.merchant-offer-sold) { border-color: rgba(var(--c-purple-rgb), 0.2); }
+.merchant-offer-card:not(.merchant-offer-sold):hover { border-color: rgba(var(--c-purple-rgb), 0.4); }
+.merchant-animal-stage { border-color: rgba(var(--c-purple-rgb), 0.24); background: radial-gradient(circle at 50% 32%, rgba(var(--c-purple-rgb), 0.18), transparent 64%), var(--surface-subtle); }
+
+.giveaway-ledger {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid rgba(var(--c-green-rgb), 0.3);
+  border-radius: 16px;
+  background: repeating-linear-gradient(0deg, rgba(var(--c-green-rgb), 0.025) 0, rgba(var(--c-green-rgb), 0.025) 1px, transparent 1px, transparent 7px), linear-gradient(135deg, rgba(var(--c-green-rgb), 0.11), var(--card-bg) 64%);
+}
+
+.giveaway-ledger-mark { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid rgba(var(--c-green-rgb), 0.34); border-radius: 12px; background: rgba(var(--c-green-rgb), 0.14); color: var(--c-green); font-size: 25px; font-weight: 900; }
+.giveaway-ledger .giveaway-kicker { color: var(--c-green); }
+.giveaway-ledger-balance { display: flex; flex-direction: column; align-items: flex-end; }
+.giveaway-ledger-balance span { color: var(--tg-theme-hint-color); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.giveaway-ledger-balance strong { margin-top: 3px; color: var(--c-green); font-size: 13px; white-space: nowrap; }
+.giveaway-form-card { border-color: rgba(var(--c-green-rgb), 0.2); }
+.giveaway-form-card .text-input:focus { border-color: var(--c-green); box-shadow: 0 0 0 3px rgba(var(--c-green-rgb), 0.12); }
+.giveaway-transfer-card { border-color: rgba(var(--c-green-rgb), 0.2); }
+
 .modal-backdrop {
   background: var(--backdrop-overlay);
   backdrop-filter: blur(8px);

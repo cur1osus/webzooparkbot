@@ -270,9 +270,9 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   const partsPresets = [1, 2, 5, 10, 25, 50];
 
   const pillActive: React.CSSProperties = {
-    background: 'var(--c-blue)',
+    background: 'var(--c-green)',
     color: 'var(--tg-theme-button-text-color)',
-    border: '1.5px solid var(--c-blue)',
+    border: '1.5px solid var(--c-green)',
   };
   const pillIdle: React.CSSProperties = {
     background: 'transparent',
@@ -282,14 +282,18 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
 
   return (
     <div className="p-[14px] flex flex-col gap-4">
-      <div className="giveaway-hero">
-        <div className="giveaway-hero-icon">💸</div>
-        <div className="min-w-0">
+      <div className="giveaway-ledger">
+        <div className="giveaway-ledger-mark">₽</div>
+        <div className="min-w-0 flex-1">
           <p className="giveaway-kicker">Поделись балансом</p>
           <p className="m-0 mt-1 text-[21px] leading-none font-black">Раздача денег</p>
-          <p className="m-0 mt-2 text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
-            Создай одну ссылку — получатели заберут равные части твоей раздачи.
+          <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">
+            Раздели сумму на равные части и отправь друзьям одну ссылку.
           </p>
+        </div>
+        <div className="giveaway-ledger-balance">
+          <span>баланс</span>
+          <strong>₽ {fmt(allIn)}</strong>
         </div>
       </div>
 
@@ -407,7 +411,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
           onClick={() => void handleCreate()}
           disabled={creating || !total || !max || total > gs.rub}
           className="w-full py-[13px] rounded-[12px] border-none cursor-pointer font-bold text-[15px] disabled:opacity-40 transition-opacity"
-          style={{ background: 'var(--c-gold)', color: '#241c08' }}
+          style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
         >
           {creating ? 'Создаём...' : 'Создать ссылку'}
         </button>
@@ -472,10 +476,10 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
                     className="w-full py-[9px] rounded-[10px] cursor-pointer font-semibold text-[13px] transition-all"
                     style={{
                       background: 'transparent',
-                      color: isCopied ? 'var(--c-green)' : 'var(--c-blue)',
+                      color: isCopied ? 'var(--c-green)' : 'var(--c-teal)',
                       border: isCopied
                         ? '1.5px solid rgba(var(--c-green-rgb),0.4)'
-                        : '1.5px solid rgba(var(--c-blue-rgb),0.4)',
+                        : '1.5px solid rgba(var(--c-teal-rgb),0.4)',
                     }}
                   >
                     {isCopied ? '✓ Скопировано' : 'Скопировать ссылку'}

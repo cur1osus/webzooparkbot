@@ -53,16 +53,15 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      <div className="bonus-hero">
-        <div className="bonus-hero-icon">🎁</div>
+      <div className="bonus-ticket">
+        <div className="bonus-ticket-mark">🎁</div>
         <div className="min-w-0">
-          <p className="bonus-kicker">Ежедневный ритуал</p>
+          <p className="bonus-kicker">Ежедневный ритуал · UTC</p>
           <p className="m-0 mt-1 text-[22px] leading-none font-black">Подарок ждёт</p>
-          <p className="m-0 mt-2 text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
-            Забирай награду раз в день. Она обновляется после полуночи по UTC.
+          <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">
+            Один бонус после полуночи. Забери его до следующего обновления.
           </p>
         </div>
-        <span className="bonus-utc-badge">UTC</span>
       </div>
 
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}

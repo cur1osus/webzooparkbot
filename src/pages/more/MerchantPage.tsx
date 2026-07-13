@@ -32,14 +32,19 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      <div className="merchant-hero">
-        <div className="merchant-hero-icon">🧙</div>
-        <div className="min-w-0">
-          <p className="merchant-kicker">Лавка странника</p>
-          <p className="m-0 mt-1 text-[21px] leading-none font-black">Случайный торговец</p>
-          <p className="m-0 mt-2 text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
-            Редкие животные со скидкой. Успей забрать выгодное предложение.
-          </p>
+      <div className="merchant-stall">
+        <div className="merchant-stall-top">
+          <span>ЛАВКА СТРАННИКА</span>
+          <span>3 предложения</span>
+        </div>
+        <div className="merchant-stall-main">
+          <div className="merchant-stall-icon">🧙</div>
+          <div className="min-w-0">
+            <p className="m-0 text-[21px] leading-none font-black">Случайный торговец</p>
+            <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">
+              Редкие животные появляются со скидкой и меняются каждый день.
+            </p>
+          </div>
         </div>
       </div>
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
