@@ -350,9 +350,11 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
         <span className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: tier.color }}>
           {isGift ? 'Подарок' : `${tier.name} пак`}
         </span>
-        <button onClick={onClose} className="tap-target rounded-full border-none px-4 text-[13px] font-extrabold" style={{ background: 'rgba(7,9,17,0.52)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.14)' }}>
-          Закрыть
-        </button>
+        {openState === 'idle' && (
+          <button onClick={onClose} className="tap-target rounded-full border-none px-4 text-[13px] font-extrabold" style={{ background: 'rgba(7,9,17,0.52)', color: 'rgba(255,255,255,0.92)', border: '1px solid rgba(255,255,255,0.14)' }}>
+            Закрыть
+          </button>
+        )}
       </header>
 
       {error && (
