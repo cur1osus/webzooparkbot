@@ -344,7 +344,10 @@ def breed_success_rate(reproduction_a: GeneTier, reproduction_b: GeneTier) -> fl
 # GDD §5: first is free and random, then Базовая цена × 1.5^(кол-во купленных).
 
 MAX_LOCALITIES = 5
-LOCALITY_BASE_PRICE_RUB = 500
+# A full five-locality zoo costs 812 500 ₽ after the first free locality. At the
+# expected starter net rate this puts the complete infrastructure path around the
+# two-week progression milestone; the 1.5× ladder keeps each next purchase legible.
+LOCALITY_BASE_PRICE_RUB = 100_000
 LOCALITY_PRICE_GROWTH = 1.5
 
 # ─── Packs ────────────────────────────────────────────────────────────────────

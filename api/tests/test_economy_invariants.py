@@ -251,6 +251,13 @@ class TestEveryItemPropertyIsApplied:
         _activate(player, "discount_locality", 20)
         assert list_localities(player)["next_price"] == int(before * 0.8)
 
+    def test_locality_ladder_targets_the_two_week_milestone(self):
+        from api.app.zoopark.progression import locality_price_rub
+
+        prices = [locality_price_rub(count) for count in range(5)]
+        assert prices == [0, 100_000, 150_000, 225_000, 337_500]
+        assert sum(prices) == 812_500
+
     def test_discount_packs_lowers_the_pack_price(self, db, player):
         before = pack_price_usd_for_tier("rare")
         _activate(player, "discount_packs", 40)

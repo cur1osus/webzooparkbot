@@ -61,6 +61,7 @@ Reason = Literal[
     "cosmetic_purchase",
     "development_upgrade",
     "admin_grant",
+    "locality_reset_refund",
 ]
 
 
