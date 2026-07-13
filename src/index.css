@@ -1994,7 +1994,8 @@ button:disabled {
 }
 .online-presence-app-header {
   position: absolute;
-  top: 4px;
+  /* Align with the 40px icon row inside PageHeader (16px top padding). */
+  top: 20px;
   right: 14px;
   z-index: 150;
 }
