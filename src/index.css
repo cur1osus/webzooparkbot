@@ -437,7 +437,8 @@ button, input, select, textarea { font: inherit; }
   overflow-wrap: anywhere;
 }
 .top-player-name-large { line-height: 1.04; }
-.top-player-name.nickname-color-wave { overflow: visible; }
+.top-player-name[class*="nickname-color-wave"],
+.top-player-name[class*="nickname-color-glitch"] { overflow: visible; }
 .top-podium-copy { width: 100%; min-width: 0; }
 .top-income-value {
   display: block;
@@ -790,9 +791,7 @@ button[aria-pressed]:focus-visible {
   button:hover:not(:disabled),
   .card-pressable:hover { transform: none !important; }
   .income-glow { animation: none !important; }
-  .nickname-color-aurora, .nickname-color-embers, .nickname-color-spectrum, .nickname-color-neon, .nickname-color-wave, .nickname-color-glitch, .nickname-color-google,
-  .nickname-preview-aurora, .nickname-preview-embers, .nickname-preview-spectrum, .nickname-preview-neon, .nickname-preview-wave, .nickname-preview-glitch, .nickname-preview-google,
-  .nickname-swatch-aurora, .nickname-swatch-embers, .nickname-swatch-spectrum, .nickname-swatch-neon, .nickname-swatch-wave, .nickname-swatch-glitch, .nickname-swatch-google { animation: none !important; }
+  [class*="nickname-color-"], [class*="nickname-preview-"], [class*="nickname-swatch-"] { animation: none !important; }
 }
 
 button:disabled {
@@ -1407,40 +1406,59 @@ button:disabled {
   -webkit-text-fill-color: transparent;
   animation: nickname-color-flow 2.8s ease-in-out infinite alternate;
 }
+/* Aurora = a cool northern-lights ribbon: only teals, greens and blue, no warm hues.
+   Kept a narrow cool band so it never reads as the full-rainbow "spectrum". */
 .nickname-color-aurora {
-  background-image: linear-gradient(100deg, #62e4c4, #80b9ff, #d7ff9b, #62e4c4);
-  text-shadow: 0 0 14px rgba(98, 228, 196, 0.38);
+  background-image: linear-gradient(100deg, #16e0a0, #23c6e6, #4bf0a6, #16e0a0);
+  text-shadow: 0 0 14px rgba(35, 224, 176, 0.4);
 }
 .nickname-color-embers {
   background-image: linear-gradient(100deg, #ffcf6b, #ff7148, #ff77b4, #ffcf6b);
   text-shadow: 0 0 14px rgba(255, 113, 72, 0.42);
 }
+/* Spectrum = the full rainbow, warm through cool, so it can't be mistaken for aurora. */
 .nickname-color-spectrum {
-  background-image: linear-gradient(100deg, #ff8ed8, #a48cff, #70ddff, #d6ff78, #ff8ed8);
-  text-shadow: 0 0 14px rgba(182, 140, 255, 0.42);
+  background-image: linear-gradient(100deg, #ff5c7a, #ff9f43, #ffe14d, #4be07a, #4bb8ff, #b06bff, #ff5c7a);
+  background-size: 320% auto;
+  text-shadow: 0 0 14px rgba(176, 107, 255, 0.4);
 }
+/* Neon's signature is not a colour sweep like aurora/spectrum but a neon-sign FLICKER:
+   a single vivid hue that briefly stutters off, the way a gas tube does. Hot magenta
+   keeps it clear of aurora's greens. The glow stays clipped to the glyphs (a box shadow
+   would paint a lit rectangle in Telegram's WebView). */
 .nickname-color-neon {
-  /* Keep the glow attached to the glyphs. A background/box shadow paints a rectangle
-     around the text, which is especially visible in Telegram's WebView. */
   background: transparent;
   -webkit-background-clip: initial;
   background-clip: initial;
-  -webkit-text-fill-color: #5dffbd;
-  color: #5dffbd !important;
-  text-shadow: 0 0 10px rgba(94, 255, 189, 0.22), 0 0 20px rgba(94, 255, 189, 0.12);
-  animation: nickname-neon-pulse 1.4s ease-in-out infinite alternate;
+  -webkit-text-fill-color: #ff43c4;
+  color: #ff43c4 !important;
+  text-shadow: 0 0 8px rgba(255, 67, 196, 0.5), 0 0 18px rgba(255, 67, 196, 0.3);
+  animation: nickname-neon-flicker 3.6s steps(1, end) infinite;
 }
-.nickname-color-wave {
+@keyframes nickname-neon-flicker {
+  0%, 8%, 10%, 40%, 43%, 72%, 74%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(255, 67, 196, 0.5), 0 0 18px rgba(255, 67, 196, 0.3);
+  }
+  9%, 41%, 73% {
+    opacity: 0.45;
+    text-shadow: none;
+  }
+}
+/* Wave is a solid colour whose glyphs bob; variants only swap the hue via --wave-color. */
+[class*="nickname-color-wave"] {
   background: transparent;
   -webkit-background-clip: initial;
   background-clip: initial;
-  -webkit-text-fill-color: #ff8a00;
-  color: #ff8a00 !important;
-  text-shadow: 0 0 12px rgba(255, 138, 0, 0.42);
+  -webkit-text-fill-color: var(--wave-color, #ff8a00);
+  color: var(--wave-color, #ff8a00) !important;
+  text-shadow: 0 0 12px var(--wave-halo, rgba(255, 138, 0, 0.42));
 }
+.nickname-color-wave-azure { --wave-color: #35b8ff; --wave-halo: rgba(53, 184, 255, 0.42); }
+.nickname-color-wave-violet { --wave-color: #b57bff; --wave-halo: rgba(181, 123, 255, 0.42); }
 /* The "wave" bob lifts glyphs above their line box; any clipping ancestor (e.g. a
    truncated name row) would cut them off, so the styled element opts out of clipping. */
-.nickname.nickname-color-wave { overflow: visible; }
+.nickname[class*="nickname-color-wave"] { overflow: visible; }
 .wave {
   display: inline-flex;
   align-items: baseline;
@@ -1453,13 +1471,13 @@ button:disabled {
 }
 @keyframes bob {
   0%, 100% { transform: translateY(0); }
-  28% { transform: translateY(-13px); color: #ff8a00; }
+  28% { transform: translateY(-13px); color: var(--wave-color, #ff8a00); }
 }
 
 /* The neon highlight is clipped to the glyphs, never painted as a block. */
 .shimmer-text {
   display: inline-block;
-  background: linear-gradient(100deg, #6e6c68 30%, #ff8a00 50%, #6e6c68 70%);
+  background: linear-gradient(100deg, var(--glitch-dim, #6e6c68) 30%, var(--glitch-hi, #ff8a00) 50%, var(--glitch-dim, #6e6c68) 70%);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -1490,8 +1508,8 @@ button:disabled {
   white-space: nowrap;
   -webkit-text-fill-color: currentColor;
 }
-.glitch::before { color: #ff5c5c; }
-.glitch::after { color: #5b8def; }
+.glitch::before { color: var(--glitch-a, #ff5c5c); }
+.glitch::after { color: var(--glitch-b, #5b8def); }
 .glitch:hover::before,
 .glitch:focus-visible::before {
   opacity: 0.85;
@@ -1539,65 +1557,77 @@ button:disabled {
 }
 .google-name { font-family: 'Product Sans', 'Segoe UI', Roboto, Arial, sans-serif; letter-spacing: -0.01em; }
 
-/* Glitch is its own premium effect (the neon style is now a plain neon glow again).
-   GlitchText supplies the shimmer + chromatic layers; the container only needs to let
-   the offset layers spill out and add a faint chromatic halo. */
-.nickname-color-glitch {
+/* Glitch is its own premium effect. GlitchText supplies the shimmer + chromatic layers;
+   the container only lets the offset layers spill out and adds a faint chromatic halo.
+   Variants recolour the two chromatic channels (--glitch-a/-b) and the shimmer highlight
+   (--glitch-hi) via custom properties, so the whole effect is one rule set. */
+[class*="nickname-color-glitch"] {
   overflow: visible;
   background: transparent;
   -webkit-background-clip: initial;
   background-clip: initial;
-  text-shadow: 0 0 12px rgba(120, 130, 255, 0.35);
+  text-shadow: 0 0 12px var(--glitch-halo, rgba(120, 130, 255, 0.35));
 }
-.nickname-preview-aurora,
-.nickname-preview-embers,
-.nickname-preview-spectrum,
-.nickname-preview-neon,
-.nickname-preview-wave,
-.nickname-preview-glitch,
-.nickname-preview-google {
+.nickname-color-glitch-aqua { --glitch-a: #2fe0ff; --glitch-b: #c05bff; --glitch-hi: #6ff0ff; --glitch-halo: rgba(47, 224, 255, 0.4); }
+.nickname-color-glitch-lime { --glitch-a: #a6ff4d; --glitch-b: #12d6a0; --glitch-hi: #c8ff6b; --glitch-halo: rgba(140, 230, 90, 0.4); }
+.nickname-color-glitch-sunset { --glitch-a: #ff4d6d; --glitch-b: #ffb03a; --glitch-hi: #ff8a5c; --glitch-halo: rgba(255, 120, 80, 0.42); }
+[class*="nickname-preview-"] {
   border-radius: 16px;
   background-size: 260% 260%;
   animation: nickname-preview-flow 3.5s ease-in-out infinite alternate;
 }
 .nickname-preview-aurora {
-  background-image: linear-gradient(125deg, rgba(83, 230, 194, 0.3), rgba(100, 146, 255, 0.22), rgba(211, 255, 131, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+  background-image: linear-gradient(125deg, rgba(22, 224, 160, 0.3), rgba(35, 198, 230, 0.24), rgba(75, 240, 166, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
 .nickname-preview-embers {
   background-image: linear-gradient(125deg, rgba(255, 205, 103, 0.3), rgba(255, 82, 56, 0.24), rgba(255, 103, 169, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
 .nickname-preview-spectrum {
-  background-image: linear-gradient(125deg, rgba(255, 130, 209, 0.28), rgba(125, 117, 255, 0.22), rgba(84, 211, 255, 0.22), rgba(205, 255, 111, 0.18), var(--tg-theme-secondary-bg-color) 76%);
+  background-image: linear-gradient(125deg, rgba(255, 92, 122, 0.24), rgba(255, 159, 67, 0.2), rgba(75, 224, 122, 0.2), rgba(75, 184, 255, 0.2), rgba(176, 107, 255, 0.2), var(--tg-theme-secondary-bg-color) 78%);
 }
 .nickname-preview-neon {
-  background-image: linear-gradient(125deg, rgba(65, 255, 181, 0.3), rgba(71, 236, 255, 0.22), rgba(171, 105, 255, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+  background-image: linear-gradient(125deg, rgba(255, 67, 196, 0.3), rgba(255, 110, 211, 0.2), rgba(120, 60, 160, 0.16), var(--tg-theme-secondary-bg-color) 76%);
 }
 .nickname-preview-wave {
   background-image: linear-gradient(125deg, rgba(255, 138, 0, 0.3), rgba(110, 108, 104, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
+.nickname-preview-wave-azure {
+  background-image: linear-gradient(125deg, rgba(53, 184, 255, 0.3), rgba(110, 108, 104, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-wave-violet {
+  background-image: linear-gradient(125deg, rgba(181, 123, 255, 0.3), rgba(110, 108, 104, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
 .nickname-preview-glitch {
   background-image: linear-gradient(125deg, rgba(255, 92, 92, 0.26), rgba(91, 141, 239, 0.24), rgba(120, 130, 255, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-glitch-aqua {
+  background-image: linear-gradient(125deg, rgba(47, 224, 255, 0.26), rgba(192, 91, 255, 0.22), rgba(111, 240, 255, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-glitch-lime {
+  background-image: linear-gradient(125deg, rgba(166, 255, 77, 0.26), rgba(18, 214, 160, 0.22), rgba(200, 255, 107, 0.2), var(--tg-theme-secondary-bg-color) 76%);
+}
+.nickname-preview-glitch-sunset {
+  background-image: linear-gradient(125deg, rgba(255, 77, 109, 0.26), rgba(255, 176, 58, 0.22), rgba(255, 138, 92, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
 .nickname-preview-google {
   background-image: linear-gradient(125deg, rgba(66, 133, 244, 0.3), rgba(234, 67, 53, 0.25), rgba(251, 188, 5, 0.22), rgba(52, 168, 83, 0.2), var(--tg-theme-secondary-bg-color) 76%);
 }
-.nickname-swatch-aurora,
-.nickname-swatch-embers,
-.nickname-swatch-spectrum,
-.nickname-swatch-neon,
-.nickname-swatch-wave,
-.nickname-swatch-glitch,
-.nickname-swatch-google {
+[class*="nickname-swatch-"] {
   border-radius: 9999px;
   background-size: 220% auto;
   animation: nickname-color-flow 1.4s ease-in-out infinite alternate;
 }
-.nickname-swatch-aurora { background-image: linear-gradient(90deg, #62e4c4, #80b9ff, #d7ff9b, #62e4c4); }
+.nickname-swatch-aurora { background-image: linear-gradient(90deg, #16e0a0, #23c6e6, #4bf0a6, #16e0a0); }
 .nickname-swatch-embers { background-image: linear-gradient(90deg, #ffcf6b, #ff7148, #ff77b4, #ffcf6b); }
-.nickname-swatch-spectrum { background-image: linear-gradient(90deg, #ff8ed8, #a48cff, #70ddff, #d6ff78, #ff8ed8); }
-.nickname-swatch-neon { background-image: linear-gradient(90deg, #5dffbd, #6efff5, #9f82ff, #ff6ed3, #5dffbd); }
+.nickname-swatch-spectrum { background-image: linear-gradient(90deg, #ff5c7a, #ff9f43, #ffe14d, #4be07a, #4bb8ff, #b06bff, #ff5c7a); }
+.nickname-swatch-neon { background-image: linear-gradient(90deg, #ff43c4, #ff6ed3, #ff43c4); }
 .nickname-swatch-wave { background-image: linear-gradient(90deg, #6e6c68, #ff8a00, #6e6c68); }
+.nickname-swatch-wave-azure { background-image: linear-gradient(90deg, #6e6c68, #35b8ff, #6e6c68); }
+.nickname-swatch-wave-violet { background-image: linear-gradient(90deg, #6e6c68, #b57bff, #6e6c68); }
 .nickname-swatch-glitch { background-image: linear-gradient(90deg, #ff5c5c, #5b8def, #7882ff, #ff5c5c); }
+.nickname-swatch-glitch-aqua { background-image: linear-gradient(90deg, #2fe0ff, #c05bff, #6ff0ff, #2fe0ff); }
+.nickname-swatch-glitch-lime { background-image: linear-gradient(90deg, #a6ff4d, #12d6a0, #c8ff6b, #a6ff4d); }
+.nickname-swatch-glitch-sunset { background-image: linear-gradient(90deg, #ff4d6d, #ffb03a, #ff8a5c, #ff4d6d); }
 .nickname-swatch-google { background-image: linear-gradient(90deg, #4285f4, #ea4335, #fbbc05, #34a853, #4285f4); }
 @keyframes nickname-color-flow {
   to { background-position: 100% center; }
@@ -1605,13 +1635,6 @@ button:disabled {
 @keyframes nickname-preview-flow {
   to { background-position: 100% 100%; }
 }
-@keyframes nickname-neon-pulse {
-  /* A faint, wide halo only. Any tighter or more opaque and it fills the gaps of a short
-     bold word, reading as a lit rectangle behind the text rather than a glow. */
-  from { text-shadow: 0 0 10px rgba(94, 255, 189, 0.18); }
-  to { text-shadow: 0 0 14px rgba(94, 255, 189, 0.3), 0 0 24px rgba(126, 120, 255, 0.14); }
-}
-
 .income-glow {
   text-shadow: 0 0 12px rgba(var(--c-green-rgb),0.55);
   animation: income-pulse 3s ease-in-out infinite;

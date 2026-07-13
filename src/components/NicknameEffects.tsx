@@ -69,9 +69,9 @@ export function Nickname({
       className={`nickname ${colorClass} ${className}`.replace(/\s+/g, ' ').trim()}
       style={{ color: nicknameColorValue(color), ...style }}
     >
-      {color === 'wave'
+      {typeof color === 'string' && color.startsWith('wave')
         ? <TextWave text={name} />
-        : color === 'glitch'
+        : typeof color === 'string' && color.startsWith('glitch')
           ? <GlitchText>{name}</GlitchText>
           : color === 'google'
             ? <GoogleText text={name} />
