@@ -977,18 +977,6 @@ button:disabled {
 
 .referral-link-card { padding: 15px; }
 
-.referral-link-badge {
-  flex-shrink: 0;
-  padding: 5px 8px;
-  border: 1px solid rgba(var(--c-gold-rgb), 0.34);
-  border-radius: 999px;
-  background: rgba(var(--c-gold-rgb), 0.12);
-  color: var(--c-gold);
-  font-size: 11px;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
 .referral-stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 
 .referral-stat {

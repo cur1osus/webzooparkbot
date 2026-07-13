@@ -58,10 +58,10 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                   Друг зарегистрируется — ты получишь награду.
                 </p>
               </div>
-              <div className="referral-reward" aria-label={`$ ${fmt(data.signup_reward_usd)} за каждого друга`}>
+              <div className="referral-reward" aria-label={`${fmt(data.signup_reward_usd)}$ за каждого друга`}>
                 <div className="referral-reward-amount">
-                  <span className="referral-reward-sign">$</span>
                   <strong>{fmt(data.signup_reward_usd)}</strong>
+                  <span className="referral-reward-sign">$</span>
                 </div>
                 <span>за друга</span>
               </div>
@@ -75,7 +75,7 @@ export function ReferralPage({ gs }: { gs: GameState }) {
               <div className="referral-step-line" />
               <div className="referral-step">
                 <span className="referral-step-mark">2</span>
-                <span>Друг<br />войдёт</span>
+                <span>Друг<br />создаст профиль</span>
               </div>
               <div className="referral-step-line" />
               <div className="referral-step">
@@ -91,7 +91,6 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                 <p className="m-0 font-bold">Твоя ссылка</p>
                 <p className="m-0 mt-1 text-[12px] text-tg-hint">Приглашает от имени {inviterName}</p>
               </div>
-              <span className="referral-link-badge">+$ {fmt(data.signup_reward_usd)}</span>
             </div>
             <div className="surface-subtle px-3 py-[10px] rounded-[10px] mb-[10px] text-[12px] text-tg-hint break-all select-all">
               {refLink || 'Ссылка загружается…'}
@@ -101,7 +100,10 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                 onClick={() => void copyLink()}
                 disabled={!refLink}
                 className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm text-[var(--tg-theme-button-text-color)] transition-all"
-                style={{ background: copied ? 'var(--c-green)' : 'var(--c-blue)' }}
+                style={{
+                  background: copied ? 'var(--c-green)' : 'var(--c-gold)',
+                  color: copied ? 'var(--tg-theme-button-text-color)' : '#241c08',
+                }}
               >
                 {copied ? '✅ Скопировано' : '📋 Копировать'}
               </button>
@@ -109,7 +111,11 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                 onClick={shareLink}
                 disabled={!refLink}
                 className="flex-1 py-3 rounded-[10px] border-none cursor-pointer font-bold text-sm"
-                style={{ background: 'rgba(var(--c-blue-rgb),0.25)', color: 'var(--c-blue)' }}
+                style={{
+                  background: 'rgba(var(--c-gold-rgb),0.16)',
+                  border: '1px solid rgba(var(--c-gold-rgb),0.32)',
+                  color: 'var(--c-gold)',
+                }}
               >
                 🔗 Поделиться
               </button>
@@ -127,9 +133,9 @@ export function ReferralPage({ gs }: { gs: GameState }) {
                 </div>
               </div>
               <div className="referral-stat referral-stat-highlight">
-                <span className="referral-stat-icon">$</span>
+                <span className="referral-stat-icon">💰</span>
                 <div>
-                  <strong>{fmt(data.total * data.signup_reward_usd)}</strong>
+                  <strong>{fmt(data.total * data.signup_reward_usd)}$</strong>
                   <span>заработано</span>
                 </div>
               </div>
