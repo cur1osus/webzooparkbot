@@ -13,11 +13,9 @@ function rankTone(rank: number): ProfileBadgeTone {
 }
 
 function RankMark({ rank, podium = false }: { rank: number; podium?: boolean }) {
-  const medal = rank === 1 ? '♛' : rank === 2 ? '◆' : rank === 3 ? '✦' : null;
-
   return (
     <span className={`top-rank-mark ${podium ? 'top-rank-mark-podium' : ''} top-rank-mark-${rankTone(rank)}`}>
-      {medal ? <span aria-hidden="true">{medal}</span> : `#${rank}`}
+      #{rank}
     </span>
   );
 }
@@ -25,7 +23,7 @@ function RankMark({ rank, podium = false }: { rank: number; podium?: boolean }) 
 function PlayerName({ entry, size = 'normal' }: { entry: TopEntry; size?: 'normal' | 'large' }) {
   return (
     <p
-      className={`m-0 truncate ${size === 'large' ? 'text-[17px]' : 'text-[14px]'} ${nicknameColorClass(entry.nickname_color)}`}
+      className={`m-0 top-player-name ${size === 'large' ? 'text-[17px] top-player-name-large' : 'text-[14px]'} ${nicknameColorClass(entry.nickname_color)}`}
       style={{
         color: nicknameColorValue(entry.nickname_color),
         fontWeight: entry.is_me ? 900 : 800,
@@ -33,6 +31,45 @@ function PlayerName({ entry, size = 'normal' }: { entry: TopEntry; size?: 'norma
     >
       {entry.nickname}
     </p>
+  );
+}
+
+function IncomeGapChart({ entries }: { entries: TopEntry[] }) {
+  const chartEntries = entries.slice(0, 5);
+  const leaderIncome = chartEntries[0]?.income_rub_per_min ?? 0;
+
+  return (
+    <section className="top-gap-chart">
+      <div className="top-section-heading">
+        <div>
+          <p className="top-eyebrow m-0">РАЗРЫВ ПО ДОХОДУ</p>
+          <h2 className="m-0 mt-1 text-[18px] font-black tracking-[-0.03em]">Кто насколько близко</h2>
+        </div>
+        <span className="top-section-note">за минуту</span>
+      </div>
+      <div className="top-gap-list">
+        {chartEntries.map(entry => {
+          const share = leaderIncome > 0 ? Math.max(8, Math.round((entry.income_rub_per_min / leaderIncome) * 100)) : 0;
+          const gap = leaderIncome - entry.income_rub_per_min;
+
+          return (
+            <div className="top-gap-row" key={entry.tg_id}>
+              <div className="top-gap-meta">
+                <RankMark rank={entry.rank} />
+                <span className={`top-gap-name ${nicknameColorClass(entry.nickname_color)}`} style={{ color: nicknameColorValue(entry.nickname_color) }}>
+                  {entry.nickname}
+                </span>
+                <span className="top-gap-value">+{fmt(entry.income_rub_per_min)} ₽</span>
+              </div>
+              <div className="top-gap-track" aria-hidden="true">
+                <span className={`top-gap-fill ${entry.rank === 1 ? 'top-gap-fill-leader' : ''}`} style={{ width: `${share}%` }} />
+              </div>
+              <span className="top-gap-diff">{gap === 0 ? 'лидер' : `−${fmt(gap)} ₽ до лидера`}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -88,7 +125,6 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
               Место определяется доходом зоопарка за минуту.
             </p>
           </div>
-          <div className="top-hero-crown" aria-hidden="true">♛</div>
         </div>
 
         <div className="top-hero-leader">
@@ -107,14 +143,14 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
 
         <div className="top-hero-stats">
           <div>
-            <span className="top-label">в рейтинге</span>
+            <span className="top-label">участников</span>
             <strong>{shownCount}</strong>
-            <small>игроков показано</small>
+            <small>показано в рейтинге</small>
           </div>
           <div>
-            <span className="top-label">твоё место</span>
+            <span className="top-label">твоя позиция</span>
             <strong>{myRank ? `#${myRank}` : '—'}</strong>
-            <small>{myEntry ? 'ты в двадцатке' : 'развивай зоопарк'}</small>
+            <small>{myEntry ? 'ты в топ-20' : 'развивай зоопарк'}</small>
           </div>
         </div>
       </div>
@@ -146,6 +182,8 @@ export function TopPage() {
       {leader && data && (
         <LeaderboardHero leader={leader} myRank={data.my_rank} myEntry={myEntry} shownCount={entries.length} />
       )}
+
+      {entries.length > 0 && <IncomeGapChart entries={entries} />}
 
       {podium.length > 0 && (
         <section>

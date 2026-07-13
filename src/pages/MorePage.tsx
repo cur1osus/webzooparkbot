@@ -35,7 +35,7 @@ const MENU_GROUPS = [
     label: 'Сообщество',
     items: [
       { id: 'clan',     emoji: '🏰',  title: 'Клан',               desc: 'Создай клан или вступи в чужой' },
-      { id: 'top',      emoji: '🏆',  title: 'Таблица лидеров',    desc: 'Топ-20 по доходу' },
+      { id: 'top',      emoji: '📊',  title: 'Таблица лидеров',    desc: 'Топ-20 по доходу' },
       { id: 'referral', emoji: '🤝',  title: 'Рефералы',           desc: 'Приглашай и зарабатывай' },
     ],
   },
@@ -122,7 +122,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   );
 
   if (section === 'top') return (
-    <MoreSectionLayer title="🏆 Таблица лидеров" onBack={back}>
+    <MoreSectionLayer title="Таблица лидеров" onBack={back}>
       <TopPage />
     </MoreSectionLayer>
   );
