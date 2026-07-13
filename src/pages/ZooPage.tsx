@@ -212,7 +212,6 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           </div>
           <div className="min-w-0 flex-1">
             <p className="m-0 text-[16px] font-extrabold leading-tight truncate">{gs.nickname}</p>
-            <p className="mt-[1px] mb-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Смотритель · сезон {gs.season_id}</p>
           </div>
           <div className="flex gap-[6px] shrink-0">
             {[
@@ -310,8 +309,6 @@ export function ZooPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
           <div className="grid grid-cols-2 gap-2">
             <StatTile icon="🦁" label="Животных"    value={fmt(gs.live_animals_count)} accent="var(--c-green)" />
             <StatTile icon="🌿" label={`Видов (+${gs.diversity_bonus_percent}%)`} value={String(gs.species_count)} accent="var(--c-cyan)" />
-            <StatTile icon="🌍" label="Местностей"  value={fmt(gs.localities_count)} accent="var(--c-cyan)" />
-            <StatTile icon="📅" label="Сезон"       value={String(gs.season_id)}  accent="var(--c-gold)" />
           </div>
 
           {gs.clan && (
