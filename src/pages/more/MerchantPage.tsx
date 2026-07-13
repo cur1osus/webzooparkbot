@@ -32,6 +32,16 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
+      <div className="merchant-hero">
+        <div className="merchant-hero-icon">🧙</div>
+        <div className="min-w-0">
+          <p className="merchant-kicker">Лавка странника</p>
+          <p className="m-0 mt-1 text-[21px] leading-none font-black">Случайный торговец</p>
+          <p className="m-0 mt-2 text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
+            Редкие животные со скидкой. Успей забрать выгодное предложение.
+          </p>
+        </div>
+      </div>
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {error && (
@@ -51,42 +61,46 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
 
       {data && (
         <>
-          <p className="m-0 text-[13px] text-tg-hint">
-            Обновится: {new Date(data.refreshes_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
-          </p>
+          <div className="merchant-refresh-bar">
+            <span>🕰 Следующая ротация</span>
+            <strong>{new Date(data.refreshes_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</strong>
+          </div>
 
           {data.animals.map((offer: MerchantOffer) => {
             const habitat = HABITAT_INFO[offer.habitat];
             const affordable = gs.rub >= offer.final_price && !offer.bought;
             return (
-              <div key={offer.slot} className="card">
-                <div className="flex items-center gap-3 mb-[10px]">
-                  <AnimalArt animal={offer} size={44} className="shrink-0" />
-                  <div className="flex-1">
-                    <p className="m-0 font-bold text-sm">{offer.species_name}</p>
-                    <p className="mt-[2px] mb-0 text-xs text-tg-hint">
-                      {habitat.emoji} {habitat.name} · разм: {geneLabel('reproduction', offer.reproduction)}
+              <div key={offer.slot} className={`card merchant-offer-card${offer.bought ? ' merchant-offer-sold' : ''}`}>
+                <div className="merchant-offer-top">
+                  <div className="merchant-animal-stage">
+                    <AnimalArt animal={offer} size={68} className="shrink-0" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="m-0 text-[16px] font-extrabold">{offer.species_name}</p>
+                    <p className="mt-[4px] mb-0 text-xs text-tg-hint">
+                      {habitat.emoji} {habitat.name}
                     </p>
+                    <span className="merchant-gene-chip">Размножение: {geneLabel('reproduction', offer.reproduction)}</span>
                   </div>
                   {(offer.bought || offer.discount_pct > 0) && (
-                    <div className="rounded-lg px-[10px] py-1 font-extrabold text-[15px]"
+                    <div className="merchant-discount-badge"
                          style={{ background: offer.bought ? 'var(--surface-subtle)' : 'rgba(var(--c-green-rgb),0.15)', color: offer.bought ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
-                      {offer.bought ? '✓' : `-${offer.discount_pct}%`}
+                      {offer.bought ? '✓' : `−${offer.discount_pct}%`}
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="merchant-price-row">
                   <div>
                     {offer.discount_pct > 0 && (
-                      <span className="text-xs text-tg-hint line-through">₽ {fmt(offer.list_price)}</span>
+                      <span className="block text-xs text-tg-hint line-through">₽ {fmt(offer.list_price)}</span>
                     )}
-                    <span className={`${offer.discount_pct > 0 ? 'ml-2 ' : ''}text-[15px] font-extrabold`}>₽ {fmt(offer.final_price)}</span>
+                    <span className="text-[18px] font-black">₽ {fmt(offer.final_price)}</span>
                   </div>
                   <button
                     onClick={() => void handleBuy(offer.slot)}
                     disabled={buying === offer.slot || !affordable || offer.bought}
-                    className="px-4 py-2 rounded-[10px] border-none cursor-pointer font-bold text-sm disabled:opacity-60"
+                    className="merchant-buy-button"
                     style={{
                       background: affordable ? 'var(--c-green)' : 'var(--surface-subtle)',
                       color: affordable ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',

@@ -282,9 +282,19 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
 
   return (
     <div className="p-[14px] flex flex-col gap-4">
+      <div className="giveaway-hero">
+        <div className="giveaway-hero-icon">💸</div>
+        <div className="min-w-0">
+          <p className="giveaway-kicker">Поделись балансом</p>
+          <p className="m-0 mt-1 text-[21px] leading-none font-black">Раздача денег</p>
+          <p className="m-0 mt-2 text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
+            Создай одну ссылку — получатели заберут равные части твоей раздачи.
+          </p>
+        </div>
+      </div>
 
       {/* ── Форма ── */}
-      <div className="card flex flex-col gap-0">
+      <div className="card giveaway-form-card flex flex-col gap-0">
         <p className="m-0 mb-[14px] text-[11px] font-semibold text-tg-hint tracking-[0.8px] uppercase">Новая раздача</p>
 
         {/* Сумма */}
@@ -397,7 +407,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
           onClick={() => void handleCreate()}
           disabled={creating || !total || !max || total > gs.rub}
           className="w-full py-[13px] rounded-[12px] border-none cursor-pointer font-bold text-[15px] disabled:opacity-40 transition-opacity"
-          style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
+          style={{ background: 'var(--c-gold)', color: '#241c08' }}
         >
           {creating ? 'Создаём...' : 'Создать ссылку'}
         </button>
@@ -415,7 +425,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
             const pct = t.max_claims > 0 ? (t.claims / t.max_claims) * 100 : 0;
             const isCopied = copiedKey === t.code;
             return (
-              <div key={t.code} className="card" style={{ opacity: t.active ? 1 : 0.6 }}>
+              <div key={t.code} className="card giveaway-transfer-card" style={{ opacity: t.active ? 1 : 0.6 }}>
                 {/* Заголовок */}
                 <div className="flex items-center justify-between mb-[10px]">
                   <span className="text-[17px] font-bold">₽ {fmt(t.total_rub)}</span>
@@ -481,20 +491,101 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
 }
 
 function WikiPage() {
+  const [openArticle, setOpenArticle] = useState('income');
+  const articles = [
+    {
+      id: 'income',
+      icon: '💰',
+      eyebrow: 'Основа игры',
+      title: 'Как растёт доход',
+      summary: 'Животные приносят рубли каждую минуту, но содержание тоже растёт.',
+      detail: 'Чистый доход = доход животных − содержание. Сила животного зависит от генов выживаемости, внешности и размера. Животное в подходящей местности зарабатывает в 1,5 раза больше.',
+    },
+    {
+      id: 'habitats',
+      icon: '🌍',
+      eyebrow: 'Размещение',
+      title: 'Местности и разнообразие',
+      summary: 'Правильное место превращает хорошее животное в выгодное.',
+      detail: 'Сверяй среду обитания животного с местностью: совпадение даёт ×1,5 к его доходу и снижает содержание. Каждый новый вид добавляет бонус разнообразия. Улучшения местности дополнительно уменьшают содержание.',
+    },
+    {
+      id: 'breeding',
+      icon: '🧬',
+      eyebrow: 'Генетика',
+      title: 'Скрещивание',
+      summary: 'Каждое животное может участвовать в скрещивании один раз в день.',
+      detail: 'Выбирай двух животных одного вида, смотри их гены и шанс успеха. Результат наследует свойства родителей. Генетический центр повышает шанс успеха, но не делает его гарантированным.',
+    },
+    {
+      id: 'expeditions',
+      icon: '🧭',
+      eyebrow: 'Приключения',
+      title: 'Экспедиции',
+      summary: 'Отправляй отряд за диким животным, но на время похода оно не приносит доход.',
+      detail: 'В отряде должно быть от 3 до 5 животных. Сила отряда сравнивается с диким животным: победа добавляет его в зоопарк, поражение может стоить отряду жизни. Перед отправкой проверь силу и длительность похода.',
+    },
+    {
+      id: 'forge',
+      icon: '⚒️',
+      eyebrow: 'Усиления',
+      title: 'Кузница и ветеринарный блок',
+      summary: 'Предметы и улучшения помогают выжать больше из сильного зоопарка.',
+      detail: 'Кузница создаёт предметы с бонусами к доходу, играм и содержанию. Ветеринарный блок снижает частоту болезней и стоимость лечения. Проверяй следующий эффект перед покупкой улучшения.',
+    },
+    {
+      id: 'economy',
+      icon: '🏦',
+      eyebrow: 'Экономика',
+      title: 'Банк и раздачи',
+      summary: 'Рубли — основной поток, доллары — ресурс для развития.',
+      detail: 'Обменивай рубли на доллары в банке и учитывай комиссию. Рефералы получают награду за нового игрока и процент с его обменов. В раздаче можно поделить рубли на равные части и отправить друзьям ссылку.',
+    },
+    {
+      id: 'games',
+      icon: '🎮',
+      eyebrow: 'Активности',
+      title: 'Игры и кланы',
+      summary: 'Рискни частью рублей в играх или собери своё сообщество.',
+      detail: 'В соло-играх играешь против механики, в дуэлях — против другого игрока. Кланы объединяют игроков, но специальных клановых специализаций сейчас нет.',
+    },
+  ];
+
   return (
-    <div className="p-[14px] flex flex-col gap-[10px]">
-      {[
-        { title: '💰 Как зарабатывать', body: 'Открывай паки и покупай животных у торговца → размещай их в местности с той же средой обитания, это даёт ×1.5 к доходу. Чем разнообразнее зоопарк, тем выше бонус.' },
-        { title: '🌍 Местности', body: 'Первая местность бесплатна и случайна, каждая следующая дороже в 1.5 раза. Животное в своей среде обитания приносит в полтора раза больше. Местность также открывает экспедиции в эту зону.' },
-        { title: '⚒️ Кузница', body: 'Предметы из кузницы дают бонусы: больше ходов в играх, скидки в банке, ускорение дохода и другие эффекты.' },
-        { title: '🎮 Игры', body: 'Играй соло или против игроков. Ставки в рублях, выигрыш удваивает ставку. В коктейль-игре угадывай рецепт за 10 попыток.' },
-        { title: '🏰 Кланы', body: 'Вступи в клан для получения клановых бонусов. Клан может иметь специализацию, которая даёт дополнительные преимущества.' },
-      ].map(({ title, body }) => (
-        <div key={title} className="card">
-          <p className="m-0 mb-[6px] font-bold text-sm">{title}</p>
-          <p className="m-0 text-[13px] text-tg-hint leading-relaxed">{body}</p>
+    <div className="wiki-page">
+      <div className="wiki-intro">
+        <div className="wiki-intro-icon">📖</div>
+        <div>
+          <p className="wiki-kicker">Справочник смотрителя</p>
+          <p className="m-0 mt-1 text-[21px] leading-none font-black">Разберись в зоопарке</p>
+          <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">Короткие ответы на вопросы, которые возникают по ходу игры.</p>
         </div>
-      ))}
+      </div>
+
+      <div className="wiki-list">
+        {articles.map((article) => {
+          const isOpen = openArticle === article.id;
+          return (
+            <div key={article.id} className={`wiki-article${isOpen ? ' wiki-article-open' : ''}`}>
+              <button
+                type="button"
+                className="wiki-article-toggle"
+                aria-expanded={isOpen}
+                onClick={() => setOpenArticle(isOpen ? '' : article.id)}
+              >
+                <span className="wiki-article-icon">{article.icon}</span>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="wiki-article-eyebrow">{article.eyebrow}</span>
+                  <strong>{article.title}</strong>
+                  <span className="wiki-article-summary">{article.summary}</span>
+                </span>
+                <span className="wiki-article-chevron" aria-hidden="true">⌄</span>
+              </button>
+              {isOpen && <p className="wiki-article-detail">{article.detail}</p>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

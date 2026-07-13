@@ -53,21 +53,56 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
-      <div className="card text-center">
-        <span className="text-[48px]">🎁</span>
-        <p className="mt-[10px] mb-1 text-lg font-extrabold">Ежедневный бонус</p>
-        <p className="m-0 text-[13px] text-tg-hint">Новый бонус каждый день после полуночи UTC.</p>
+      <div className="bonus-hero">
+        <div className="bonus-hero-icon">🎁</div>
+        <div className="min-w-0">
+          <p className="bonus-kicker">Ежедневный ритуал</p>
+          <p className="m-0 mt-1 text-[22px] leading-none font-black">Подарок ждёт</p>
+          <p className="m-0 mt-2 text-[12px] leading-[1.4]" style={{ color: 'rgba(255,248,236,0.68)' }}>
+            Забирай награду раз в день. Она обновляется после полуночи по UTC.
+          </p>
+        </div>
+        <span className="bonus-utc-badge">UTC</span>
       </div>
 
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {offer && meta && (
-        <div className="card text-center" style={{ borderColor: `color-mix(in srgb, ${meta.color} 35%, transparent)` }}>
-          <p className="m-0 text-[12px] text-tg-hint">Сегодня выпало</p>
-          <p className="mt-2 mb-0 text-[32px] font-extrabold" style={{ color: meta.color }}>
-            {meta.icon} {fmt(offer.amount)}
-          </p>
-          <p className="mt-1 mb-0 text-[13px] text-tg-hint">{meta.name}</p>
+        <div className="bonus-offer-card" style={{ borderColor: `color-mix(in srgb, ${meta.color} 38%, transparent)` }}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="bonus-offer-kicker">Твоя награда сегодня</p>
+            <span className="bonus-offer-status">{offer.claimed ? 'Получено' : 'Готово'}</span>
+          </div>
+          <div className="bonus-offer-reward">
+            <span className="bonus-offer-icon" style={{ color: meta.color }}>{meta.icon}</span>
+            <div>
+              <strong style={{ color: meta.color }}>{fmt(offer.amount)}</strong>
+              <span>{meta.name}</span>
+            </div>
+          </div>
+          <p className="m-0 mt-2 text-[12px] text-tg-hint">Забери сейчас или попробуй другой вариант.</p>
+
+          <button
+            onClick={() => void run('claim')}
+            disabled={!canClaim || busy}
+            className="bonus-claim-button"
+            style={{
+              background: canClaim ? meta.color : 'var(--surface-subtle)',
+              color: canClaim ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
+            }}
+          >
+            {busy ? 'Получаем...' : canClaim ? `Забрать ${meta.icon}` : '⏳ Уже получен сегодня'}
+          </button>
+
+          <button
+            onClick={() => void run('reroll')}
+            disabled={!canReroll || busy}
+            className="bonus-reroll-button"
+          >
+            {offer.rerolls_left > 0
+              ? `🎲 Перебросить · осталось ${offer.rerolls_left}`
+              : 'Перебросов нет — их дают предметы кузницы'}
+          </button>
         </div>
       )}
 
@@ -83,41 +118,18 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
         </div>
       )}
 
-      <button
-        onClick={() => void run('claim')}
-        disabled={!canClaim || busy}
-        className="py-[14px] rounded-xl border-none cursor-pointer font-extrabold text-base disabled:opacity-60 disabled:cursor-not-allowed"
-        style={{
-          background: canClaim ? 'var(--c-green)' : 'var(--surface-subtle)',
-          color: canClaim ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
-        }}
-      >
-        {busy ? 'Получаем...' : canClaim ? '🎁 Забрать' : '⏳ Уже получен сегодня'}
-      </button>
-
-      {offer && (
-        <button
-          onClick={() => void run('reroll')}
-          disabled={!canReroll || busy}
-          className="py-3 rounded-xl border bg-transparent text-tg-text font-bold text-sm disabled:opacity-40 cursor-pointer"
-          style={{ borderColor: 'var(--surface-overlay-border)' }}
-        >
-          {offer.rerolls_left > 0
-            ? `🎲 Перебросить (осталось ${offer.rerolls_left})`
-            : 'Перебросов нет — их дают предметы кузницы'}
-        </button>
-      )}
-
       <RewardBurst reward={burst} onDone={() => setBurst(null)} />
 
-      <div className="card">
-        <p className="m-0 mb-2 font-bold">Возможные награды:</p>
-        {(Object.keys(CURRENCY) as BonusCurrency[]).map(key => (
-          <div key={key} className="flex gap-[10px] mb-[6px]">
-            <span className="text-lg shrink-0" style={{ color: CURRENCY[key].color }}>{CURRENCY[key].icon}</span>
-            <span className="text-[13px] text-tg-hint">{CURRENCY[key].name}</span>
-          </div>
-        ))}
+      <div className="card bonus-pool-card">
+        <p className="m-0 text-[11px] font-bold text-tg-hint tracking-[0.8px] uppercase">В пуле наград</p>
+        <div className="bonus-pool-grid">
+          {(Object.keys(CURRENCY) as BonusCurrency[]).map(key => (
+            <div key={key} className="bonus-pool-item">
+              <span style={{ color: CURRENCY[key].color }}>{CURRENCY[key].icon}</span>
+              <span>{CURRENCY[key].name}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
