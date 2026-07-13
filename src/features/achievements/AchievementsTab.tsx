@@ -1,20 +1,16 @@
 import { TgsPlayer } from '@/components/TgsPlayer';
+import { ACHIEVEMENT_TGS, profileAchievementValue } from '@/data/achievements';
 import type { Achievement } from '@/types';
 
-const ART_BY_ACHIEVEMENT: Record<string, string> = {
-  first_beast: '/nft_ScaredCat-15455.tgs',
-  growing_zoo: '/nft_KhabibsPapakha-28085.tgs',
-  collector: '/nft_CrystalBall-9406.tgs',
-  first_baby: '/nft_HypnoLollipop-9514.tgs',
-  geneticist: '/nft_AstralShard-3155.tgs',
-  first_expedition: '/nft_StellarRocket-31355.tgs',
-  pathfinder: '/nft_HeroicHelmet-611.tgs',
-  architect: '/nft_ArtisanBrick-2928.tgs',
-  blacksmith: '/nft_SwissWatch-6567.tgs',
-  arena_winner: '/nft_MiniOscar-1300.tgs',
-};
-
-export function AchievementsTab({ achievements }: { achievements: Achievement[] }) {
+export function AchievementsTab({
+  achievements,
+  profileAvatar,
+  onSetProfileAvatar,
+}: {
+  achievements: Achievement[];
+  profileAvatar: string | null;
+  onSetProfileAvatar: (avatar: string | null) => void;
+}) {
   const completed = achievements.filter(achievement => achievement.completed).length;
 
   return (
@@ -38,16 +34,31 @@ export function AchievementsTab({ achievements }: { achievements: Achievement[] 
 
       <div className="flex flex-col gap-2">
         {achievements.map(achievement => (
-          <AchievementCard key={achievement.id} achievement={achievement} />
+          <AchievementCard
+            key={achievement.id}
+            achievement={achievement}
+            profileAvatar={profileAvatar}
+            onSetProfileAvatar={onSetProfileAvatar}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function AchievementCard({ achievement }: { achievement: Achievement }) {
+function AchievementCard({
+  achievement,
+  profileAvatar,
+  onSetProfileAvatar,
+}: {
+  achievement: Achievement;
+  profileAvatar: string | null;
+  onSetProfileAvatar: (avatar: string | null) => void;
+}) {
   const percent = Math.min(100, (achievement.value / achievement.target) * 100);
-  const art = ART_BY_ACHIEVEMENT[achievement.id] ?? '/nft_TopHat-3159.tgs';
+  const art = ACHIEVEMENT_TGS[achievement.id] ?? '/nft_TopHat-3159.tgs';
+  const profileValue = profileAchievementValue(achievement.id);
+  const isProfileAvatar = profileAvatar === profileValue;
 
   return (
     <article
@@ -77,7 +88,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
             border: '2px solid color-mix(in srgb, var(--c-gold) 18%, transparent)',
           }}
         >
-          <TgsPlayer src={art} size={56} />
+          <TgsPlayer src={art} size={56} loop />
         </div>
         <span
           className="absolute -bottom-[2px] right-[1px] grid h-[20px] min-w-[20px] place-items-center rounded-full px-1 text-[10px] font-black"
@@ -112,6 +123,20 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
             {achievement.value}/{achievement.target}
           </span>
         </div>
+        {achievement.completed && (
+          <button
+            type="button"
+            onClick={() => onSetProfileAvatar(isProfileAvatar ? null : profileValue)}
+            className="mt-[8px] rounded-lg border px-2 py-[4px] text-[11px] font-extrabold"
+            style={{
+              color: isProfileAvatar ? '#241c08' : 'var(--c-gold)',
+              background: isProfileAvatar ? 'var(--c-gold)' : 'rgba(var(--c-gold-rgb),0.10)',
+              borderColor: 'rgba(var(--c-gold-rgb),0.35)',
+            }}
+          >
+            {isProfileAvatar ? 'В профиле · убрать' : 'Поставить в профиль'}
+          </button>
+        )}
       </div>
     </article>
   );

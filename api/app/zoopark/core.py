@@ -17,7 +17,8 @@ from sqlalchemy.orm import Session
 from api.app.core.config import BOT_USERNAME
 from api.app.db.connection import get_session
 from api.app.db.models import Player, PlayerCosmetic, utcnow
-from api.app.schemas.core import NicknameColorBody, RegisterBody
+from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, RegisterBody
+from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import NICKNAME_COLORS, REFERRAL_SIGNUP_REWARD_USD
 from api.app.zoopark.income import sync_player_income
@@ -26,6 +27,8 @@ from api.app.zoopark.profile import build_state, get_player
 from api.app.zoopark.season import ensure_player_season
 
 logger = logging.getLogger(__name__)
+
+PROFILE_ACHIEVEMENT_PREFIX = "achievement:"
 
 
 def health() -> dict:
@@ -61,6 +64,35 @@ def set_nickname_color(tg_id: int, body: NicknameColorBody) -> dict:
         player.nickname_color = body.color
         session.commit()
         return {"ok": True, "nickname_color": player.nickname_color}
+
+
+def set_profile_avatar(tg_id: int, body: ProfileAvatarBody) -> dict:
+    avatar = body.avatar
+    if avatar is not None:
+        if not avatar.startswith(PROFILE_ACHIEVEMENT_PREFIX):
+            raise HTTPException(400, "Неизвестная аватарка профиля")
+        achievement_id = avatar.removeprefix(PROFILE_ACHIEVEMENT_PREFIX)
+        if achievement_id not in {item.id for item in achievements_module.ACHIEVEMENTS}:
+            # Keep the format check separate from the completion check below. The
+            # catalogue is the single source of truth for which IDs may be selected.
+            raise HTTPException(400, "Неизвестное достижение")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+
+        if avatar is not None:
+            available = {
+                item["id"]: item["completed"]
+                for item in achievements_module.list_achievements(session, player)
+            }
+            if not available.get(achievement_id, False):
+                raise HTTPException(400, "Сначала открой это достижение")
+
+        player.profile_emoji = avatar
+        session.commit()
+        return {"ok": True, "profile_emoji": player.profile_emoji}
 
 
 def buy_nickname_color(tg_id: int, color: str) -> dict:

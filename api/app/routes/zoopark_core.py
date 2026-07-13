@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.core import NicknameColorBody, RegisterBody
+from api.app.schemas.core import NicknameColorBody, ProfileAvatarBody, RegisterBody
 from api.app.zoopark import core as core_service
 
 router = APIRouter(tags=["core"])
@@ -27,6 +27,11 @@ def me(tg_id: TelegramId):
 @router.post("/api/profile/nickname-color")
 def set_nickname_color(body: NicknameColorBody, tg_id: TelegramId):
     return core_service.set_nickname_color(tg_id, body)
+
+
+@router.post("/api/profile/avatar")
+def set_profile_avatar(body: ProfileAvatarBody, tg_id: TelegramId):
+    return core_service.set_profile_avatar(tg_id, body)
 
 
 @router.post("/api/profile/nickname-colors/{color}")

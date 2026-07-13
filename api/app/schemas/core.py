@@ -10,3 +10,7 @@ class RegisterBody(BaseModel):
 
 class NicknameColorBody(BaseModel):
     color: str = Field(min_length=1, max_length=16)
+
+
+class ProfileAvatarBody(BaseModel):
+    avatar: str | None = Field(default=None, max_length=64)

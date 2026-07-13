@@ -109,7 +109,7 @@ function waitForCanvas(picture: HTMLPictureElement, timeoutMs = 1200): Promise<b
   });
 }
 
-export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string }>(({ size, src }, ref) => {
+export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; loop?: boolean }>(({ size, src, loop = false }, ref) => {
   const pictureRef = useRef<HTMLPictureElement>(null);
   const sourceRef = useRef<HTMLSourceElement>(null);
 
@@ -122,24 +122,24 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string }>(
     resetPlayer(picture);
     source.setAttribute('srcset', src);
 
-    const animationEnd = waitForAnimationEnd(picture);
+    const animationEnd = loop ? null : waitForAnimationEnd(picture);
     // A TGS player can be remounted inside a page when returning from a
     // subpage. When RLottie is already loaded, initializing in the same frame
     // as the new <picture> can leave a blank avatar, so give the browser a
     // frame and retry once if no canvas appears.
     await nextFrame();
     if (pictureRef.current !== picture || sourceRef.current !== source) return;
-    window.RLottie!.init(picture, { playUntilEnd: true });
+    window.RLottie!.init(picture, loop ? {} : { playUntilEnd: true });
     if (!(await waitForCanvas(picture))) {
       resetPlayer(picture);
       source.setAttribute('srcset', src);
       await nextFrame();
       if (pictureRef.current !== picture || sourceRef.current !== source) return;
-      window.RLottie!.init(picture, { playUntilEnd: true });
+      window.RLottie!.init(picture, loop ? {} : { playUntilEnd: true });
       await waitForCanvas(picture);
     }
-    await animationEnd;
-  }, []);
+    if (animationEnd) await animationEnd;
+  }, [loop]);
 
   useImperativeHandle(ref, () => ({
     clearAnimation(): void {

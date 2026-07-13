@@ -117,7 +117,7 @@ class Player(Base):
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Unique in the schema, not just in a racy `SELECT … WHERE nickname = ?` beforehand.
     nickname: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
-    profile_emoji: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    profile_emoji: Mapped[str | None] = mapped_column(String(64), nullable=True)
     nickname_color: Mapped[str] = mapped_column(String(16), nullable=False, default="ivory")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
 

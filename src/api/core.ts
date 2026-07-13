@@ -15,6 +15,11 @@ export const apiSetNicknameColor = (color: string) =>
     method: 'POST',
     body: JSON.stringify({ color }),
   });
+export const apiSetProfileAvatar = (avatar: string | null) =>
+  req<{ ok: true; profile_emoji: string | null }>('/profile/avatar', {
+    method: 'POST',
+    body: JSON.stringify({ avatar }),
+  });
 export const apiBuyNicknameColor = (color: string) =>
   req<{ ok: true; nickname_color: string; new_paw_coins: number }>(`/profile/nickname-colors/${color}`, {
     method: 'POST',
