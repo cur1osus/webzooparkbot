@@ -85,6 +85,14 @@ export default function App() {
       });
   }, [patchState, state, transferCode]);
 
+  // Keep the result visible long enough to read, then return the interface to
+  // its normal state. A new notice restarts the timer.
+  useEffect(() => {
+    if (!transferNotice) return;
+    const timeoutId = window.setTimeout(() => setTransferNotice(null), 4_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [transferNotice]);
+
   // Tell Telegram to hide the launch placeholder once the root tree is mounted.
   useEffect(() => {
     readyTma();
