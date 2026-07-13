@@ -56,7 +56,7 @@ function IncomeGapChart({ entries }: { entries: TopEntry[] }) {
             <div className="top-gap-row" key={entry.tg_id}>
               <div className="top-gap-meta">
                 <RankMark rank={entry.rank} />
-                <span className={`top-gap-name ${nicknameColorClass(entry.nickname_color)}`} style={{ color: nicknameColorValue(entry.nickname_color) }}>
+                <span className="top-gap-name">
                   {entry.nickname}
                 </span>
                 <span className="top-gap-value">+{fmt(entry.income_rub_per_min)} ₽</span>
