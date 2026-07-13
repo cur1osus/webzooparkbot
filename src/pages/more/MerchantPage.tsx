@@ -82,10 +82,21 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="m-0 text-[16px] font-extrabold">{offer.species_name}</p>
-                    <p className="mt-[4px] mb-0 text-xs text-tg-hint">
-                      {habitat.emoji} {habitat.name}
-                    </p>
-                    <span className="merchant-gene-chip">Размножение: {geneLabel('reproduction', offer.reproduction)}</span>
+                    {offer.bought ? (
+                      <div className="merchant-revealed-stats">
+                        <span>{habitat.emoji} {habitat.name}</span>
+                        <span>🧬 {geneLabel('survival', offer.survival)}</span>
+                        <span>🪺 {geneLabel('reproduction', offer.reproduction)}</span>
+                        <span>✨ {geneLabel('appearance', offer.appearance)}</span>
+                        <span>📏 {geneLabel('size_trait', offer.size_trait)}</span>
+                      </div>
+                    ) : (
+                      <div className="merchant-hidden-stats" aria-label="Характеристики откроются после покупки">
+                        <span className="merchant-hidden-stat"><b>?</b> Гены</span>
+                        <span className="merchant-hidden-stat"><b>?</b> Местность</span>
+                        <span className="merchant-hidden-stat"><b>?</b> Доход</span>
+                      </div>
+                    )}
                   </div>
                   {(offer.bought || offer.discount_pct > 0) && (
                     <div className="merchant-discount-badge"
