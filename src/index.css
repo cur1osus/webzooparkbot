@@ -1992,6 +1992,12 @@ button:disabled {
   top: calc(100% + 8px);
   right: 0;
 }
+.online-presence-app-header {
+  position: absolute;
+  top: 4px;
+  right: 14px;
+  z-index: 150;
+}
 
 .online-presence-toggle {
   display: inline-flex;

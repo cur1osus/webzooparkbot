@@ -10,6 +10,7 @@ import { getTelegramStartParam } from '@/lib/tmaEnv';
 import { fmt, formatCountdown } from '@/utils/format';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
+import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { RegisterScreen } from '@/pages/RegisterScreen';
 import type { MaintenancePollStatus } from '@/types';
 
@@ -328,6 +329,11 @@ export default function App() {
           className={`app-shell max-w-[480px] mx-auto relative ${showDevBar ? 'pt-[60px]' : ''}`}
           style={inTma && !showDevBar ? { paddingTop: 'var(--safe-top)' } : undefined}
         >
+          {tab !== 'zoo' && (
+            <div className="online-presence-app-header">
+              <OnlinePlayersIndicator data={onlinePresence} placement="inline" />
+            </div>
+          )}
           {transferNotice && (
             <div className={`transfer-claim-toast transfer-claim-toast-${transferNotice.kind}`} role="status">
               <span>{transferNotice.kind === 'success' ? '🎉' : '⚠️'}</span>
