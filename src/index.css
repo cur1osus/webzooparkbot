@@ -548,7 +548,7 @@ button, input, select, textarea { font: inherit; }
   border-radius: 7px;
   background: rgba(255,255,255,0.035);
 }
-.top-rank-mark-podium { position: absolute; z-index: 1; top: 9px; left: 50%; transform: translateX(-50%); }
+.top-rank-mark-podium { position: absolute; z-index: 2; top: 9px; left: 50%; transform: translateX(-50%); }
 .top-rank-mark-gold { color: var(--c-gold); border-color: rgba(var(--c-gold-rgb),0.42); background: rgba(var(--c-gold-rgb),0.12); }
 .top-rank-mark-silver { color: #c5d3d9; border-color: rgba(190,205,214,0.32); background: rgba(190,205,214,0.08); }
 .top-rank-mark-bronze { color: var(--c-orange); border-color: rgba(var(--c-orange-rgb),0.38); background: rgba(var(--c-orange-rgb),0.10); }
