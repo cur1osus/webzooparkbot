@@ -11,12 +11,12 @@ import secrets
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import Clan, ClanMember, Player, Transfer, TransferClaim, utcnow
+from api.app.db.models import Animal, Clan, ClanMember, Locality, Player, Transfer, TransferClaim, utcnow
 from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
@@ -26,9 +26,12 @@ from api.app.zoopark.catalog import (
     TOP_LIMIT,
     TRANSFER_MAX_CLAIMS,
     TRANSFER_TTL_HOURS,
+    SPECIES_BY_ID,
 )
+from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark.income import sync_player_income
-from api.app.zoopark.profile import get_player
+from api.app.zoopark.profile import get_clan, get_player
+from api.app.zoopark.season import active_season
 
 
 # ─── Leaderboard ──────────────────────────────────────────────────────────────
@@ -74,6 +77,82 @@ def top(tg_id: int) -> dict:
             my_rank = int(ahead or 0) + 1
 
         return {"entries": entries, "my_rank": my_rank}
+
+
+def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
+    """Return the non-sensitive profile surface used by the leaderboard sheet."""
+    with get_session() as session:
+        viewer = get_player(session, viewer_tg_id)
+        if not viewer:
+            raise HTTPException(404, "Нет игрока")
+
+        target = session.scalars(
+            select(Player).where(Player.telegram_id == target_tg_id, Player.status == "active")
+        ).first()
+        if not target:
+            raise HTTPException(404, "Игрок не найден")
+
+        ahead = session.scalar(
+            select(func.count(Player.id)).where(
+                Player.status == "active",
+                or_(
+                    Player.income_rub_per_min > target.income_rub_per_min,
+                    and_(
+                        Player.income_rub_per_min == target.income_rub_per_min,
+                        Player.id < target.id,
+                    ),
+                ),
+            )
+        )
+        rank = int(ahead or 0) + 1
+
+        season = active_season(session)
+        animals = session.scalars(
+            select(Animal).where(
+                Animal.player_id == target.id,
+                Animal.season_id == season.id,
+                Animal.removed_at.is_(None),
+                Animal.dies_at > utcnow(),
+            )
+        ).all()
+        species_counts: dict[int, int] = {}
+        for animal in animals:
+            species_counts[animal.species_id] = species_counts.get(animal.species_id, 0) + 1
+
+        species = [
+            {
+                "name": SPECIES_BY_ID[species_id]["name"],
+                "emoji": SPECIES_BY_ID[species_id]["emoji"],
+                "count": count,
+            }
+            for species_id, count in sorted(species_counts.items(), key=lambda item: (-item[1], item[0]))
+            if species_id in SPECIES_BY_ID
+        ]
+        localities = session.scalars(
+            select(Locality).where(Locality.player_id == target.id, Locality.season_id == season.id)
+        ).all()
+        achievements = achievements_module.list_achievements(session, target)
+
+        return {
+            "tg_id": target.telegram_id,
+            "nickname": target.nickname,
+            "nickname_color": target.nickname_color,
+            "profile_emoji": target.profile_emoji,
+            "rank": rank,
+            "income_rub_per_min": target.income_rub_per_min,
+            "upkeep_rub_per_min": target.upkeep_rub_per_min,
+            "animals_count": len(animals),
+            "species_count": len(species_counts),
+            "localities_count": len(localities),
+            "locality_levels": sum(int(locality.level) for locality in localities),
+            "achievements_completed": sum(achievement["completed"] for achievement in achievements),
+            "achievements_total": len(achievements),
+            "vet_level": target.vet_level,
+            "genetics_level": target.genetics_level,
+            "registered_at": target.registered_at.isoformat(),
+            "clan": get_clan(session, target.id),
+            "species": species,
+        }
 
 
 # ─── Clans ────────────────────────────────────────────────────────────────────

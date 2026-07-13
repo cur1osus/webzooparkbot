@@ -7,6 +7,7 @@ import { PacksPage } from './PacksPage';
 import { LocalitiesPage } from './LocalitiesPage';
 import { ForgeShopTab } from '@/features/forge/ForgeShopTab';
 import { PageHeader } from '@/components/PageHeader';
+import { TextWave } from '@/components/NicknameEffects';
 
 const RARITY_LABEL = { standard: null, rare: 'Редкий', legendary: 'Легендарный' } as const;
 
@@ -18,6 +19,18 @@ const SHOP_TABS: { id: ShopTab; emoji: string; label: string }[] = [
   { id: 'forge',      emoji: '🔨', label: 'Кузница' },
   { id: 'cosmetics',  emoji: '🎨', label: 'Стиль' },
 ];
+
+function ShimmerText({ children }: { children: string }) {
+  return <span className="shimmer-text">{children}</span>;
+}
+
+function GlitchText({ children }: { children: string }) {
+  return (
+    <span className="glitch" data-text={children}>
+      <ShimmerText>{children}</ShimmerText>
+    </span>
+  );
+}
 
 function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [selectedColor, setSelectedColor] = useState<NicknameColor>(gs.nickname_color);
@@ -74,7 +87,7 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
         <div className="relative">
           <p className="m-0 text-[11px] font-extrabold tracking-[0.7px] uppercase text-tg-hint">Подпись владельца</p>
           <p className={`m-0 mt-2 text-[25px] leading-none font-extrabold ${active.animated ? `nickname-color-${active.id}` : ''}`} style={{ color: active.value, textShadow: `0 0 18px ${active.glow}` }}>
-            {gs.nickname}
+            {active.id === 'neon' ? <GlitchText>{gs.nickname}</GlitchText> : active.id === 'wave' ? <TextWave text={gs.nickname} /> : gs.nickname}
           </p>
           <p className="m-0 mt-3 max-w-[270px] text-[13px] leading-[1.35] text-tg-hint">
             Цвет имени будет виден в таблице лидеров. Открытые оттенки остаются навсегда.

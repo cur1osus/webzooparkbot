@@ -11,6 +11,7 @@ export const NICKNAME_COLORS: { id: NicknameColor; label: string; value: string;
   { id: 'embers', label: 'Угли', value: '#ff9569', glow: 'rgba(255, 112, 73, 0.42)', animated: true },
   { id: 'spectrum', label: 'Спектр', value: '#d896ff', glow: 'rgba(216, 150, 255, 0.42)', animated: true },
   { id: 'neon', label: 'Неон', value: '#72ffbc', glow: 'rgba(81, 255, 182, 0.52)', animated: true },
+  { id: 'wave', label: 'Волна', value: '#ff8a00', glow: 'rgba(255, 138, 0, 0.42)', animated: true },
   { id: 'google', label: 'Google', value: '#4285f4', glow: 'rgba(66, 133, 244, 0.58)', animated: true },
 ];
 

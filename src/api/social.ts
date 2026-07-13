@@ -1,6 +1,7 @@
 import type {
   ClanListResponse,
   ClanMembersResponse,
+  PublicProfile,
   ReferralResponse,
   TopResponse,
   TransferClaimResponse,
@@ -10,6 +11,7 @@ import type {
 import { req } from './client';
 
 export const apiGetTop = () => req<TopResponse>('/top');
+export const apiGetPublicProfile = (tgId: number) => req<PublicProfile>(`/players/${tgId}/profile`);
 
 export const apiGetClanList = () => req<ClanListResponse>('/clans');
 export const apiCreateClan = (name: string) =>

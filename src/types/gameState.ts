@@ -101,7 +101,7 @@ export interface GameState {
   achievements: Achievement[];
 }
 
-export type NicknameColor = 'ivory' | 'gold' | 'jade' | 'lagoon' | 'orchid' | 'coral' | 'aurora' | 'embers' | 'spectrum' | 'neon' | 'google';
+export type NicknameColor = 'ivory' | 'gold' | 'jade' | 'lagoon' | 'orchid' | 'coral' | 'aurora' | 'embers' | 'spectrum' | 'neon' | 'wave' | 'google';
 export type NicknameColorRarity = 'standard' | 'rare' | 'legendary';
 
 export interface NicknameColorOption {

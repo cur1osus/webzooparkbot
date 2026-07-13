@@ -1,9 +1,12 @@
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { TopEntry } from '@/types';
-import { apiGetTop } from '@/api';
+import { useState } from 'react';
+import type { PublicProfile, TopEntry } from '@/types';
+import { apiGetPublicProfile, apiGetTop } from '@/api';
 import { fmt } from '@/utils/format';
 import { ProfileBadge, type ProfileBadgeTone } from '@/components/ProfileBadge';
 import { nicknameColorClass, nicknameColorValue } from '@/data/nicknameColors';
+import { TextWave } from '@/components/NicknameEffects';
 
 function rankTone(rank: number): ProfileBadgeTone {
   if (rank === 1) return 'gold';
@@ -20,7 +23,7 @@ function RankMark({ rank, podium = false }: { rank: number; podium?: boolean }) 
   );
 }
 
-function PlayerName({ entry, size = 'normal' }: { entry: TopEntry; size?: 'normal' | 'large' }) {
+function PlayerName({ entry, size = 'normal' }: { entry: Pick<TopEntry, 'nickname' | 'nickname_color' | 'is_me'>; size?: 'normal' | 'large' }) {
   return (
     <p
       className={`m-0 top-player-name ${size === 'large' ? 'text-[17px] top-player-name-large' : 'text-[14px]'} ${nicknameColorClass(entry.nickname_color)}`}
@@ -29,12 +32,101 @@ function PlayerName({ entry, size = 'normal' }: { entry: TopEntry; size?: 'norma
         fontWeight: entry.is_me ? 900 : 800,
       }}
     >
-      {entry.nickname}
+      {entry.nickname_color === 'wave' ? <TextWave text={entry.nickname} /> : entry.nickname}
     </p>
   );
 }
 
-function IncomeGapChart({ entries }: { entries: TopEntry[] }) {
+function PublicProfileSheet({
+  entry,
+  profile,
+  isLoading,
+  error,
+  onClose,
+}: {
+  entry: TopEntry;
+  profile: PublicProfile | undefined;
+  isLoading: boolean;
+  error: boolean;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose} role="presentation">
+      <section
+        className="sheet-panel top-profile-sheet w-full max-w-[480px] rounded-t-3xl"
+        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Профиль игрока ${entry.nickname}`}
+      >
+        <div className="top-profile-sheet-handle" />
+        <div className="top-profile-sheet-toolbar">
+          <span className="top-eyebrow">ПРОФИЛЬ ИГРОКА</span>
+          <button type="button" className="top-profile-close" onClick={onClose}>Закрыть</button>
+        </div>
+
+        {isLoading && <p className="top-profile-state">Загружаем профиль...</p>}
+        {error && <p className="top-profile-state top-profile-state-error">Не удалось загрузить профиль.</p>}
+
+        {profile && (
+          <div className="top-profile-content">
+            <div className="top-profile-identity">
+              <ProfileBadge profileEmoji={profile.profile_emoji} size={86} tone={rankTone(profile.rank)} />
+              <div className="min-w-0 flex-1">
+                <PlayerName entry={{ ...profile, is_me: entry.is_me }} size="large" />
+                <p className="m-0 mt-1 text-[12px] text-tg-hint">#{profile.rank} место в рейтинге</p>
+                {profile.clan && (
+                  <p className="m-0 mt-2 text-[11px] font-bold" style={{ color: 'var(--c-purple)' }}>
+                    🏰 {profile.clan.name} · уровень {profile.clan.level}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="top-profile-stats">
+              <div><strong className="top-profile-stat-income">+{fmt(profile.income_rub_per_min)} ₽</strong><span>доход / мин</span></div>
+              <div><strong className={profile.income_rub_per_min - profile.upkeep_rub_per_min >= 0 ? 'top-profile-stat-income' : 'top-profile-stat-expense'}>{fmt(profile.income_rub_per_min - profile.upkeep_rub_per_min)} ₽</strong><span>чистыми / мин</span></div>
+              <div><strong>{profile.animals_count}</strong><span>животных</span></div>
+              <div><strong>{profile.species_count}</strong><span>видов</span></div>
+              <div><strong>{profile.localities_count}</strong><span>местностей</span></div>
+              <div><strong>{profile.achievements_completed}/{profile.achievements_total}</strong><span>медалей</span></div>
+            </div>
+
+            <div className="top-profile-section">
+              <p className="top-eyebrow m-0">РАЗВИТИЕ ЗООПАРКА</p>
+              <div className="top-profile-development">
+                <div><strong>{profile.genetics_level}</strong><span>генетический центр</span></div>
+                <div><strong>{profile.vet_level}</strong><span>ветеринарный блок</span></div>
+                <div><strong>{profile.locality_levels}</strong><span>уровней местностей</span></div>
+              </div>
+            </div>
+
+            <div className="top-profile-section">
+              <div className="flex items-center justify-between gap-3">
+                <p className="top-eyebrow m-0">КОЛЛЕКЦИЯ</p>
+                <span className="text-[10px] text-tg-hint">{profile.animals_count} животных</span>
+              </div>
+              {profile.species.length > 0 ? (
+                <div className="top-profile-species">
+                  {profile.species.map(species => (
+                    <span key={species.name}><b>{species.emoji}</b>{species.name}<em>×{species.count}</em></span>
+                  ))}
+                </div>
+              ) : (
+                <p className="m-0 mt-2 text-[12px] text-tg-hint">Коллекция пока пуста.</p>
+              )}
+            </div>
+
+            <p className="top-profile-footnote">В игре с {new Date(profile.registered_at).toLocaleDateString('ru-RU')}</p>
+          </div>
+        )}
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function IncomeGapChart({ entries, onSelect }: { entries: TopEntry[]; onSelect: (entry: TopEntry) => void }) {
   const chartEntries = entries.slice(0, 5);
   const leaderIncome = chartEntries[0]?.income_rub_per_min ?? 0;
 
@@ -53,7 +145,7 @@ function IncomeGapChart({ entries }: { entries: TopEntry[] }) {
           const gap = leaderIncome - entry.income_rub_per_min;
 
           return (
-            <div className="top-gap-row" key={entry.tg_id}>
+            <button type="button" className="top-gap-row" key={entry.tg_id} onClick={() => onSelect(entry)} aria-label={`Открыть профиль ${entry.nickname}`}>
               <div className="top-gap-meta">
                 <RankMark rank={entry.rank} />
                 <span className="top-gap-name">
@@ -65,7 +157,7 @@ function IncomeGapChart({ entries }: { entries: TopEntry[] }) {
                 <span className={`top-gap-fill ${entry.rank === 1 ? 'top-gap-fill-leader' : ''}`} style={{ width: `${share}%` }} />
               </div>
               <span className="top-gap-diff">{gap === 0 ? 'лидер' : `−${fmt(gap)} ₽ до лидера`}</span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -73,11 +165,16 @@ function IncomeGapChart({ entries }: { entries: TopEntry[] }) {
   );
 }
 
-function PodiumCard({ entry }: { entry: TopEntry }) {
+function PodiumCard({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: TopEntry) => void }) {
   const winner = entry.rank === 1;
 
   return (
-    <div className={`top-podium-card top-podium-rank-${entry.rank} ${winner ? 'top-podium-card-winner' : ''}`}>
+    <button
+      type="button"
+      className={`top-podium-card top-podium-rank-${entry.rank} ${winner ? 'top-podium-card-winner' : ''}`}
+      onClick={() => onSelect(entry)}
+      aria-label={`Открыть профиль ${entry.nickname}`}
+    >
       <RankMark rank={entry.rank} podium />
       <ProfileBadge profileEmoji={entry.profile_emoji} size={winner ? 76 : 58} tone={rankTone(entry.rank)} />
       <div className="top-podium-copy">
@@ -85,13 +182,18 @@ function PodiumCard({ entry }: { entry: TopEntry }) {
         <span className="top-income-value">+{fmt(entry.income_rub_per_min)} ₽<small>/мин</small></span>
       </div>
       {entry.is_me && <span className="top-you-label">это ты</span>}
-    </div>
+    </button>
   );
 }
 
-function PlayerRow({ entry }: { entry: TopEntry }) {
+function PlayerRow({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: TopEntry) => void }) {
   return (
-    <div className={`top-player-row ${entry.is_me ? 'top-player-row-me' : ''}`}>
+    <button
+      type="button"
+      className={`top-player-row ${entry.is_me ? 'top-player-row-me' : ''}`}
+      onClick={() => onSelect(entry)}
+      aria-label={`Открыть профиль ${entry.nickname}`}
+    >
       <RankMark rank={entry.rank} />
       <ProfileBadge profileEmoji={entry.profile_emoji} size={42} />
       <div className="top-player-main">
@@ -102,15 +204,16 @@ function PlayerRow({ entry }: { entry: TopEntry }) {
         <span className="top-player-caption">смотритель зоопарка</span>
       </div>
       <span className="top-player-income">+{fmt(entry.income_rub_per_min)} ₽<small>/мин</small></span>
-    </div>
+    </button>
   );
 }
 
-function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
+function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
   leader: TopEntry;
   myRank: number | null;
   myEntry: TopEntry | undefined;
   shownCount: number;
+  onSelect: (entry: TopEntry) => void;
 }) {
   return (
     <section className="top-hero">
@@ -127,7 +230,7 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
           </div>
         </div>
 
-        <div className="top-hero-leader">
+        <button type="button" className="top-hero-leader" onClick={() => onSelect(leader)} aria-label={`Открыть профиль ${leader.nickname}`}>
           <ProfileBadge profileEmoji={leader.profile_emoji} size={52} tone="gold" />
           <div className="min-w-0 flex-1">
             <p className="top-label m-0">лидер прямо сейчас</p>
@@ -139,7 +242,7 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
               +{fmt(leader.income_rub_per_min)} ₽<span className="text-[10px] font-bold text-tg-hint">/мин</span>
             </p>
           </div>
-        </div>
+        </button>
 
         <div className="top-hero-stats">
           <div>
@@ -159,9 +262,16 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount }: {
 }
 
 export function TopPage() {
+  const [selectedEntry, setSelectedEntry] = useState<TopEntry | null>(null);
   const { data, error, isLoading } = useQuery({
     queryKey: ['top'],
     queryFn: apiGetTop,
+    staleTime: 30_000,
+  });
+  const { data: publicProfile, isLoading: isProfileLoading, error: profileError } = useQuery({
+    queryKey: ['public-profile', selectedEntry?.tg_id],
+    queryFn: () => apiGetPublicProfile(selectedEntry!.tg_id),
+    enabled: selectedEntry !== null,
     staleTime: 30_000,
   });
 
@@ -180,10 +290,16 @@ export function TopPage() {
       {error && <p className="text-[var(--c-red-soft)]">⚠️ {error instanceof Error ? error.message : 'Ошибка'}</p>}
 
       {leader && data && (
-        <LeaderboardHero leader={leader} myRank={data.my_rank} myEntry={myEntry} shownCount={entries.length} />
+        <LeaderboardHero
+          leader={leader}
+          myRank={data.my_rank}
+          myEntry={myEntry}
+          shownCount={entries.length}
+          onSelect={setSelectedEntry}
+        />
       )}
 
-      {entries.length > 0 && <IncomeGapChart entries={entries} />}
+      {entries.length > 0 && <IncomeGapChart entries={entries} onSelect={setSelectedEntry} />}
 
       {podium.length > 0 && (
         <section>
@@ -195,7 +311,7 @@ export function TopPage() {
             <span className="top-section-note">доход / мин</span>
           </div>
           <div className={`top-podium top-podium-count-${podium.length}`}>
-            {podium.map(entry => <PodiumCard key={entry.tg_id} entry={entry} />)}
+            {podium.map(entry => <PodiumCard key={entry.tg_id} entry={entry} onSelect={setSelectedEntry} />)}
           </div>
         </section>
       )}
@@ -220,7 +336,7 @@ export function TopPage() {
             </div>
           </div>
           <div className="top-player-list">
-            {rest.map(entry => <PlayerRow key={entry.tg_id} entry={entry} />)}
+            {rest.map(entry => <PlayerRow key={entry.tg_id} entry={entry} onSelect={setSelectedEntry} />)}
           </div>
         </section>
       )}
@@ -231,6 +347,16 @@ export function TopPage() {
           <p className="m-0 mt-3 text-[16px] font-black">Рейтинг пока пуст</p>
           <p className="m-0 mt-1 text-[12px] text-tg-hint">Собери первый зоопарк и займи вершину.</p>
         </div>
+      )}
+
+      {selectedEntry && (
+        <PublicProfileSheet
+          entry={selectedEntry}
+          profile={publicProfile}
+          isLoading={isProfileLoading}
+          error={Boolean(profileError)}
+          onClose={() => setSelectedEntry(null)}
+        />
       )}
     </div>
   );

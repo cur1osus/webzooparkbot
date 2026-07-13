@@ -13,6 +13,38 @@ export interface TopResponse {
   my_rank: number | null;
 }
 
+export interface PublicProfileSpecies {
+  name: string;
+  emoji: string;
+  count: number;
+}
+
+export interface PublicProfile {
+  tg_id: number;
+  nickname: string;
+  nickname_color: string;
+  profile_emoji: string | null;
+  rank: number;
+  income_rub_per_min: number;
+  upkeep_rub_per_min: number;
+  animals_count: number;
+  species_count: number;
+  localities_count: number;
+  locality_levels: number;
+  achievements_completed: number;
+  achievements_total: number;
+  vet_level: number;
+  genetics_level: number;
+  registered_at: string;
+  clan: {
+    name: string;
+    level: number;
+    member_count: number;
+    role: 'owner' | 'member';
+  } | null;
+  species: PublicProfileSpecies[];
+}
+
 export interface ClanOut {
   id: number;
   name: string;

@@ -14,6 +14,11 @@ def top(tg_id: TelegramId):
     return social_service.top(tg_id)
 
 
+@router.get("/api/players/{target_tg_id}/profile")
+def public_profile(target_tg_id: int, tg_id: TelegramId):
+    return social_service.public_profile(tg_id, target_tg_id)
+
+
 @router.get("/api/clans")
 def clan_list(tg_id: TelegramId):
     return social_service.clan_list(tg_id)
