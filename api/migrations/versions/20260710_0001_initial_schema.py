@@ -75,7 +75,7 @@ def upgrade() -> None:
 
     op.create_table(
         "players",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("telegram_id", sa.BigInteger(), nullable=False, unique=True),
         sa.Column("username", sa.String(64), nullable=True),
         sa.Column("nickname", sa.String(32), nullable=False, unique=True),
@@ -133,7 +133,7 @@ def upgrade() -> None:
 
     op.create_table(
         "localities",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False),
         sa.Column("habitat", HABITAT, nullable=False),
@@ -153,7 +153,7 @@ def upgrade() -> None:
     ]
     op.create_table(
         "animals",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False),
         sa.Column("species_id", sa.SmallInteger(), sa.ForeignKey("species.id"), nullable=False),
@@ -190,7 +190,7 @@ def upgrade() -> None:
 
     op.create_table(
         "pack_openings",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False),
         sa.Column("animal_id", sa.BigInteger(), sa.ForeignKey("animals.id", ondelete="CASCADE"), nullable=False),
@@ -203,7 +203,7 @@ def upgrade() -> None:
 
     op.create_table(
         "breeding_attempts",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False),
         sa.Column("parent_a_id", sa.BigInteger(), sa.ForeignKey("animals.id", ondelete="CASCADE"), nullable=False),
@@ -218,7 +218,7 @@ def upgrade() -> None:
 
     op.create_table(
         "expeditions",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False),
         sa.Column("locality_id", sa.BigInteger(), sa.ForeignKey("localities.id", ondelete="CASCADE"), nullable=False),
@@ -250,7 +250,7 @@ def upgrade() -> None:
 
     op.create_table(
         "merchant_offers",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("season_id", sa.Integer(), sa.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False),
         sa.Column("slot", sa.SmallInteger(), nullable=False),
@@ -276,7 +276,7 @@ def upgrade() -> None:
 
     op.create_table(
         "items",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("rarity", sa.String(16), nullable=False),
         sa.Column("level", sa.SmallInteger(), nullable=False, server_default="0"),
@@ -294,7 +294,7 @@ def upgrade() -> None:
 
     op.create_table(
         "item_properties",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("item_id", sa.BigInteger(), sa.ForeignKey("items.id", ondelete="CASCADE"), nullable=False),
         sa.Column("kind", sa.String(24), nullable=False),
         sa.Column("value", sa.Integer(), nullable=False),
@@ -311,7 +311,7 @@ def upgrade() -> None:
 
     op.create_table(
         "item_sets",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(32), nullable=False),
         sa.Column("emoji", sa.String(16), nullable=False, server_default="⚒️"),
@@ -331,7 +331,7 @@ def upgrade() -> None:
 
     op.create_table(
         "clans",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("name", sa.String(32), nullable=False, unique=True),
         sa.Column(
             "owner_id",
@@ -358,7 +358,7 @@ def upgrade() -> None:
 
     op.create_table(
         "duels",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("kind", sa.String(16), nullable=False),
         sa.Column("stake_rub", sa.BigInteger(), nullable=False),
         sa.Column("creator_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
@@ -403,7 +403,7 @@ def upgrade() -> None:
 
     op.create_table(
         "daily_bonuses",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("bonus_date", sa.Date(), nullable=False),
         sa.Column("currency", sa.String(8), nullable=False),
@@ -418,7 +418,7 @@ def upgrade() -> None:
 
     op.create_table(
         "transfers",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("code", sa.String(32), nullable=False, unique=True),
         sa.Column("sender_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("amount_per_claim", sa.BigInteger(), nullable=False),
@@ -465,7 +465,7 @@ def upgrade() -> None:
 
     op.create_table(
         "ledger",
-        sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
+        sa.Column("id", sa.BigInteger().with_variant(sa.Integer(), "sqlite"), primary_key=True, autoincrement=True),
         sa.Column("player_id", sa.BigInteger(), sa.ForeignKey("players.id", ondelete="CASCADE"), nullable=False),
         sa.Column("currency", sa.String(8), nullable=False),
         sa.Column("delta", sa.BigInteger(), nullable=False),

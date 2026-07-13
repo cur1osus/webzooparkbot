@@ -7,10 +7,24 @@ export interface Duel {
   stake_rub: number;
   creator_nickname: string;
   created_at: string;
+  expires_at: string | null;
   status: 'open' | 'finished' | 'cancelled';
+  participant_count: number;
+  max_players: number;
+  creator_joined: boolean;
+  viewer_joined: boolean;
+  participants: Array<{
+    player_id: number;
+    nickname: string;
+    score: number | null;
+    place: number | null;
+    reward_rub: number;
+  }>;
   creator_score: number | null;
   opponent_score: number | null;
+  third_score: number | null;
   winner_nickname: string | null;
+  outcome_message: string | null;
 }
 
 export interface DuelsResponse {
@@ -23,10 +37,20 @@ export interface DuelActionResponse {
   new_rub: number;
 }
 
+export interface DuelResponse {
+  ok: boolean;
+  game: Duel;
+}
+
 export interface DuelCancelResponse {
   ok: boolean;
   refunded_rub: number;
   new_rub: number;
+}
+
+export interface DuelResolveResponse {
+  ok: boolean;
+  game: Duel;
 }
 
 export interface DonateInfo {

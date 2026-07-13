@@ -613,12 +613,16 @@ class Duel(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     stake_rub: Mapped[int] = mapped_column(BigInteger, nullable=False)
     creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    creator_joined: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     opponent_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
+    third_player_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
     winner_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
     creator_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     opponent_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    third_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
 

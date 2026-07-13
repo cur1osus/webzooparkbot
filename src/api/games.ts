@@ -2,7 +2,9 @@ import type {
   CocktailGuessResult,
   DuelActionResponse,
   DuelCancelResponse,
+  DuelResponse,
   DuelsResponse,
+  DuelResolveResponse,
   SoloGameResult,
   SoloStats,
 } from '@/types';
@@ -14,8 +16,12 @@ export const apiCreateDuel = (kind: string, stake_rub: number) =>
     method: 'POST',
     body: JSON.stringify({ kind, stake_rub: Math.floor(stake_rub) }),
   });
+export const apiGetDuel = (duel_id: number) =>
+  req<DuelResponse>(`/duels/${duel_id}`);
 export const apiJoinDuel = (duel_id: number) =>
   req<DuelActionResponse>(`/duels/${duel_id}/join`, { method: 'POST' });
+export const apiResolveDuel = (duel_id: number) =>
+  req<DuelResolveResponse>(`/duels/${duel_id}/resolve`, { method: 'POST' });
 export const apiCancelDuel = (duel_id: number) =>
   req<DuelCancelResponse>(`/duels/${duel_id}/cancel`, { method: 'POST' });
 

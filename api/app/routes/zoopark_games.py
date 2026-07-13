@@ -11,7 +11,7 @@ router = APIRouter(tags=["games"])
 
 @router.get("/api/duels")
 def open_duels(tg_id: TelegramId):
-    return games_service.open_duels()
+    return games_service.open_duels(tg_id)
 
 
 @router.post("/api/duels")
@@ -21,12 +21,17 @@ def create_duel(body: DuelCreateBody, tg_id: TelegramId):
 
 @router.get("/api/duels/{duel_id}")
 def get_duel(duel_id: int, tg_id: TelegramId):
-    return games_service.get_duel(duel_id)
+    return games_service.get_duel(duel_id, tg_id)
 
 
 @router.post("/api/duels/{duel_id}/join")
 def join_duel(duel_id: int, tg_id: TelegramId):
     return games_service.join_duel(tg_id, duel_id)
+
+
+@router.post("/api/duels/{duel_id}/resolve")
+def resolve_duel(duel_id: int, tg_id: TelegramId):
+    return games_service.resolve_duel(tg_id, duel_id)
 
 
 @router.post("/api/duels/{duel_id}/cancel")

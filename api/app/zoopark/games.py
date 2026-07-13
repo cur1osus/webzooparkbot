@@ -30,6 +30,9 @@ from api.app.zoopark.catalog import (
     COCKTAIL_REWARD_PAW,
     DUEL_BASE_MOVES,
     DUEL_DICE_SIDES,
+    DUEL_DURATION_MINUTES,
+    DUEL_MAX_PLAYERS,
+    DUEL_REWARD_DISTRIBUTION,
     GAME_KINDS,
     MAX_STAKE_RUB,
     SOLO_MATCH_MAX_ROUNDS,
@@ -70,28 +73,99 @@ def _lock_players(session: Session, *player_ids: int) -> dict[int, Player]:
     return {row.id: row for row in rows}
 
 
-def _duel_payload(session: Session, duel: Duel) -> dict:
+def _duel_expires_at(duel: Duel) -> datetime:
+    """Keep legacy rows readable while every new lobby stores its own deadline."""
+    return duel.expires_at or (duel.created_at + timedelta(minutes=DUEL_DURATION_MINUTES))
+
+
+def _duel_slots(duel: Duel) -> list[tuple[str, int, int | None]]:
+    slots: list[tuple[str, int, int | None]] = []
+    if duel.creator_joined:
+        slots.append(("creator", duel.creator_id, duel.creator_score))
+    if duel.opponent_id is not None:
+        slots.append(("opponent", duel.opponent_id, duel.opponent_score))
+    if duel.third_player_id is not None:
+        slots.append(("third", duel.third_player_id, duel.third_score))
+    return slots
+
+
+def _ranked_slots(slots: list[tuple[str, int, int | None]]) -> list[tuple[str, int, int | None]]:
+    # Player id is the deterministic tie-breaker. It keeps prize placement stable when
+    # two players happen to roll the same score and the result is read again later.
+    return sorted(slots, key=lambda item: (item[2] if item[2] is not None else -1, -item[1]), reverse=True)
+
+
+def _duel_prizes(duel: Duel, slots: list[tuple[str, int, int | None]]) -> dict[int, int]:
+    if not slots:
+        return {}
+    if duel.status == "cancelled" or len(slots) < 2:
+        return {player_id: int(duel.stake_rub) for _, player_id, _ in slots}
+    ranked = _ranked_slots(slots)
+    percentages = DUEL_REWARD_DISTRIBUTION[:len(ranked)]
+    if len(ranked) == 2:
+        # With two participants the unused third-place share goes to second place.
+        percentages = (DUEL_REWARD_DISTRIBUTION[0], 100 - DUEL_REWARD_DISTRIBUTION[0])
+    pot = int(duel.stake_rub) * len(ranked)
+    prizes = [pot * percent // 100 for percent in percentages]
+    prizes[0] += pot - sum(prizes)
+    return {ranked[index][1]: prizes[index] for index in range(len(ranked))}
+
+
+def _duel_payload(session: Session, duel: Duel, viewer_player_id: int | None = None) -> dict:
     creator = session.get(Player, duel.creator_id)
     winner = session.get(Player, duel.winner_id) if duel.winner_id else None
+    slots = _duel_slots(duel)
+    ranked = _ranked_slots(slots)
+    places = {player_id: index + 1 for index, (_, player_id, _) in enumerate(ranked)} if duel.status == "finished" else {}
+    prizes = _duel_prizes(duel, slots) if duel.status != "open" else {}
+    participants = []
+    for _, player_id, score in slots:
+        player = session.get(Player, player_id)
+        participants.append({
+            "player_id": player_id,
+            "nickname": player.nickname if player else "—",
+            "score": score,
+            "place": places.get(player_id),
+            "reward_rub": prizes.get(player_id, 0),
+        })
+
+    if duel.status == "finished":
+        outcome_message = f"Победитель: {winner.nickname}" if winner else "Игра завершена"
+    elif duel.status == "cancelled":
+        outcome_message = "Недостаточно участников — ставки возвращены"
+    else:
+        outcome_message = None
+
     return {
         "id": duel.id,
         "kind": duel.kind,
         "stake_rub": int(duel.stake_rub),
         "creator_nickname": creator.nickname if creator else "—",
         "created_at": duel.created_at.isoformat(),
+        "expires_at": _duel_expires_at(duel).isoformat(),
         "status": duel.status,
+        "participant_count": len(slots),
+        "max_players": DUEL_MAX_PLAYERS,
+        "creator_joined": duel.creator_joined,
+        "viewer_joined": viewer_player_id in {player_id for _, player_id, _ in slots} if viewer_player_id else False,
+        "participants": participants,
         "creator_score": duel.creator_score,
         "opponent_score": duel.opponent_score,
+        "third_score": duel.third_score,
         "winner_nickname": winner.nickname if winner else None,
+        "outcome_message": outcome_message,
     }
 
 
-def open_duels() -> dict:
+def open_duels(tg_id: int | None = None) -> dict:
     with get_session() as session:
+        viewer = get_player(session, tg_id) if tg_id else None
+        now = utcnow()
         duels = session.scalars(
-            select(Duel).where(Duel.status == "open").order_by(Duel.created_at.desc()).limit(20)
+            select(Duel).where(Duel.status == "open").order_by(Duel.created_at.desc()).limit(50)
         ).all()
-        return {"games": [_duel_payload(session, duel) for duel in duels]}
+        visible = [duel for duel in duels if _duel_expires_at(duel) > now]
+        return {"games": [_duel_payload(session, duel, viewer.id if viewer else None) for duel in visible]}
 
 
 def create_duel(tg_id: int, body: DuelCreateBody) -> dict:
@@ -104,12 +178,21 @@ def create_duel(tg_id: int, body: DuelCreateBody) -> dict:
             raise HTTPException(404, "Нет игрока")
         sync_player_income(session, player)
 
-        duel = Duel(kind=kind, stake_rub=stake, creator_id=player.id, status="open")
+        now = utcnow()
+        duel = Duel(
+            kind=kind,
+            stake_rub=stake,
+            creator_id=player.id,
+            creator_joined=False,
+            status="open",
+            created_at=now,
+            expires_at=now + timedelta(minutes=DUEL_DURATION_MINUTES),
+        )
         session.add(duel)
         session.flush()
-        ledger.spend(session, player, "rub", stake, "duel_stake", ref_table="duels", ref_id=duel.id)
-
-        payload = _duel_payload(session, duel)
+        # Creating a lobby is free. The stake is charged exactly once, when each player
+        # presses Join, including the creator.
+        payload = _duel_payload(session, duel, player.id)
         result = {"ok": True, "game": payload, "new_rub": ledger.balance(player, "rub")}
         session.commit()
         return result
@@ -125,7 +208,7 @@ def _roll_score(session: Session, player_id: int) -> int:
 
 def join_duel(tg_id: int, duel_id: int) -> dict:
     with get_session() as session:
-        joiner = get_player(session, tg_id)
+        joiner = get_player(session, tg_id, for_update=True)
         if not joiner:
             raise HTTPException(404, "Нет игрока")
         joiner_id = joiner.id
@@ -137,39 +220,89 @@ def join_duel(tg_id: int, duel_id: int) -> dict:
             raise HTTPException(404, "Игра не найдена")
         if duel.status != "open":
             raise HTTPException(400, "Игра недоступна")
-        if duel.creator_id == joiner_id:
-            raise HTTPException(400, "Нельзя вступить в свою игру")
 
-        players = _lock_players(session, duel.creator_id, joiner_id)
-        creator = players.get(duel.creator_id)
-        joiner = players.get(joiner_id)
-        if creator is None or joiner is None:
-            raise HTTPException(404, "Игрок не найден")
+        if _duel_expires_at(duel) <= utcnow():
+            _resolve_duel_locked(session, duel)
+            payload = _duel_payload(session, duel, joiner_id)
+            result = {"ok": True, "game": payload, "new_rub": ledger.balance(joiner, "rub")}
+            session.commit()
+            return result
+
+        slots = _duel_slots(duel)
+        if joiner_id in {player_id for _, player_id, _ in slots}:
+            raise HTTPException(400, "Ты уже в этой игре")
+        if len(slots) >= DUEL_MAX_PLAYERS:
+            raise HTTPException(400, "Игра уже заполнена")
+
         sync_player_income(session, joiner)
-
         stake = int(duel.stake_rub)
         ledger.spend(session, joiner, "rub", stake, "duel_stake", ref_table="duels", ref_id=duel.id)
+        score = _roll_score(session, joiner_id)
 
-        creator_score = _roll_score(session, creator.id)
-        opponent_score = _roll_score(session, joiner.id)
-        while creator_score == opponent_score:
-            creator_score = _roll_score(session, creator.id)
-            opponent_score = _roll_score(session, joiner.id)
+        if joiner_id == duel.creator_id:
+            duel.creator_joined = True
+            duel.creator_score = score
+        elif duel.opponent_id is None:
+            duel.opponent_id = joiner_id
+            duel.opponent_score = score
+        else:
+            duel.third_player_id = joiner_id
+            duel.third_score = score
 
-        winner = creator if creator_score > opponent_score else joiner
-        duel.opponent_id = joiner_id
-        duel.status = "finished"
-        duel.creator_score = creator_score
-        duel.opponent_score = opponent_score
-        duel.winner_id = winner.id
-        duel.resolved_at = utcnow()
+        session.flush()
+        if len(_duel_slots(duel)) >= DUEL_MAX_PLAYERS:
+            _resolve_duel_locked(session, duel)
 
-        ledger.grant(session, winner, "rub", stake * 2, "duel_payout", ref_table="duels", ref_id=duel.id)
-
-        payload = _duel_payload(session, duel)
+        payload = _duel_payload(session, duel, joiner_id)
         result = {"ok": True, "game": payload, "new_rub": ledger.balance(joiner, "rub")}
         session.commit()
         return result
+
+
+def _resolve_duel_locked(session: Session, duel: Duel) -> None:
+    """Resolve an expired/full lobby. Caller owns the duel row lock."""
+    if duel.status != "open":
+        return
+
+    slots = _duel_slots(duel)
+    players = _lock_players(session, *(player_id for _, player_id, _ in slots))
+    if len(slots) < 2:
+        for _, player_id, _ in slots:
+            player = players.get(player_id)
+            if player:
+                ledger.grant(session, player, "rub", int(duel.stake_rub), "duel_refund", ref_table="duels", ref_id=duel.id)
+        duel.status = "cancelled"
+        duel.resolved_at = utcnow()
+        return
+
+    ranked = _ranked_slots(slots)
+    prizes = _duel_prizes(duel, slots)
+    for _, player_id, _ in ranked:
+        player = players.get(player_id)
+        prize = prizes.get(player_id, 0)
+        if player and prize:
+            ledger.grant(session, player, "rub", prize, "duel_payout", ref_table="duels", ref_id=duel.id)
+
+    duel.winner_id = ranked[0][1]
+    duel.status = "finished"
+    duel.resolved_at = utcnow()
+
+
+def resolve_duel(tg_id: int, duel_id: int) -> dict:
+    with get_session() as session:
+        viewer = get_player(session, tg_id)
+        if not viewer:
+            raise HTTPException(404, "Нет игрока")
+        duel = session.scalars(select(Duel).where(Duel.id == duel_id).with_for_update()).first()
+        if not duel:
+            raise HTTPException(404, "Игра не найдена")
+        if duel.status == "open":
+            if _duel_expires_at(duel) > utcnow():
+                raise HTTPException(400, "Время игры еще не закончилось")
+            _resolve_duel_locked(session, duel)
+        payload = _duel_payload(session, duel, viewer.id)
+        session.commit()
+        return {"ok": True, "game": payload}
 
 
 def cancel_duel(tg_id: int, duel_id: int) -> dict:
@@ -186,22 +319,30 @@ def cancel_duel(tg_id: int, duel_id: int) -> dict:
         if duel.status != "open":
             raise HTTPException(400, "Игру уже нельзя отменить")
 
+        slots = _duel_slots(duel)
+        players = _lock_players(session, *(player_id for _, player_id, _ in slots))
+        refunded = 0
+        for _, participant_id, _ in slots:
+            participant = players.get(participant_id)
+            if participant:
+                ledger.grant(session, participant, "rub", int(duel.stake_rub), "duel_refund", ref_table="duels", ref_id=duel.id)
+                if participant_id == player.id:
+                    refunded = int(duel.stake_rub)
         duel.status = "cancelled"
         duel.resolved_at = utcnow()
-        refunded = int(duel.stake_rub)
-        ledger.grant(session, player, "rub", refunded, "duel_refund", ref_table="duels", ref_id=duel.id)
 
         result = {"ok": True, "refunded_rub": refunded, "new_rub": ledger.balance(player, "rub")}
         session.commit()
         return result
 
 
-def get_duel(duel_id: int) -> dict:
+def get_duel(duel_id: int, tg_id: int | None = None) -> dict:
     with get_session() as session:
         duel = session.get(Duel, duel_id)
         if not duel:
             raise HTTPException(404, "Игра не найдена")
-        return {"ok": True, "game": _duel_payload(session, duel)}
+        viewer = get_player(session, tg_id) if tg_id else None
+        return {"ok": True, "game": _duel_payload(session, duel, viewer.id if viewer else None)}
 
 
 # ─── Solo games ───────────────────────────────────────────────────────────────

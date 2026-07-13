@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
 import type { Duel, GameState } from '@/types';
@@ -6,9 +6,11 @@ import { GAMES } from '@/data/games';
 import {
   apiConfig,
   apiCreateDuel,
+  apiGetDuel,
   apiGetOpenDuels,
   apiGetSoloStats,
   apiJoinDuel,
+  apiResolveDuel,
 } from '@/api';
 import { CocktailTab } from '@/features/games/CocktailTab';
 import { SoloGameFlow } from '@/features/games/SoloGameFlow';
@@ -21,6 +23,7 @@ type BetAmount = 1 | 10 | 100;
 type MultiScreen = 'list' | 'share';
 
 const BET_AMOUNTS: BetAmount[] = [1, 10, 100];
+const DUEL_DURATION_SECONDS = 10 * 60;
 
 const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = {
   basketball: { from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
@@ -38,6 +41,17 @@ function parseRubInput(value: string): number {
   return Number(value.replace(/\D/g, '') || 0);
 }
 
+function duelSecondsLeft(expiresAt: string | null, nowMs: number): number {
+  if (!expiresAt) return DUEL_DURATION_SECONDS;
+  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - nowMs) / 1000));
+}
+
+function formatDuelTimer(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
 /* ──────────────────────────── MULTI ────────────────────────────────── */
 function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: () => void; inviteGameId?: number }) {
   const [actionError, setActionError] = useState<string | null>(null);
@@ -48,11 +62,25 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const [screen, setScreen] = useState<MultiScreen>('list');
   const [createdGame, setCreatedGame] = useState<Duel | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const resolvingGames = useRef(new Set<number>());
   const { data: openGames, error: openGamesError, isLoading, refetch: refetchGames } = useQuery({
     queryKey: ['mp-games', 'open'],
     queryFn: apiGetOpenDuels,
-    staleTime: 10_000,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
   });
+  const { data: createdGameResponse } = useQuery({
+    queryKey: ['mp-game', createdGame?.id],
+    queryFn: () => apiGetDuel(createdGame!.id),
+    enabled: screen === 'share' && Boolean(createdGame),
+    refetchInterval: screen === 'share' ? 2_000 : false,
+  });
+  useEffect(() => {
+    if (createdGameResponse?.game && createdGameResponse.game.id === createdGame?.id) {
+      setCreatedGame(createdGameResponse.game);
+    }
+  }, [createdGameResponse, createdGame?.id]);
   const { data: config } = useQuery({
     queryKey: ['config'],
     queryFn: apiConfig,
@@ -65,14 +93,44 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const bet = parseRubInput(betInput);
   const betTooHigh = bet > gs.rub;
   const canCreate = bet > 0 && !betTooHigh;
-  const createdGameDef = createdGame ? getGameDef(createdGame.kind) : null;
-  const createdGameLink = createdGame
-    ? buildBotLink(botUsername, { startapp: `mpgame_${createdGame.id}` }) ?? ''
+  const currentCreatedGame = createdGame;
+  const createdGameDef = currentCreatedGame ? getGameDef(currentCreatedGame.kind) : null;
+  const createdGameLink = currentCreatedGame
+    ? buildBotLink(botUsername, { startapp: `mpgame_${currentCreatedGame.id}` }) ?? ''
     : '';
   const invitedGameAvailable = inviteGameId ? games.some((game) => game.id === inviteGameId) : false;
   const visibleGames = inviteGameId
     ? [...games].sort((a, b) => Number(b.id === inviteGameId) - Number(a.id === inviteGameId))
     : games;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.page-scroll-area')?.scrollTo({ top: 0, behavior: 'auto' });
+  }, [screen]);
+
+  useEffect(() => {
+    const candidates = [
+      ...games,
+      ...(currentCreatedGame ? [currentCreatedGame] : []),
+    ];
+    for (const game of candidates) {
+      if (game.status !== 'open' || duelSecondsLeft(game.expires_at, nowMs) > 0 || resolvingGames.current.has(game.id)) {
+        continue;
+      }
+      resolvingGames.current.add(game.id);
+      void apiResolveDuel(game.id)
+        .then((result) => {
+          if (currentCreatedGame?.id === game.id) setCreatedGame(result.game);
+          void refetchGames();
+        })
+        .catch(() => undefined)
+        .finally(() => resolvingGames.current.delete(game.id));
+    }
+  }, [games, currentCreatedGame, nowMs, refetchGames]);
 
   const setPresetBet = (amount: BetAmount) => {
     setBetInput(String(amount));
@@ -93,7 +151,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
       const result = await apiCreateDuel(selectedGame, bet);
       setCreatedGame(result.game);
       setScreen('share');
-      setMessage('Игра создана. Ждём второго игрока.');
+      setMessage('Комната создана. Вступи сам и пригласи ещё игроков.');
       onRefresh();
       void refetchGames();
     } catch (e) {
@@ -117,9 +175,9 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   };
 
   const shareInviteLink = () => {
-    if (!createdGame || !createdGameLink) return;
-    const title = createdGameDef?.name ?? createdGame.kind;
-    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ₽${fmt(createdGame.stake_rub)}`);
+    if (!currentCreatedGame || !createdGameLink) return;
+    const title = createdGameDef?.name ?? currentCreatedGame.kind;
+    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ₽${fmt(currentCreatedGame.stake_rub)}`);
   };
 
   const joinGame = async (gameId: number) => {
@@ -128,8 +186,11 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     setMessage(null);
     setActionError(null);
     try {
-      await apiJoinDuel(gameId);
-      setMessage('Ты присоединился к игре.');
+      const result = await apiJoinDuel(gameId);
+      if (currentCreatedGame?.id === gameId) setCreatedGame(result.game);
+      setMessage(result.game.status === 'finished'
+        ? (result.game.outcome_message ?? 'Игра завершена.')
+        : 'Ты присоединился к игре.');
       onRefresh();
       void refetchGames();
     } catch (e) {
@@ -139,7 +200,8 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     }
   };
 
-  if (screen === 'share' && createdGame) {
+  if (screen === 'share' && currentCreatedGame) {
+    const createdSecondsLeft = duelSecondsLeft(currentCreatedGame.expires_at, nowMs);
     return (
       <div className="p-[14px] flex flex-col gap-3">
         <div className="flex items-center gap-3 mb-1">
@@ -164,12 +226,55 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
           <div>
             <p className="m-0 font-extrabold text-[18px]">Игра создана</p>
             <p className="m-0 mt-1 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {createdGameDef?.name ?? createdGame.kind} · ставка ₽{fmt(createdGame.stake_rub)}
+              {createdGameDef?.name ?? currentCreatedGame.kind} · ставка ₽{fmt(currentCreatedGame.stake_rub)}
             </p>
           </div>
           <div className="surface-subtle w-full px-3 py-[10px] rounded-xl text-[12px] break-all select-all text-left" style={{ color: 'var(--tg-theme-hint-color)' }}>
             {createdGameLink}
           </div>
+        </div>
+
+        <div className="card flex flex-col gap-3" style={{ background: 'rgba(var(--c-orange-rgb),0.08)', borderColor: 'rgba(var(--c-orange-rgb),0.25)' }}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="m-0 text-[12px] uppercase tracking-[1px] font-extrabold text-tg-hint">Время на сбор</p>
+              <p className="m-0 mt-1 text-[28px] font-display font-extrabold tabular-nums" style={{ color: createdSecondsLeft <= 60 ? 'var(--c-red-soft)' : 'var(--c-orange)' }}>
+                {formatDuelTimer(createdSecondsLeft)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="m-0 text-[12px] text-tg-hint">Участники</p>
+              <p className="m-0 mt-1 text-[22px] font-extrabold tabular-nums">{currentCreatedGame.participant_count}/{currentCreatedGame.max_players}</p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            {currentCreatedGame.participants.length > 0 ? currentCreatedGame.participants.map((participant) => (
+              <div key={participant.player_id} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface-subtle)' }}>
+                <span className="text-[13px] font-bold truncate">{participant.nickname}{participant.player_id === currentCreatedGame.participants[0]?.player_id ? ' · создатель' : ''}</span>
+                <span className="text-[11px] text-tg-hint">в игре</span>
+              </div>
+            )) : (
+              <p className="m-0 text-[12px] text-tg-hint">Пока никто не вошёл. Ставка спишется после нажатия «Войти».</p>
+            )}
+          </div>
+          {currentCreatedGame.status === 'open' && !currentCreatedGame.viewer_joined && (
+            <button
+              onClick={() => void joinGame(currentCreatedGame.id)}
+              disabled={busy || createdSecondsLeft <= 0}
+              className="w-full py-[13px] rounded-xl border-none font-extrabold text-[15px] disabled:opacity-50"
+              style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
+            >
+              Войти в игру · ₽{fmt(currentCreatedGame.stake_rub)}
+            </button>
+          )}
+          {currentCreatedGame.status === 'open' && currentCreatedGame.viewer_joined && (
+            <p className="m-0 text-[12px] font-bold" style={{ color: 'var(--c-green)' }}>Ты уже участвуешь. Ждём остальных игроков.</p>
+          )}
+          {currentCreatedGame.status !== 'open' && (
+            <p className="m-0 text-[12px] font-bold" style={{ color: currentCreatedGame.status === 'finished' ? 'var(--c-green)' : 'var(--c-orange)' }}>
+              {currentCreatedGame.outcome_message ?? 'Игра завершена.'}
+            </p>
+          )}
         </div>
 
         <button
@@ -201,6 +306,13 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
 
   return (
     <div className="p-[14px] flex flex-col gap-3">
+      <div className="card flex flex-col gap-2" style={{ background: 'rgba(var(--c-blue-rgb),0.07)', borderColor: 'rgba(var(--c-blue-rgb),0.2)' }}>
+        <div className="flex items-center justify-between gap-3">
+          <p className="m-0 text-[13px] font-extrabold">Мультиплеерный раунд</p>
+          <span className="text-[12px] font-extrabold tabular-nums" style={{ color: 'var(--c-orange)' }}>10:00</span>
+        </div>
+        <p className="m-0 text-[12px] text-tg-hint">До 3 игроков. Ставка списывается при входе, а банк делится между местами: 70% · 20% · 10%.</p>
+      </div>
       <div className="card flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <p className="m-0 font-bold text-[15px]">Создать игру</p>
@@ -331,16 +443,19 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
               )}
             </div>
             <p className="mt-[2px] mb-0 text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {g.creator_nickname} · ставка ₽{fmt(g.stake_rub)}
+              {g.creator_nickname} · ₽{fmt(g.stake_rub)} · {g.participant_count}/{g.max_players} игроков
+            </p>
+            <p className="mt-[3px] mb-0 text-[11px] font-bold tabular-nums" style={{ color: duelSecondsLeft(g.expires_at, nowMs) <= 60 ? 'var(--c-red-soft)' : 'var(--c-orange)' }}>
+              ⏱ {formatDuelTimer(duelSecondsLeft(g.expires_at, nowMs))} на вход
             </p>
           </div>
           <button
             onClick={() => void joinGame(g.id)}
-            disabled={busy}
+            disabled={busy || g.viewer_joined || duelSecondsLeft(g.expires_at, nowMs) <= 0}
             className="px-4 py-2 rounded-xl border-none font-bold text-[13px] shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: 'var(--tg-theme-button-text-color)', boxShadow: '0 2px 8px rgba(var(--c-blue-rgb),0.3)' }}
+            style={{ background: g.viewer_joined ? 'var(--surface-subtle)' : 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: g.viewer_joined ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)', boxShadow: g.viewer_joined ? 'none' : '0 2px 8px rgba(var(--c-blue-rgb),0.3)' }}
           >
-            Войти
+            {g.viewer_joined ? 'Ты в игре' : 'Войти'}
           </button>
         </div>
       )})}
