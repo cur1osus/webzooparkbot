@@ -362,14 +362,14 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                 Мои животные · {gs.animals.length} · нажми для карточки
               </p>
               {gs.animals.length > 1 && (
-                <div className="flex flex-wrap gap-[6px] mb-2">
+                <div className="grid grid-cols-4 gap-1 mb-2">
                   {ANIMAL_SORTS.map(s => {
                     const active = s.id === animalSort;
                     return (
                       <button
                         key={s.id}
                         onClick={() => setAnimalSort(s.id)}
-                        className="shrink-0 px-[12px] py-[6px] rounded-full text-[12px] font-bold border-none cursor-pointer whitespace-nowrap transition-colors"
+                        className="min-w-0 w-full px-1 py-[10px] rounded-xl text-[11px] font-bold border-none cursor-pointer whitespace-nowrap transition-colors"
                         style={{
                           background: active ? 'color-mix(in srgb, var(--c-gold) 18%, transparent)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 9%, transparent)',
                           color: active ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
