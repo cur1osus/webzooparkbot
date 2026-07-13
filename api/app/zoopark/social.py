@@ -30,7 +30,7 @@ from api.app.zoopark.catalog import (
     SPECIES_BY_ID,
 )
 from api.app.zoopark import achievements as achievements_module
-from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.income import on_expedition_subquery, sync_player_income
 from api.app.zoopark.profile import get_clan, get_player
 from api.app.zoopark.season import active_season
 
@@ -116,6 +116,7 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
                 Animal.season_id == season.id,
                 Animal.removed_at.is_(None),
                 Animal.dies_at > utcnow(),
+                Animal.id.not_in(on_expedition_subquery()),
             )
         ).all()
         species_counts: dict[int, int] = {}

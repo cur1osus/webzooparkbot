@@ -292,6 +292,7 @@ def count_alive_animals(session: Session, player_id: int, season_id: int | None 
 
 
 def alive_animals(session: Session, player_id: int, season_id: int) -> list[tuple[Animal, str | None]]:
+    """Alive animals currently visible in the zoo, excluding an active expedition squad."""
     rows = list(
         session.execute(
             select(Animal, Locality.habitat)
@@ -300,6 +301,7 @@ def alive_animals(session: Session, player_id: int, season_id: int) -> list[tupl
                 Animal.player_id == player_id,
                 Animal.season_id == season_id,
                 alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
             )
             .order_by(Animal.acquired_at.desc())
         ).all()

@@ -8,7 +8,7 @@ import pytest
 
 from api.app.db.connection import get_session
 from api.app.db.models import Animal, Expedition, LedgerEntry, PackOpening, Player, utcnow
-from api.app.zoopark import progression
+from api.app.zoopark import progression, social
 from api.app.zoopark.catalog import (
     BREED_TIER_INDEX,
     EXPEDITION_SQUAD_MIN,
@@ -188,6 +188,22 @@ class TestExpeditionLifecycle:
         with get_session() as session:
             row = session.query(Player).filter_by(telegram_id=player).one()
             assert row.income_rub_per_min < before
+
+    def test_animals_on_an_expedition_are_hidden_from_zoo(self, db, player, grant):
+        from api.app.zoopark.core import me
+
+        squad = self._squad(player, grant)
+        locality_id = progression.list_localities(player)["localities"][0]["id"]
+        progression.start_expedition(player, StartExpeditionBody(locality_id=locality_id, animal_ids=squad))
+
+        state = me(player)
+        visible_ids = {animal["id"] for animal in state["animals"]}
+        assert not visible_ids.intersection(squad)
+        assert state["live_animals_count"] == len(state["animals"])
+
+        public_profile = social.public_profile(player, player)
+        assert public_profile["animals_count"] == len(state["animals"])
+        assert public_profile["animals_count"] < len(squad) + len(state["animals"])
 
     def test_locality_upgrade_reduces_upkeep(self, db, player, grant):
         from api.app.zoopark.core import me
