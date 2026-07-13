@@ -63,6 +63,7 @@ def top(tg_id: int) -> dict:
                     "nickname_color": player.nickname_color,
                     "profile_emoji": player.profile_emoji,
                     "profile_frame": player.profile_frame,
+                    "profile_wallpaper": player.profile_wallpaper,
                     "income_rub_per_min": player.income_rub_per_min,
                     "is_me": is_me,
                 }

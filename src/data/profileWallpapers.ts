@@ -1,18 +1,19 @@
 import type { ProfileWallpaper } from '@/types';
 
-// Catalogue mirror of the server's PROFILE_WALLPAPERS. The actual fills/patterns are
-// original CSS/SVG in `.wallpaper-<id>` (no third-party assets). `accent` tints the shop
-// button; `label` is the display name.
+// Catalogue mirror of the server's PROFILE_WALLPAPERS. Labels and accents come from real
+// Telegram NFT gift backdrops — colours scraped by scripts/extract_gift_backdrops.py and
+// baked into `.wallpaper-<id>` (backdrop gradient + tiled symbol in the gift's own pattern
+// colour). The ids stay stable so ownership survives a re-theme.
 export const PROFILE_WALLPAPERS: { id: ProfileWallpaper; label: string; accent: string }[] = [
   { id: 'none', label: 'Без обоев', accent: 'var(--tg-theme-hint-color)' },
-  { id: 'dusk', label: 'Сумерки', accent: '#7b4fd0' },
-  { id: 'sunrise', label: 'Рассвет', accent: '#ff5c8a' },
-  { id: 'meadow', label: 'Луг', accent: '#2fb98a' },
-  { id: 'ocean', label: 'Океан', accent: '#2f9fd0' },
-  { id: 'bubbles', label: 'Пузыри', accent: '#22b0a2' },
-  { id: 'grid', label: 'Сетка', accent: '#52658f' },
-  { id: 'paws', label: 'Лапки', accent: '#c47c46' },
-  { id: 'stars', label: 'Звёзды', accent: '#6a57c8' },
+  { id: 'dusk', label: 'Аметист', accent: '#b17da5' },
+  { id: 'sunrise', label: 'Персиммон', accent: '#e7a75a' },
+  { id: 'meadow', label: 'Мятный', accent: '#7ecb82' },
+  { id: 'ocean', label: 'Сапфир', accent: '#80a4b8' },
+  { id: 'bubbles', label: 'Циан', accent: '#31b5aa' },
+  { id: 'grid', label: 'Фанданго', accent: '#e28ab6' },
+  { id: 'paws', label: 'Капучино', accent: '#b1907e' },
+  { id: 'stars', label: 'Стальной', accent: '#97a2ac' },
 ];
 
 export const wallpaperClass = (id: string | null | undefined): string =>

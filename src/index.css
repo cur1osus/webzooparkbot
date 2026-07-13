@@ -328,42 +328,65 @@ button, input, select, textarea { font: inherit; }
   inset: 0;
   background: linear-gradient(to bottom, rgba(8, 10, 18, 0.12), rgba(8, 10, 18, 0.34));
 }
-.wallpaper-dusk    { background-image: linear-gradient(150deg, #3a2a6a, #5b3aa6 55%, #7b4fd0); }
-.wallpaper-sunrise { background-image: linear-gradient(150deg, #ff7a5c, #ff5c8a 55%, #ffb14e); }
-.wallpaper-meadow  { background-image: linear-gradient(150deg, #1f9e6e, #2fb98a 55%, #6fe0a0); }
-.wallpaper-ocean   { background-image: linear-gradient(150deg, #1f6ea6, #2f9fd0 55%, #5fd0e6); }
+.wallpaper-dusk {
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%28101%2C40%2C82%2C0.5%29%27%3E%3Cpath%20d%3D%27M22%209%20C23%2018%2026%2021%2035%2022%20C26%2023%2023%2026%2022%2035%20C21%2026%2018%2023%209%2022%20C18%2021%2021%2018%2022%209%20Z%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%28101%2C40%2C82%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%28101%2C40%2C82%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #b17da5, #8c577a 82%);
+  background-size: 44px 44px, cover;
+}
+.wallpaper-sunrise {
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%28173%2C14%2C0%2C0.5%29%27%3E%3Cpath%20d%3D%27M22%209%20C23%2018%2026%2021%2035%2022%20C26%2023%2023%2026%2022%2035%20C21%2026%2018%2023%209%2022%20C18%2021%2021%2018%2022%209%20Z%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%28173%2C14%2C0%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%28173%2C14%2C0%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #e7a75a, #c5675f 82%);
+  background-size: 44px 44px, cover;
+}
+.wallpaper-meadow {
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%282%2C107%2C34%2C0.5%29%27%3E%3Ccircle%20cx%3D%2722%27%20cy%3D%2716%27%20r%3D%275%27%2F%3E%3Ccircle%20cx%3D%2716%27%20cy%3D%2724%27%20r%3D%275%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%2724%27%20r%3D%275%27%2F%3E%3Crect%20x%3D%2721%27%20y%3D%2724%27%20width%3D%272%27%20height%3D%279%27%20rx%3D%271%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%282%2C107%2C34%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%282%2C107%2C34%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #7ecb82, #459e5a 82%);
+  background-size: 44px 44px, cover;
+}
+.wallpaper-ocean {
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%2821%2C55%2C75%2C0.5%29%27%3E%3Cpath%20d%3D%27M22%2010%20L25%2018%20L34%2018%20L27%2023%20L29%2032%20L22%2027%20L15%2032%20L17%2023%20L10%2018%20L19%2018%20Z%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%2821%2C55%2C75%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%2821%2C55%2C75%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #80a4b8, #607c91 82%);
+  background-size: 44px 44px, cover;
+}
 .wallpaper-bubbles {
   background-image:
-    radial-gradient(circle, rgba(255,255,255,0.16) 2.5px, transparent 3px),
-    linear-gradient(150deg, #17998f, #22b0a2 60%, #4fd8c4);
-  background-size: 26px 26px, cover;
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%280%2C79%2C79%2C0.5%29%27%3E%3Cpath%20d%3D%27M22%2010%20L31%2022%20L22%2034%20L13%2022%20Z%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%280%2C79%2C79%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%280%2C79%2C79%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #31b5aa, #189599 82%);
+  background-size: 44px 44px, cover;
 }
 .wallpaper-grid {
   background-image:
-    linear-gradient(rgba(255,255,255,0.10) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.10) 1px, transparent 1px),
-    linear-gradient(150deg, #2b3550, #38476e 60%, #52658f);
-  background-size: 24px 24px, 24px 24px, cover;
-  background-repeat: repeat, repeat, no-repeat;
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%28142%2C5%2C78%2C0.5%29%27%3E%3Cpath%20d%3D%27M22%2031%20C12%2024%2010%2017%2015%2013.5%20C18.5%2011%2022%2014%2022%2016.5%20C22%2014%2025.5%2011%2029%2013.5%20C34%2017%2032%2024%2022%2031%20Z%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%28142%2C5%2C78%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%28142%2C5%2C78%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #e28ab6, #a4588b 82%);
+  background-size: 44px 44px, cover;
 }
 .wallpaper-paws {
   background-image:
-    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2746%27%20height%3D%2746%27%20viewBox%3D%270%200%2046%2046%27%3E%3Cg%20fill%3D%27rgba%28255%2C255%2C255%2C0.14%29%27%3E%3Cellipse%20cx%3D%2723%27%20cy%3D%2728%27%20rx%3D%277%27%20ry%3D%276%27%2F%3E%3Ccircle%20cx%3D%2714%27%20cy%3D%2719%27%20r%3D%272.6%27%2F%3E%3Ccircle%20cx%3D%2720%27%20cy%3D%2715%27%20r%3D%272.8%27%2F%3E%3Ccircle%20cx%3D%2727%27%20cy%3D%2715%27%20r%3D%272.8%27%2F%3E%3Ccircle%20cx%3D%2733%27%20cy%3D%2719%27%20r%3D%272.6%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"),
-    linear-gradient(150deg, #a6642f, #c47c46 60%, #e0a06f);
-  background-size: 46px 46px, cover;
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%2874%2C50%2C38%2C0.5%29%27%3E%3Cellipse%20cx%3D%2722%27%20cy%3D%2726%27%20rx%3D%276.5%27%20ry%3D%275.5%27%2F%3E%3Ccircle%20cx%3D%2714%27%20cy%3D%2718%27%20r%3D%272.5%27%2F%3E%3Ccircle%20cx%3D%2719%27%20cy%3D%2714%27%20r%3D%272.7%27%2F%3E%3Ccircle%20cx%3D%2725%27%20cy%3D%2714%27%20r%3D%272.7%27%2F%3E%3Ccircle%20cx%3D%2730%27%20cy%3D%2718%27%20r%3D%272.5%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%2874%2C50%2C38%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%2874%2C50%2C38%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #b1907e, #7c6356 82%);
+  background-size: 44px 44px, cover;
 }
 .wallpaper-stars {
   background-image:
-    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2742%27%20height%3D%2742%27%20viewBox%3D%270%200%2042%2042%27%3E%3Cpath%20fill%3D%27rgba%28255%2C255%2C255%2C0.16%29%27%20d%3D%27M21%206%20C22%2015%2027%2020%2036%2021%20C27%2022%2022%2027%2021%2036%20C20%2027%2015%2022%206%2021%20C15%2020%2020%2015%2021%206%20Z%27%2F%3E%3Ccircle%20cx%3D%2734%27%20cy%3D%279%27%20r%3D%271.6%27%20fill%3D%27rgba%28255%2C255%2C255%2C0.12%29%27%2F%3E%3Ccircle%20cx%3D%278%27%20cy%3D%2733%27%20r%3D%271.6%27%20fill%3D%27rgba%28255%2C255%2C255%2C0.12%29%27%2F%3E%3C%2Fsvg%3E"),
-    linear-gradient(150deg, #2b2a6a, #43379a 60%, #6a57c8);
-  background-size: 42px 42px, cover;
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2744%27%20height%3D%2744%27%20viewBox%3D%270%200%2044%2044%27%3E%3Cg%20fill%3D%27rgba%2851%2C69%2C82%2C0.5%29%27%3E%3Cpath%20d%3D%27M22%2010%20L25%2018%20L34%2018%20L27%2023%20L29%2032%20L22%2027%20L15%2032%20L17%2023%20L10%2018%20L19%2018%20Z%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%277%27%20cy%3D%277%27%20r%3D%271.5%27%20fill%3D%27rgba%2851%2C69%2C82%2C0.32%29%27%2F%3E%3Ccircle%20cx%3D%2737%27%20cy%3D%2737%27%20r%3D%271.5%27%20fill%3D%27rgba%2851%2C69%2C82%2C0.32%29%27%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(circle at 50% 34%, #97a2ac, #63727c 82%);
+  background-size: 44px 44px, cover;
 }
 /* Small non-layered preview swatch for the shop grid: no scrim, rounded tile. */
 .wallpaper-swatch { border-radius: 8px; background-size: cover; }
-.wallpaper-swatch.wallpaper-bubbles { background-size: 16px 16px, cover; }
-.wallpaper-swatch.wallpaper-grid { background-size: 12px 12px, 12px 12px, cover; }
-.wallpaper-swatch.wallpaper-paws { background-size: 28px 28px, cover; }
-.wallpaper-swatch.wallpaper-stars { background-size: 26px 26px, cover; }
+/* swatch sizes */
+.wallpaper-swatch.wallpaper-dusk { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-sunrise { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-meadow { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-ocean { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-bubbles { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-grid { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-paws { background-size: 24px 24px, cover; }
+.wallpaper-swatch.wallpaper-stars { background-size: 24px 24px, cover; }
 
 .top-page {
   display: flex;
@@ -639,6 +662,8 @@ button, input, select, textarea { font: inherit; }
   box-shadow: inset 0 1px 0 var(--card-highlight);
 }
 .top-player-row {
+  position: relative;
+  overflow: hidden;
   display: flex;
   width: 100%;
   align-items: center;
@@ -650,6 +675,12 @@ button, input, select, textarea { font: inherit; }
   background: transparent;
   cursor: pointer;
   text-align: left;
+}
+/* A player's wallpaper tints their row. A heavy scrim keeps it a faint texture behind the
+   name rather than a bright band, so the leaderboard stays readable. */
+.top-player-row > *:not(.profile-wallpaper) { position: relative; z-index: 1; }
+.profile-wallpaper--row::after {
+  background: linear-gradient(to right, rgba(8, 10, 18, 0.66), rgba(8, 10, 18, 0.82));
 }
 .top-player-row:last-child { border-bottom: 0; }
 .top-player-row-me { background: rgba(var(--c-blue-rgb),0.08); }

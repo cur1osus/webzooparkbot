@@ -195,6 +195,9 @@ function PlayerRow({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: Top
       onClick={() => onSelect(entry)}
       aria-label={`Открыть профиль ${entry.nickname}`}
     >
+      {entry.profile_wallpaper && entry.profile_wallpaper !== 'none' && (
+        <div className={`profile-wallpaper profile-wallpaper--row ${wallpaperClass(entry.profile_wallpaper)}`} aria-hidden="true" />
+      )}
       <RankMark rank={entry.rank} />
       <ProfileBadge profileEmoji={entry.profile_emoji} size={42} frame={entry.profile_frame} />
       <div className="top-player-main">

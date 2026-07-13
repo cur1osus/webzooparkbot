@@ -5,6 +5,7 @@ export interface TopEntry {
   nickname_color: string;
   profile_emoji: string | null;
   profile_frame: string;
+  profile_wallpaper: string;
   income_rub_per_min: number;
   is_me: boolean;
 }
