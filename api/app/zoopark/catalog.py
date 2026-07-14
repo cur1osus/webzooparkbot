@@ -545,7 +545,9 @@ FORGE_CREATE_PAW = 350
 FORGE_CREATE_GROWTH = 1.15
 FORGE_UPGRADE_BASE_USD = 5_000
 FORGE_UPGRADE_FAIL_PCT_PER_LEVEL = 8
-FORGE_MERGE_BASE_USD = 1_000
+# Merging two items into one is a flat, deliberately steep dollar fee — set well above any
+# item's resale, so merge-then-sell can never turn a profit regardless of the inputs.
+FORGE_MERGE_COST_USD = 100_000
 FORGE_MAX_ITEM_LEVEL = 12
 FORGE_MAX_ACTIVE_ITEMS = 3
 
@@ -564,18 +566,19 @@ def forge_create_cost_usd(creations: int) -> int:
     return int(FORGE_CREATE_BASE_USD * (FORGE_CREATE_GROWTH ** max(0, creations)))
 
 
-# Selling is a partial refund — never a profit. The resale base is a small flat amount,
-# deliberately *pinned* and decoupled from the (now large and escalating) create price:
-# coupling them, as the old `create_base × 0.4` did, would let an item forged cheaply under
-# the old price be dumped for a fortune the moment the create price rose. Rarity drives an
-# item's *bonuses*, not its resale; only the level (upgrade investment) raises the price.
-FORGE_SELL_BASE_USD = 48
-FORGE_SELL_PER_LEVEL_USD = int(FORGE_UPGRADE_BASE_USD * 0.4)
+# Selling is a partial refund — never a profit. Resale returns 40% of the create price plus
+# 40% of each upgrade level's base. It stays safe because the create price is an $80k+ sink
+# and merging is a flat $100k fee: both dwarf the 40% resale, so no create/merge→sell loop
+# turns a profit. Resale is rarity-independent (you pay the same to create any rarity), so
+# only the level (upgrade investment) raises the price.
+FORGE_SELL_REFUND_RATE = 0.4
+FORGE_SELL_PER_LEVEL_USD = int(FORGE_UPGRADE_BASE_USD * FORGE_SELL_REFUND_RATE)
 
 
 def item_sell_price_usd(rarity: ItemRarity, level: int) -> int:
     del rarity  # resale is rarity-independent — see note above
-    return FORGE_SELL_BASE_USD + max(0, level) * FORGE_SELL_PER_LEVEL_USD
+    base = round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE)
+    return base + max(0, level) * FORGE_SELL_PER_LEVEL_USD
 
 
 # ─── Item properties ──────────────────────────────────────────────────────────

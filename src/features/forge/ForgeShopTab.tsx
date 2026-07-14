@@ -3,7 +3,7 @@ import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/
 import { tmaConfirm } from '@/lib/tma';
 import type { ForgeItem, GameState } from '@/types';
 import { fmt } from '@/utils/format';
-import { FORGE_CREATE_PAW, forgeUpgradeCostUsd, PROPERTY_ICON } from '@/data/itemProperties';
+import { FORGE_CREATE_PAW, FORGE_MERGE_COST_USD, forgeUpgradeCostUsd, PROPERTY_ICON } from '@/data/itemProperties';
 
 const RARITY_COLOR: Record<string, string> = {
   common: 'var(--tg-theme-hint-color)', rare: 'var(--c-green)', epic: 'var(--c-purple)', mythical: 'var(--c-orange)', legendary: 'var(--c-gold)',
@@ -135,9 +135,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
       return;
     }
     const item1 = items.find(i => i.id === mergeFirst)!;
-    const n1 = item1.properties?.length ?? 0;
-    const n2 = item.properties?.length ?? 0;
-    const cost = 1_000 * (n1 + n2 + Math.max(item1.level + item.level, 1));
+    const cost = FORGE_MERGE_COST_USD;
     if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}`, `Слить «${item1.name}» + «${item.name}»?`))) {
       setMergeFirst(null);
       return;

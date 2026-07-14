@@ -21,7 +21,8 @@ from api.app.zoopark.catalog import (
     RATE_MIN_RUB_PER_USD,
     SOLO_WIN_CHANCE_PCT,
     FORGE_CREATE_BASE_USD,
-    FORGE_MERGE_BASE_USD,
+    FORGE_MAX_ITEM_LEVEL,
+    FORGE_MERGE_COST_USD,
     FORGE_UPGRADE_BASE_USD,
     ITEM_RARITIES,
     MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME,
@@ -177,8 +178,9 @@ class TestForgeCannotPrintMoney:
             assert gain < FORGE_UPGRADE_BASE_USD * (level + 1)
 
     def test_merging_costs_more_than_the_result_sells_for(self):
-        cheapest_merge = FORGE_MERGE_BASE_USD * (1 + 1 + 1)
-        assert item_sell_price_usd("legendary", 0) < cheapest_merge
+        # Merge is a flat fee; it must stay above the resale of even a max-level item, so a
+        # merge-then-sell can never turn a profit.
+        assert item_sell_price_usd("legendary", FORGE_MAX_ITEM_LEVEL) < FORGE_MERGE_COST_USD
 
 
 class TestSoloGameKeepsAHouseEdge:

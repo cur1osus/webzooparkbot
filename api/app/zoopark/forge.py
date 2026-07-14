@@ -32,7 +32,7 @@ from api.app.zoopark.catalog import (
     forge_create_cost_usd,
     FORGE_MAX_ACTIVE_ITEMS,
     FORGE_MAX_ITEM_LEVEL,
-    FORGE_MERGE_BASE_USD,
+    FORGE_MERGE_COST_USD,
     FORGE_UPGRADE_BASE_USD,
     FORGE_UPGRADE_FAIL_PCT_PER_LEVEL,
     ITEM_PROPERTIES,
@@ -211,8 +211,8 @@ def forge_upgrade(tg_id: int, body: ForgeItemIdBody) -> dict:
         return result
 
 
-def merge_cost_usd(count_a: int, count_b: int, level_a: int, level_b: int) -> int:
-    return FORGE_MERGE_BASE_USD * (count_a + count_b + max(level_a + level_b, 1))
+def merge_cost_usd() -> int:
+    return FORGE_MERGE_COST_USD
 
 
 def _merge_properties(a: list[ItemProperty], b: list[ItemProperty]) -> list[tuple[PropertyKind, int, int | None]]:
@@ -263,7 +263,7 @@ def forge_merge(tg_id: int, body: ForgeMergeBody) -> dict:
             if item.rarity == "legendary":
                 raise HTTPException(400, "Легендарные предметы нельзя объединять")
 
-        cost = merge_cost_usd(len(item_a.properties), len(item_b.properties), item_a.level, item_b.level)
+        cost = merge_cost_usd()
         ledger.spend(session, player, "usd", cost, "forge_merge")
 
         properties = _merge_properties(list(item_a.properties), list(item_b.properties))

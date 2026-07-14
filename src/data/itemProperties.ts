@@ -37,3 +37,6 @@ export const FORGE_UPGRADE_BASE_USD = 5000;
 export function forgeUpgradeCostUsd(level: number): number {
   return FORGE_UPGRADE_BASE_USD * (level + 1);
 }
+
+/** `FORGE_MERGE_COST_USD`, mirrored: merging two items is a flat fee. */
+export const FORGE_MERGE_COST_USD = 100_000;
