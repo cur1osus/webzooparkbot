@@ -11,6 +11,10 @@ class ClanRequestBody(BaseModel):
     clan_id: int = Field(gt=0)
 
 
+class ClanSpecializationBody(BaseModel):
+    specialization: str = Field(pattern="^(specialist|megapark|wild)$")
+
+
 class TransferCreateBody(BaseModel):
     total_rub: int = Field(ge=1)
     max_claims: int = Field(ge=1, le=100)

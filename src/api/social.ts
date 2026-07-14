@@ -1,6 +1,7 @@
 import type {
   ClanListResponse,
   ClanMembersResponse,
+  ClanDetailsResponse,
   PublicProfile,
   ReferralResponse,
   TopResponse,
@@ -23,6 +24,13 @@ export const apiJoinClan = (clan_id: number) =>
   req<{ ok: boolean; message: string }>('/clans/join', { method: 'POST', body: JSON.stringify({ clan_id }) });
 export const apiLeaveClan = () => req<{ ok: boolean; message: string }>('/clans/leave', { method: 'POST' });
 export const apiGetClanMembers = () => req<ClanMembersResponse>('/clans/members');
+export const apiGetClanDetails = () => req<ClanDetailsResponse>('/clans/details');
+export const apiUpgradeClan = () => req<{ ok: boolean; level: number; message: string }>('/clans/level-up', { method: 'POST' });
+export const apiChooseClanSpecialization = (specialization: string) =>
+  req<{ ok: boolean; specialization: string; message: string }>('/clans/specialization', {
+    method: 'POST',
+    body: JSON.stringify({ specialization }),
+  });
 
 export const apiGetReferrals = () => req<ReferralResponse>('/referrals');
 

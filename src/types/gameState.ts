@@ -59,6 +59,7 @@ export interface ClanInfo {
   level: number;
   member_count: number;
   role: 'owner' | 'member';
+  specialization?: string | null;
 }
 
 export interface GameState {

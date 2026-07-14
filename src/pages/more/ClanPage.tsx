@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { ClanListResponse, ClanMember, ClanOut, GameState } from '@/types';
-import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan, apiGetClanMembers } from '@/api';
+import type { ClanDetailsResponse, ClanListResponse, ClanMember, ClanOut, GameState } from '@/types';
+import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan, apiGetClanMembers, apiGetClanDetails, apiUpgradeClan, apiChooseClanSpecialization } from '@/api';
 import { fmt } from '@/utils/format';
 
 const CLAN_NAME_MIN_LENGTH = 1;
 const CLAN_NAME_MAX_LENGTH = 20;
 
-type ClanTab = 'top' | 'members';
+type ClanTab = 'progress' | 'top' | 'members';
 
 const CLAN_TABS: { id: ClanTab; emoji: string; label: string }[] = [
+  { id: 'progress', emoji: '⚒️', label: 'Развитие' },
   { id: 'top',     emoji: '🏆', label: 'Рейтинг' },
   { id: 'members', emoji: '👥', label: 'Участники' },
 ];
@@ -36,6 +37,8 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+  const [choosingSpec, setChoosingSpec] = useState(false);
 
   const { data, error, isLoading, refetch } = useQuery<ClanListResponse>({
     queryKey: ['clans'],
@@ -50,6 +53,13 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
     enabled: !!gs.clan,
   });
 
+  const { data: detailsData, isLoading: detailsLoading, error: detailsError, refetch: refetchDetails } = useQuery<ClanDetailsResponse>({
+    queryKey: ['clan-details'],
+    queryFn: apiGetClanDetails,
+    staleTime: 15_000,
+    enabled: !!gs.clan,
+  });
+
   const queryError = error instanceof Error ? error.message : null;
   const openClans = data?.clans ?? [];
   const trimmedName = newName.trim();
@@ -58,6 +68,38 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const canAffordCreate = gs.usd >= CLAN_CREATE_COST_USD;
   const canCreate = trimmedName.length >= CLAN_NAME_MIN_LENGTH && trimmedName.length <= CLAN_NAME_MAX_LENGTH && canAffordCreate;
   const isOwner = gs.clan?.role === 'owner';
+
+  const handleUpgrade = async () => {
+    if (upgrading) return;
+    setUpgrading(true);
+    clearMsgs();
+    try {
+      const res = await apiUpgradeClan();
+      setSuccessMsg(res.message);
+      onRefresh();
+      void refetchDetails();
+    } catch (e) {
+      setErrorMsg((e as Error).message ?? 'Не удалось повысить уровень');
+    } finally {
+      setUpgrading(false);
+    }
+  };
+
+  const handleSpecialization = async (specialization: string) => {
+    if (choosingSpec) return;
+    setChoosingSpec(true);
+    clearMsgs();
+    try {
+      const res = await apiChooseClanSpecialization(specialization);
+      setSuccessMsg(res.message);
+      onRefresh();
+      void refetchDetails();
+    } catch (e) {
+      setErrorMsg((e as Error).message ?? 'Не удалось выбрать специализацию');
+    } finally {
+      setChoosingSpec(false);
+    }
+  };
 
   const clearMsgs = () => { setSuccessMsg(null); setErrorMsg(null); };
 
@@ -247,6 +289,67 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
               );
             })}
           </div>
+
+          {/* ── Tab: Top ── */}
+          {tab === 'progress' && (
+            <div className="px-[14px] flex flex-col gap-3 page-enter">
+              {detailsLoading && (
+                <div className="card flex items-center gap-3"><div className="spinner" /><p className="m-0 text-[13px] text-tg-hint">Считаем развитие клана...</p></div>
+              )}
+              {detailsError && <div className="card bg-[rgba(var(--c-red-rgb),0.1)]"><p className="m-0 text-[var(--c-red-soft)]">⚠️ {detailsError instanceof Error ? detailsError.message : 'Ошибка загрузки'}</p></div>}
+              {detailsData && (
+                <>
+                  <div className="card border border-[rgba(var(--c-gold-rgb),0.3)]" style={{ background: 'linear-gradient(145deg, rgba(var(--c-gold-rgb),0.12), var(--card-bg))' }}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="m-0 text-[11px] text-tg-hint uppercase tracking-[0.6px]">Путь клана</p>
+                        <p className="m-0 mt-1 text-[24px] font-extrabold">Уровень {detailsData.level}{detailsData.next_level ? ` → ${detailsData.next_level}` : ' · максимум'}</p>
+                      </div>
+                      <span className="text-[28px]">{detailsData.level >= 3 ? '👑' : '⚒️'}</span>
+                    </div>
+                    {detailsData.requirements.length > 0 && (
+                      <div className="mt-4 flex flex-col gap-2">
+                        <p className="m-0 text-[12px] font-bold text-tg-hint">Условия следующего уровня</p>
+                        {detailsData.requirements.map(requirement => (
+                          <div key={requirement.key} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 surface-subtle">
+                            <span className="text-[13px]">{requirement.met ? '✅' : '⬜'} {requirement.label}</span>
+                            <span className={`text-[12px] font-extrabold tabular-nums ${requirement.met ? 'text-[var(--c-green)]' : 'text-tg-hint'}`}>{fmt(requirement.current)} / {fmt(requirement.target)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {isOwner && detailsData.next_level && (
+                      <button onClick={() => void handleUpgrade()} disabled={!detailsData.can_upgrade || upgrading} className="w-full mt-4 py-3 rounded-xl border-none cursor-pointer btn-primary font-extrabold disabled:opacity-50 disabled:cursor-not-allowed">
+                        {upgrading ? 'Повышаем...' : `Повысить до уровня ${detailsData.next_level}`}
+                      </button>
+                    )}
+                  </div>
+
+                  {detailsData.level >= 3 && (
+                    <div className="card border border-[rgba(var(--c-purple-rgb),0.3)]">
+                      <p className="m-0 font-extrabold">Специализация клана</p>
+                      <p className="mt-1 mb-3 text-[12px] text-tg-hint">Выбор один раз меняет бонусы всех участников.</p>
+                      {detailsData.clan.specialization ? (
+                        <div className="surface-subtle rounded-xl px-3 py-3">
+                          <p className="m-0 font-extrabold">{detailsData.clan.specialization_name}</p>
+                          <p className="m-0 mt-1 text-[12px] text-tg-hint">{detailsData.specializations[detailsData.clan.specialization]?.description}</p>
+                        </div>
+                      ) : isOwner ? (
+                        <div className="flex flex-col gap-2">
+                          {Object.entries(detailsData.specializations).map(([key, spec]) => (
+                            <button key={key} onClick={() => void handleSpecialization(key)} disabled={choosingSpec} className="text-left rounded-xl border px-3 py-3 bg-transparent text-tg-text" style={{ borderColor: 'var(--surface-overlay-border)' }}>
+                              <span className="block font-extrabold">{spec.name}</span>
+                              <span className="block mt-1 text-[12px] text-tg-hint">{spec.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : <p className="m-0 text-[13px] text-tg-hint">Владелец ещё не выбрал специализацию.</p>}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* ── Tab: Top ── */}
           {tab === 'top' && (

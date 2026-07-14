@@ -16,8 +16,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
-from api.app.db.models import Animal, Clan, ClanMember, Item, Locality, Player, Transfer, TransferClaim, utcnow
-from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
+from api.app.db.models import (
+    Animal,
+    Clan,
+    ClanMember,
+    Item,
+    Locality,
+    Player,
+    Transfer,
+    TransferClaim,
+    utcnow,
+)
+from api.app.schemas.social import (
+    ClanCreateBody,
+    ClanRequestBody,
+    ClanSpecializationBody,
+    TransferCreateBody,
+)
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
     CLAN_CREATE_COST_USD,
@@ -30,7 +45,7 @@ from api.app.zoopark.catalog import (
     SPECIES_BY_ID,
 )
 from api.app.zoopark import achievements as achievements_module
-from api.app.zoopark.income import on_expedition_subquery, sync_player_income
+from api.app.zoopark.income import count_alive_animals, on_expedition_subquery, sync_player_income
 from api.app.zoopark.profile import get_clan, get_player, item_payload
 from api.app.zoopark.season import active_season
 
@@ -167,6 +182,20 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
 
 # ─── Clans ────────────────────────────────────────────────────────────────────
 
+CLAN_SPECIALIZATIONS = {
+    "specialist": {
+        "name": "🔬 Редкий зверинец",
+        "description": "+50% дохода от эпических, мифических и легендарных животных; −20% от редких.",
+    },
+    "megapark": {
+        "name": "🏟 Мегапарк",
+        "description": "+1% дохода за каждые 10 животных (до +60%); +15% к содержанию.",
+    },
+    "wild": {
+        "name": "🌿 Дикий заповедник",
+        "description": "+3% дохода за каждый уникальный вид.",
+    },
+}
 
 def _member_counts(session: Session) -> dict[int, int]:
     rows = session.execute(
@@ -175,13 +204,37 @@ def _member_counts(session: Session) -> dict[int, int]:
     return {clan_id: int(count) for clan_id, count in rows}
 
 
+def _clan_entry(clan: Clan, count: int, owner_nickname: str) -> dict:
+    specialization = CLAN_SPECIALIZATIONS.get(clan.specialization or "")
+    return {
+        "id": clan.id,
+        "name": clan.name,
+        "level": clan.level,
+        "member_count": count,
+        "owner_nickname": owner_nickname,
+        "specialization": clan.specialization,
+        "specialization_name": specialization["name"] if specialization else None,
+    }
+
+
+def _my_membership(session: Session, player_id: int) -> ClanMember | None:
+    return session.scalars(select(ClanMember).where(ClanMember.player_id == player_id)).first()
+
+
+def _clan_owner(session: Session, player: Player) -> tuple[Clan, ClanMember]:
+    membership = _my_membership(session, player.id)
+    if membership is None:
+        raise HTTPException(400, "Ты не в клане")
+    clan = session.get(Clan, membership.clan_id, with_for_update=True)
+    if clan is None or clan.owner_id != player.id or membership.role != "owner":
+        raise HTTPException(403, "Только владелец клана может выполнить это действие")
+    return clan, membership
+
+
 def clan_list(tg_id: int) -> dict:
     with get_session() as session:
         me = get_player(session, tg_id)
-        my_membership = (
-            session.scalars(select(ClanMember).where(ClanMember.player_id == me.id)).first() if me else None
-        )
-
+        my_membership = _my_membership(session, me.id) if me else None
         clans = session.scalars(select(Clan).order_by(Clan.level.desc(), Clan.id.asc()).limit(20)).all()
         counts = _member_counts(session)
         owners = {
@@ -195,11 +248,7 @@ def clan_list(tg_id: int) -> dict:
         my_clan = None
         for clan in clans:
             entry = {
-                "id": clan.id,
-                "name": clan.name,
-                "level": clan.level,
-                "member_count": counts.get(clan.id, 0),
-                "owner_nickname": owners.get(clan.owner_id, "—"),
+                **_clan_entry(clan, counts.get(clan.id, 0), owners.get(clan.owner_id, "—")),
             }
             payload.append(entry)
             if my_membership and my_membership.clan_id == clan.id:
@@ -209,6 +258,32 @@ def clan_list(tg_id: int) -> dict:
             "clans": payload,
             "my_clan": my_clan,
             "my_role": my_membership.role if my_membership else None,
+        }
+
+
+def clan_details(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        membership = _my_membership(session, player.id)
+        if membership is None:
+            raise HTTPException(400, "Ты не в клане")
+        clan = session.get(Clan, membership.clan_id)
+        assert clan is not None
+        members = session.scalars(select(ClanMember).where(ClanMember.clan_id == clan.id)).all()
+        total_income = sum(int(member.player.income_rub_per_min) for member in members)
+        animal_counts = {member.player_id: count_alive_animals(session, member.player_id) for member in members}
+        requirements = _level_requirements(clan.level, len(members), total_income, animal_counts)
+        owner = session.get(Player, clan.owner_id)
+        return {
+            "clan": _clan_entry(clan, len(members), owner.nickname if owner else "—"),
+            "my_role": membership.role,
+            "specializations": CLAN_SPECIALIZATIONS,
+            "level": clan.level,
+            "next_level": clan.level + 1 if clan.level < 3 else None,
+            "requirements": requirements,
+            "can_upgrade": all(item["met"] for item in requirements),
         }
 
 
@@ -249,6 +324,8 @@ def clan_join(tg_id: int, body: ClanRequestBody) -> dict:
         if not clan:
             raise HTTPException(404, "Клан не найден")
 
+        if _my_membership(session, player.id):
+            raise HTTPException(400, "Ты уже в клане")
         members = session.scalar(select(func.count(ClanMember.player_id)).where(ClanMember.clan_id == clan.id)) or 0
         if members >= CLAN_MAX_MEMBERS:
             raise HTTPException(400, f"В клане уже {CLAN_MAX_MEMBERS} участников")
@@ -257,7 +334,6 @@ def clan_join(tg_id: int, body: ClanRequestBody) -> dict:
         try:
             session.flush()
         except IntegrityError as exc:
-            # `uq_clan_members_player`: one clan per player, enforced by the schema.
             raise HTTPException(400, "Ты уже в клане") from exc
 
         result = {"ok": True, "message": f"Вступил в клан «{clan.name}»"}
@@ -283,10 +359,12 @@ def clan_members(tg_id: int) -> dict:
 
         members = [
             {
+                "id": member.id,
                 "tg_id": member.telegram_id,
                 "nickname": member.nickname,
                 "role": role,
                 "income_rub_per_min": member.income_rub_per_min,
+                "animals_count": count_alive_animals(session, member.id),
             }
             for member, role in rows
         ]
@@ -307,12 +385,68 @@ def clan_leave(tg_id: int) -> dict:
 
         clan = session.get(Clan, membership.clan_id, with_for_update=True)
         session.delete(membership)
-        # The owner leaving dissolves the clan; `ondelete=CASCADE` clears the memberships.
         if clan is not None and clan.owner_id == player.id:
-            session.delete(clan)
+            next_member = session.scalars(
+                select(ClanMember).where(ClanMember.clan_id == clan.id).order_by(ClanMember.joined_at.asc(), ClanMember.player_id.asc())
+            ).first()
+            if next_member is None:
+                session.delete(clan)
+            else:
+                next_member.role = "owner"
+                clan.owner_id = next_member.player_id
 
         session.commit()
         return {"ok": True, "message": "Покинул клан"}
+
+
+def _level_requirements(level: int, member_count: int, total_income: int, animal_counts: dict[int, int]) -> list[dict]:
+    if level >= 3:
+        return []
+    if level == 1:
+        return [{"key": "members", "label": "Участников", "current": member_count, "target": 3, "met": member_count >= 3}]
+    return [
+        {"key": "members", "label": "Участников", "current": member_count, "target": 5, "met": member_count >= 5},
+        {"key": "income", "label": "Доход клана ₽/мин", "current": total_income, "target": 1000, "met": total_income >= 1000},
+        {"key": "animals", "label": "Животных у каждого", "current": min(animal_counts.values(), default=0), "target": 5, "met": min(animal_counts.values(), default=0) >= 5},
+    ]
+
+
+def clan_level_up(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        clan, _ = _clan_owner(session, player)
+        members = session.scalars(select(ClanMember).where(ClanMember.clan_id == clan.id)).all()
+        counts = {member.player_id: count_alive_animals(session, member.player_id) for member in members}
+        requirements = _level_requirements(clan.level, len(members), sum(int(member.player.income_rub_per_min) for member in members), counts)
+        if clan.level >= 3:
+            raise HTTPException(400, "Клан уже достиг максимального уровня")
+        if not all(item["met"] for item in requirements):
+            raise HTTPException(400, "Условия повышения уровня ещё не выполнены")
+        clan.level += 1
+        session.commit()
+        return {"ok": True, "level": clan.level, "message": f"Клан достиг {clan.level}-го уровня"}
+
+
+def clan_choose_specialization(tg_id: int, body: ClanSpecializationBody) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        clan, _ = _clan_owner(session, player)
+        if clan.level < 3:
+            raise HTTPException(400, "Специализация открывается на 3-м уровне")
+        if clan.specialization:
+            raise HTTPException(400, "Специализация уже выбрана")
+        clan.specialization = body.specialization
+        for member in session.scalars(select(ClanMember).where(ClanMember.clan_id == clan.id)).all():
+            member_player = session.get(Player, member.player_id, with_for_update=True)
+            if member_player:
+                sync_player_income(session, member_player)
+        session.commit()
+        spec = CLAN_SPECIALIZATIONS[body.specialization]
+        return {"ok": True, "specialization": body.specialization, "message": f"Выбрано: {spec['name']}"}
 
 
 # ─── Referrals ────────────────────────────────────────────────────────────────

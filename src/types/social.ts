@@ -47,6 +47,7 @@ export interface PublicProfile {
     level: number;
     member_count: number;
     role: 'owner' | 'member';
+    specialization?: string | null;
   } | null;
   species: PublicProfileSpecies[];
   active_items: ForgeItem[];
@@ -58,6 +59,8 @@ export interface ClanOut {
   level: number;
   member_count: number;
   owner_nickname: string;
+  specialization: string | null;
+  specialization_name: string | null;
 }
 
 export interface ClanListResponse {
@@ -75,6 +78,24 @@ export interface ClanMember {
 
 export interface ClanMembersResponse {
   members: ClanMember[];
+}
+
+export interface ClanRequirement {
+  key: string;
+  label: string;
+  current: number;
+  target: number;
+  met: boolean;
+}
+
+export interface ClanDetailsResponse {
+  clan: ClanOut;
+  my_role: 'owner' | 'member';
+  level: number;
+  next_level: number | null;
+  requirements: ClanRequirement[];
+  can_upgrade: boolean;
+  specializations: Record<string, { name: string; description: string }>;
 }
 
 export interface ReferralResponse {

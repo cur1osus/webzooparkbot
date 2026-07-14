@@ -20,7 +20,7 @@ from math import trunc
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from api.app.db.models import Animal, Expedition, ExpeditionMember, Locality, Player, utcnow
+from api.app.db.models import Animal, Clan, ClanMember, Expedition, ExpeditionMember, Locality, Player, utcnow
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.bonuses import Bonuses
@@ -166,6 +166,12 @@ def calc_player_income(
         )
     ).all()
 
+    clan_specialization = session.scalar(
+        select(Clan.specialization)
+        .join(ClanMember, ClanMember.clan_id == Clan.id)
+        .where(ClanMember.player_id == player_id)
+    )
+
     total = 0
     locality_discounted_income = 0.0
     level_discounted_income = 0.0
@@ -173,6 +179,12 @@ def calc_player_income(
     counts_by_species: dict[int, int] = {}
     for animal, locality_habitat, locality_level in rows:
         current_income = animal_income(animal, locality_habitat, active_bonuses)
+        if clan_specialization == "specialist":
+            rarity = SPECIES_BY_ID[animal.species_id]["rarity"]
+            if rarity in ("epic", "mythic", "legendary"):
+                current_income = round(current_income * 1.5)
+            elif rarity == "rare":
+                current_income = round(current_income * 0.8)
         total += current_income
         upkeep_discount = locality_upkeep_discount(locality_level)
         level_discounted_income += current_income * upkeep_discount / 100
@@ -186,6 +198,10 @@ def calc_player_income(
     # small zoos (e.g. 42 × 1.30 should become 55, not 54). Round each derived rate so
     # percentage bonuses remain visible at the new scale.
     total = round(total * active_bonuses.income_multiplier() * diversity_multiplier(list(counts_by_species.values())))
+    if clan_specialization == "megapark":
+        total = round(total * (1 + min(60, len(rows) // 10) / 100))
+    elif clan_specialization == "wild":
+        total = round(total * (1 + len(counts_by_species) * 3 / 100))
 
     base_upkeep = upkeep_rub_per_min(total, len(rows))
     base_percent = 0.0 if total <= 0 else base_upkeep / total
@@ -206,6 +222,8 @@ def calc_player_income(
     elif locality_discounted_income > 0 and base_upkeep > 0:
         locality_relief = max(1, locality_relief)
     upkeep = max(0, base_upkeep - locality_relief)
+    if clan_specialization == "megapark":
+        upkeep = round(upkeep * 1.15)
     upkeep = max(0, round(upkeep * active_bonuses.upkeep_discount_multiplier()))
     return total, upkeep
 

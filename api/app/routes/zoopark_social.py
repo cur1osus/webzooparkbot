@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.social import ClanCreateBody, ClanRequestBody, TransferCreateBody
+from api.app.schemas.social import ClanCreateBody, ClanRequestBody, ClanSpecializationBody, TransferCreateBody
 from api.app.zoopark import social as social_service
 
 router = APIRouter(tags=["social"])
@@ -24,6 +24,11 @@ def clan_list(tg_id: TelegramId):
     return social_service.clan_list(tg_id)
 
 
+@router.get("/api/clans/details")
+def clan_details(tg_id: TelegramId):
+    return social_service.clan_details(tg_id)
+
+
 @router.post("/api/clans")
 def clan_create(body: ClanCreateBody, tg_id: TelegramId):
     return social_service.clan_create(tg_id, body)
@@ -42,6 +47,16 @@ def clan_members(tg_id: TelegramId):
 @router.post("/api/clans/leave")
 def clan_leave(tg_id: TelegramId):
     return social_service.clan_leave(tg_id)
+
+
+@router.post("/api/clans/level-up")
+def clan_level_up(tg_id: TelegramId):
+    return social_service.clan_level_up(tg_id)
+
+
+@router.post("/api/clans/specialization")
+def clan_specialization(body: ClanSpecializationBody, tg_id: TelegramId):
+    return social_service.clan_choose_specialization(tg_id, body)
 
 
 @router.get("/api/referrals")

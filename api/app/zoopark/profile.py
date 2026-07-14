@@ -198,6 +198,7 @@ def get_clan(session: Session, player_id: int) -> dict | None:
         "level": clan.level,
         "member_count": member_count,
         "role": membership.role,
+        "specialization": clan.specialization,
     }
 
 

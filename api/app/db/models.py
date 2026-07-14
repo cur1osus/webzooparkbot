@@ -569,6 +569,7 @@ class Clan(Base):
         BigInteger, ForeignKey("players.id", ondelete="CASCADE", name="fk_clans_owner_id"), nullable=False
     )
     level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
+    specialization: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
     members: Mapped[list[ClanMember]] = relationship(
