@@ -131,6 +131,12 @@ export interface AssignLocalityResult {
   income_rub_per_min: number;
 }
 
+export interface ReleaseAnimalResult {
+  ok: boolean;
+  animal_id: number;
+  income_rub_per_min: number;
+}
+
 export interface BreedResult {
   ok: boolean;
   success: boolean;

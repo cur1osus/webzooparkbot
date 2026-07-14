@@ -394,11 +394,16 @@ PACK_REWARD_RANGES: dict[PackTier, PackRewardRange] = {
 
 # Price doubles per tier: rare is the cheap entry rung, each tier above costs twice as much.
 PACK_TIER_PRICE_MULTIPLIER: dict[PackTier, int] = {"rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
-# Each paid opening makes the next paid pack 5% more expensive for that player this season.
-PACK_PRICE_GROWTH_PER_PURCHASE = 1.05
+# Each paid opening makes the next paid pack 30% more expensive for that player this season.
+# The old 5% barely bit — a player could open dozens of packs a day for almost the entry
+# price. At 30% the fourth paid pack already costs ~2.2× the first, so pack-spam self-limits.
+PACK_PRICE_GROWTH_PER_PURCHASE = 1.30
 # The rare (cheapest paid) pack costs this share of what a pack animal earns over its whole
 # life — the main early-game tuning knob.
 PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = 0.005
+# Packs were 5× too cheap for how much lifetime income each animal prints; this raises the
+# entry price of every tier without touching the merchant (which keys off the fraction above).
+PACK_BASE_PRICE_MULTIPLIER = 5
 
 
 def expected_pack_lifetime_income_rub() -> int:
@@ -406,7 +411,11 @@ def expected_pack_lifetime_income_rub() -> int:
     return int(per_minute * expected_lifespan_minutes())
 
 
-PACK_BASE_PRICE_RUB = int(expected_pack_lifetime_income_rub() * PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME)
+PACK_BASE_PRICE_RUB = int(
+    expected_pack_lifetime_income_rub()
+    * PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME
+    * PACK_BASE_PRICE_MULTIPLIER
+)
 
 
 def pack_reward_range(tier: PackTier) -> PackRewardRange:

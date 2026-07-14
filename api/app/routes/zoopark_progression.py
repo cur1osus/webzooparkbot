@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, OpenPackBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, OpenPackBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import progression as progression_service
 
 router = APIRouter(tags=["progression"])
@@ -42,6 +42,11 @@ def upgrade_locality(body: UpgradeLocalityBody, tg_id: TelegramId):
 @router.post("/api/localities/assign")
 def assign_locality(body: AssignLocalityBody, tg_id: TelegramId):
     return progression_service.assign_locality(tg_id, body)
+
+
+@router.post("/api/animals/release")
+def release_animal(body: ReleaseAnimalBody, tg_id: TelegramId):
+    return progression_service.release_animal(tg_id, body)
 
 
 @router.post("/api/breed")

@@ -23,7 +23,7 @@ from api.app.db.models import (
     Player,
     utcnow,
 )
-from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
@@ -532,6 +532,42 @@ def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
         # Moving an animal into (or out of) its habitat changes income by 50%.
         sync_player_income(session, player)
         result = {"ok": True, "income_rub_per_min": player.income_rub_per_min}
+        session.commit()
+        return result
+
+
+def release_animal(tg_id: int, body: ReleaseAnimalBody) -> dict:
+    """Permanently remove an animal from the zoo so the player can cull their population.
+
+    This is a voluntary, irreversible removal — unlike a natural death or an expedition loss
+    it enqueues no notification. An animal committed to an active expedition cannot be
+    released. Income is resynced so the freed animal stops paying immediately.
+    """
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+
+        animal = session.scalars(
+            select(Animal)
+            .where(
+                Animal.id == body.animal_id,
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
+            )
+            .with_for_update()
+        ).first()
+        if not animal:
+            raise HTTPException(404, "Животное недоступно")
+
+        animal.removed_at = utcnow()
+        animal.removal_reason = "released"
+        animal.sick_since = None
+        income, _ = sync_player_income(session, player)
+        result = {"ok": True, "animal_id": animal.id, "income_rub_per_min": income}
         session.commit()
         return result
 

@@ -8,6 +8,10 @@ class AssignLocalityBody(BaseModel):
     locality_id: int | None = None
 
 
+class ReleaseAnimalBody(BaseModel):
+    animal_id: int = Field(gt=0)
+
+
 class BreedBody(BaseModel):
     animal_id_1: int = Field(gt=0)
     animal_id_2: int = Field(gt=0)

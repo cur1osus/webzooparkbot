@@ -8,6 +8,7 @@ import type {
   ExpeditionInfo,
   ExpeditionStartResponse,
   LocalitiesInfo,
+  ReleaseAnimalResult,
   UpgradeLocalityResult,
   MerchantBuyResponse,
   MerchantResponse,
@@ -45,6 +46,12 @@ export const apiAssignLocality = (animal_id: number, locality_id: number | null)
   req<AssignLocalityResult>('/localities/assign', {
     method: 'POST',
     body: JSON.stringify({ animal_id, locality_id }),
+  });
+/** Permanently remove an animal from the zoo — used to cull the population. Irreversible. */
+export const apiReleaseAnimal = (animal_id: number) =>
+  req<ReleaseAnimalResult>('/animals/release', {
+    method: 'POST',
+    body: JSON.stringify({ animal_id }),
   });
 
 export const apiGetExpeditions = () => req<ExpeditionInfo>('/expeditions');
