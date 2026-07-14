@@ -27,9 +27,9 @@ from api.app.schemas.forge import (
 )
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
-    FORGE_CREATE_BASE_USD,
-    FORGE_CREATE_GROWTH,
+    FORGE_CREATE_COUNTER_EPOCH,
     FORGE_CREATE_PAW,
+    forge_create_cost_usd,
     FORGE_MAX_ACTIVE_ITEMS,
     FORGE_MAX_ITEM_LEVEL,
     FORGE_MERGE_BASE_USD,
@@ -125,17 +125,18 @@ def forge_sets(tg_id: int) -> dict:
 # ─── Create, upgrade, merge, sell ─────────────────────────────────────────────
 
 
-def create_cost_usd(item_count: int) -> int:
-    return int(FORGE_CREATE_BASE_USD * (FORGE_CREATE_GROWTH ** item_count))
-
-
 def forge_create(tg_id: int, body: ForgeCreateBody) -> dict:
     with get_session() as session:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
 
-        item_count = session.scalar(select(func.count(Item.id)).where(Item.player_id == player.id)) or 0
+        # Price escalates with how many items the player has created since the counter epoch,
+        # counted from the ledger — so selling or merging items away never cheapens the next
+        # creation. See FORGE_CREATE_COUNTER_EPOCH for why it is not counted from all time.
+        creations = ledger.count_by_reason(
+            session, player.id, "forge_create", since=FORGE_CREATE_COUNTER_EPOCH
+        )
         rarity = _roll_rarity()
         properties = _roll_properties(rarity)
 
@@ -143,7 +144,7 @@ def forge_create(tg_id: int, body: ForgeCreateBody) -> dict:
             ledger.spend(session, player, "paw", FORGE_CREATE_PAW, "forge_create")
             cost = {"cost_paw": FORGE_CREATE_PAW, "cost_usd": None}
         else:
-            usd_cost = create_cost_usd(int(item_count))
+            usd_cost = forge_create_cost_usd(creations)
             ledger.spend(session, player, "usd", usd_cost, "forge_create")
             cost = {"cost_paw": None, "cost_usd": usd_cost}
 

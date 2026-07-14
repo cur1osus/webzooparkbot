@@ -13,6 +13,7 @@ from api.app.core.config import ADMIN_TG_IDS
 from api.app.db.models import Animal, Clan, ClanMember, Item, ItemSet, Locality, Player, PlayerCosmetic, Season, utcnow
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import bonuses as bonuses_module
+from api.app.zoopark import ledger
 from api.app.zoopark import maintenance
 from api.app.zoopark.bonuses import Bonuses
 from api.app.zoopark.catalog import (
@@ -27,7 +28,9 @@ from api.app.zoopark.catalog import (
     SPECIES_BY_ID,
     SPECIES_RARITY_INCOME_MULT,
     SICK_INCOME_MULT,
+    FORGE_CREATE_COUNTER_EPOCH,
     PropertyKind,
+    forge_create_cost_usd,
     item_sell_price_usd,
 )
 from api.app.zoopark.income import (
@@ -306,6 +309,13 @@ def build_state(session: Session, player: Player) -> dict:
         "season_started_at": _iso(season.starts_at),
         "season_ends_at": _iso(season.ends_at),
         "items": items,
+        # Price to forge the next item — escalates with lifetime creations, so the client
+        # shows the true next cost instead of guessing from items currently on hand.
+        "forge_create_cost_usd": forge_create_cost_usd(
+            ledger.count_by_reason(
+                session, player.id, "forge_create", since=FORGE_CREATE_COUNTER_EPOCH
+            )
+        ),
         "item_sets": list_item_sets(session, player.id),
         "clan": get_clan(session, player.id),
         "achievements": achievements_module.list_achievements(session, player),

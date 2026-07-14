@@ -3,7 +3,7 @@ import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/
 import { tmaConfirm } from '@/lib/tma';
 import type { ForgeItem, GameState } from '@/types';
 import { fmt } from '@/utils/format';
-import { FORGE_CREATE_PAW, forgeCreateCostUsd, PROPERTY_ICON } from '@/data/itemProperties';
+import { FORGE_CREATE_PAW, PROPERTY_ICON } from '@/data/itemProperties';
 
 const RARITY_COLOR: Record<string, string> = {
   common: 'var(--tg-theme-hint-color)', rare: 'var(--c-green)', epic: 'var(--c-purple)', mythical: 'var(--c-orange)', legendary: 'var(--c-gold)',
@@ -63,8 +63,9 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
   const allItems = gs.items;
   const items = pendingItem ? allItems.filter(i => i.id !== pendingItem.id) : allItems;
   const itemCount = allItems.length;
-  // The preview used to read `1 * 1.15^n`, promising a $1 artefact.
-  const usdCost = forgeCreateCostUsd(itemCount);
+  // Server-authoritative: the price escalates with lifetime creations (counted from the
+  // ledger), which the client can't derive from items on hand, so we read it from state.
+  const usdCost = gs.forge_create_cost_usd;
   const pawCost = FORGE_CREATE_PAW;
 
   function showToast(msg: string, ok = true) {

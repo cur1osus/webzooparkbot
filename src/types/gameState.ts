@@ -104,6 +104,8 @@ export interface GameState {
   season_ends_at: string;
 
   items: ForgeItem[];
+  /** Server-authoritative price to forge the next item; escalates with lifetime creations. */
+  forge_create_cost_usd: number;
   item_sets: ForgeSet[];
   clan: ClanInfo | null;
   achievements: Achievement[];

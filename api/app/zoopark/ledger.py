@@ -9,6 +9,7 @@ exploit detectable after the fact instead of merely suspected.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Literal
 
 from fastapi import HTTPException
@@ -151,6 +152,27 @@ def credit_treasury(session: Session, currency: Currency, amount: int) -> int:
 def treasury_balance(session: Session, currency: Currency) -> int:
     row = session.get(Treasury, currency)
     return int(row.balance) if row else 0
+
+
+def count_by_reason(
+    session: Session,
+    player_id: int,
+    reason: Reason,
+    *,
+    since: datetime | None = None,
+) -> int:
+    """How many ledger movements this player has with the given reason — a monotonic,
+    tamper-evident history counter (e.g. the `forge_create` count drives forge price).
+
+    `since` restricts the count to entries at or after that instant, so a counter can be
+    anchored to a cutoff rather than to the beginning of time."""
+    stmt = select(func.count(LedgerEntry.id)).where(
+        LedgerEntry.player_id == player_id,
+        LedgerEntry.reason == reason,
+    )
+    if since is not None:
+        stmt = stmt.where(LedgerEntry.created_at >= since)
+    return int(session.scalar(stmt) or 0)
 
 
 def reconcile(session: Session, player_id: int, currency: Currency) -> tuple[int, int]:

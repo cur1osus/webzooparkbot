@@ -12,6 +12,7 @@ economy state that genuinely changes at runtime is the bank rate, which lives in
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Literal, TypedDict
 
 Rarity = Literal["rare", "epic", "mythic", "legendary"]
@@ -536,8 +537,11 @@ ITEM_RARITY_NAME: dict[ItemRarity, str] = {
     "mythical": "Мифический", "legendary": "Легендарный",
 }
 
-FORGE_CREATE_BASE_USD = 120
+FORGE_CREATE_BASE_USD = 80_000
 FORGE_CREATE_PAW = 350
+# Each item the player has ever created makes the next one 15% more expensive. The counter
+# is the number of `forge_create` ledger entries (see `forge.forge_create`), so it only ever
+# rises — selling or merging an item away does not cheapen the next creation.
 FORGE_CREATE_GROWTH = 1.15
 FORGE_UPGRADE_BASE_USD = 300
 FORGE_UPGRADE_FAIL_PCT_PER_LEVEL = 8
@@ -545,19 +549,33 @@ FORGE_MERGE_BASE_USD = 1_000
 FORGE_MAX_ITEM_LEVEL = 12
 FORGE_MAX_ACTIVE_ITEMS = 3
 
-# Selling is a partial refund of what an item costs to make — never a profit. A freshly
-# created item always sells for less than the create price, which kills the create→sell
-# arbitrage (you can't roll a lucky rarity and dump it for gain). Rarity drives an item's
-# *bonuses*, not its resale: you pay the same to create any rarity, so resale is flat and
-# only the level (upgrade investment) raises it.
-FORGE_SELL_REFUND_RATE = 0.4
+
+# Escalation is counted only from this instant, not from the beginning of time. When this
+# pricing shipped, forging had been near-free (base $120) and some players had already forged
+# thousands of items — 1.15^2000 is effectively infinite, which would lock forging forever.
+# So we anchor the counter here: only `forge_create` ledger rows created at or after this
+# moment escalate the price. Everyone restarts at the base; selling still never cheapens it.
+FORGE_CREATE_COUNTER_EPOCH = datetime(2026, 7, 14, 23, 45, 0, tzinfo=timezone.utc)
+
+
+def forge_create_cost_usd(creations: int) -> int:
+    """Dollar price to forge the *next* item, given how many the player has created since
+    `FORGE_CREATE_COUNTER_EPOCH`. Escalates 15% per prior creation, growing monotonically."""
+    return int(FORGE_CREATE_BASE_USD * (FORGE_CREATE_GROWTH ** max(0, creations)))
+
+
+# Selling is a partial refund — never a profit. The resale base is a small flat amount,
+# deliberately *pinned* and decoupled from the (now large and escalating) create price:
+# coupling them, as the old `create_base × 0.4` did, would let an item forged cheaply under
+# the old price be dumped for a fortune the moment the create price rose. Rarity drives an
+# item's *bonuses*, not its resale; only the level (upgrade investment) raises the price.
+FORGE_SELL_BASE_USD = 48
 FORGE_SELL_PER_LEVEL_USD = int(FORGE_UPGRADE_BASE_USD * 0.4)
 
 
 def item_sell_price_usd(rarity: ItemRarity, level: int) -> int:
     del rarity  # resale is rarity-independent — see note above
-    base = round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE)
-    return base + max(0, level) * FORGE_SELL_PER_LEVEL_USD
+    return FORGE_SELL_BASE_USD + max(0, level) * FORGE_SELL_PER_LEVEL_USD
 
 
 # ─── Item properties ──────────────────────────────────────────────────────────

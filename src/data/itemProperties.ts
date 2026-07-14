@@ -28,11 +28,6 @@ export const PROPERTY_SHORT: Record<PropertyKind, string> = {
   bonus_rerolls: 'Перебросы',
 };
 
-/** `FORGE_CREATE_BASE_USD` and `FORGE_CREATE_GROWTH`, mirrored for the price preview. */
-export const FORGE_CREATE_BASE_USD = 120;
-export const FORGE_CREATE_GROWTH = 1.15;
+/** Paw-coin price of forging an item (the USD price is server-authoritative — it escalates
+ *  with lifetime creations and arrives on game state as `forge_create_cost_usd`). */
 export const FORGE_CREATE_PAW = 350;
-
-export function forgeCreateCostUsd(itemCount: number): number {
-  return Math.floor(FORGE_CREATE_BASE_USD * Math.pow(FORGE_CREATE_GROWTH, itemCount));
-}

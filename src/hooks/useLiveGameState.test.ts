@@ -35,6 +35,7 @@ const baseState: GameState = {
   season_started_at: '2026-12-01T00:00:00.000Z',
   season_ends_at: '2026-12-31T00:00:00.000Z',
   items: [],
+  forge_create_cost_usd: 80000,
   item_sets: [],
   clan: null,
   achievements: [],
