@@ -64,6 +64,8 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
   const totalIncome = locality.animals.reduce((s, a) => s + a.income, 0);
 
   const canAdd = unassignedCount > 0;
+  const hasAnimals = locality.animals.length > 0;
+  const [collapsed, setCollapsed] = useState(hasAnimals);
   return (
     <div
       className="rounded-2xl overflow-hidden"
@@ -72,18 +74,26 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
         border: `1px solid color-mix(in srgb, ${hab.color} 30%, transparent)`,
       }}
     >
-      {/* Header — a full-width horizontal banner tinted with the habitat's own colour, and
-          the tap target for adding an animal. Colours are CSS variables, so alpha comes from
-          color-mix (a `${var}55` hex suffix would be invalid). */}
-      <button
-        onClick={canAdd ? onAdd : undefined}
-        disabled={!canAdd}
-        className="w-full flex items-center gap-3 px-4 py-[16px] border-none text-left"
+      {/* Header — a full-width horizontal banner tinted with the habitat's own colour. Tapping
+          it collapses/expands the animal list, so long localities can be folded away. The
+          "+ добавить" action lives in its own nested button. Colours are CSS variables, so alpha
+          comes from color-mix (a `${var}55` hex suffix would be invalid). */}
+      <div
+        onClick={hasAnimals ? () => setCollapsed(c => !c) : undefined}
+        className="w-full flex items-center gap-3 px-4 py-[16px] text-left"
         style={{
           background: `linear-gradient(90deg, color-mix(in srgb, ${hab.color} 48%, transparent) 0%, color-mix(in srgb, ${hab.color} 20%, transparent) 55%, transparent 100%)`,
-          cursor: canAdd ? 'pointer' : 'default',
+          cursor: hasAnimals ? 'pointer' : 'default',
         }}
       >
+        {hasAnimals && (
+          <span
+            className="text-[12px] shrink-0 transition-transform"
+            style={{ color: hab.color, transform: collapsed ? 'rotate(-90deg)' : 'none' }}
+          >
+            ▾
+          </span>
+        )}
         <div
           className="w-11 h-11 rounded-xl grid place-items-center text-[24px] shrink-0"
           style={{ background: `color-mix(in srgb, ${hab.color} 24%, transparent)`, border: `1px solid color-mix(in srgb, ${hab.color} 42%, transparent)` }}
@@ -104,14 +114,18 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
           )}
         </div>
         {canAdd && (
-          <span className="text-[13px] font-bold shrink-0 flex items-center gap-1" style={{ color: hab.color }}>
+          <button
+            onClick={e => { e.stopPropagation(); onAdd(); }}
+            className="text-[13px] font-bold shrink-0 flex items-center gap-1 border-none bg-transparent cursor-pointer px-1"
+            style={{ color: hab.color }}
+          >
             + добавить
-          </span>
+          </button>
         )}
-      </button>
+      </div>
 
       {/* Animals */}
-      {locality.animals.length > 0 && (
+      {hasAnimals && !collapsed && (
         <div className="flex flex-col gap-[6px] px-4 py-3">
           {locality.animals.map(a => (
             <AnimalChip key={a.id} animal={a} onRemove={() => onRemove(a.id)} />
