@@ -543,7 +543,7 @@ FORGE_CREATE_PAW = 350
 # is the number of `forge_create` ledger entries (see `forge.forge_create`), so it only ever
 # rises — selling or merging an item away does not cheapen the next creation.
 FORGE_CREATE_GROWTH = 1.15
-FORGE_UPGRADE_BASE_USD = 300
+FORGE_UPGRADE_BASE_USD = 5_000
 FORGE_UPGRADE_FAIL_PCT_PER_LEVEL = 8
 FORGE_MERGE_BASE_USD = 1_000
 FORGE_MAX_ITEM_LEVEL = 12

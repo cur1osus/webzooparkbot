@@ -31,3 +31,9 @@ export const PROPERTY_SHORT: Record<PropertyKind, string> = {
 /** Paw-coin price of forging an item (the USD price is server-authoritative — it escalates
  *  with lifetime creations and arrives on game state as `forge_create_cost_usd`). */
 export const FORGE_CREATE_PAW = 350;
+
+/** `FORGE_UPGRADE_BASE_USD`, mirrored for the upgrade-price preview. */
+export const FORGE_UPGRADE_BASE_USD = 5000;
+export function forgeUpgradeCostUsd(level: number): number {
+  return FORGE_UPGRADE_BASE_USD * (level + 1);
+}

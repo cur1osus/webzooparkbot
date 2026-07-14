@@ -3,7 +3,7 @@ import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/
 import { tmaConfirm } from '@/lib/tma';
 import type { ForgeItem, GameState } from '@/types';
 import { fmt } from '@/utils/format';
-import { FORGE_CREATE_PAW, PROPERTY_ICON } from '@/data/itemProperties';
+import { FORGE_CREATE_PAW, forgeUpgradeCostUsd, PROPERTY_ICON } from '@/data/itemProperties';
 
 const RARITY_COLOR: Record<string, string> = {
   common: 'var(--tg-theme-hint-color)', rare: 'var(--c-green)', epic: 'var(--c-purple)', mythical: 'var(--c-orange)', legendary: 'var(--c-gold)',
@@ -109,7 +109,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
   async function handleUpgrade(item: ForgeItem) {
     if (busy) return;
     const level = item.level;
-    const cost = 300 * (level + 1);
+    const cost = forgeUpgradeCostUsd(level);
     const successPct = Math.max(0, 100 - 8 * level);
     if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}\nШанс успеха: ${successPct}%`, `Улучшить ${item.name}?`))) return;
     setBusy(true);
@@ -288,7 +288,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
         items.map(item => {
           const rarityColor = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
           const level = item.level;
-          const upgradeCost = 300 * (level + 1);
+          const upgradeCost = forgeUpgradeCostUsd(level);
           const successPct = Math.max(0, 100 - 8 * level);
           const isLegendary = item.rarity === 'legendary';
           const isSelected = mergeFirst === item.id;
