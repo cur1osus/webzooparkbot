@@ -8,6 +8,7 @@ import { ProfileBadge, type ProfileBadgeTone } from '@/components/ProfileBadge';
 import { Nickname } from '@/components/NicknameEffects';
 import { wallpaperClass } from '@/data/profileWallpapers';
 import { DEVELOPER_TG_ID } from '@/lib/access';
+import { PROPERTY_ICON } from '@/data/itemProperties';
 
 function rankTone(rank: number): ProfileBadgeTone {
   if (rank === 1) return 'gold';
@@ -138,7 +139,14 @@ function PublicProfileSheet({
                       <span className="text-[22px] shrink-0">{item.icon}</span>
                       <div className="min-w-0 flex-1">
                         <p className="m-0 text-[12px] font-bold truncate">{item.name}</p>
-                        <p className="m-0 mt-1 text-[10px] text-tg-hint truncate">ур. {item.level} · {item.properties.map(property => property.label).join(' · ')}</p>
+                        <div className="mt-1 flex flex-col gap-1">
+                          <p className="m-0 text-[10px] text-tg-hint">ур. {item.level}</p>
+                          {item.properties.length > 0 ? item.properties.map((property, index) => (
+                            <p key={`${property.kind}-${property.species_code ?? 'all'}-${index}`} className="m-0 text-[10px] leading-snug text-tg-hint">
+                              {PROPERTY_ICON[property.kind] ?? '✨'} {property.label}
+                            </p>
+                          )) : <p className="m-0 text-[10px] text-tg-hint">Без свойств</p>}
+                        </div>
                       </div>
                     </div>
                   ))}

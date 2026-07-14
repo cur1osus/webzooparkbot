@@ -16,11 +16,49 @@ function forgeItemIcon(item: ForgeItem): string {
   return first ? (PROPERTY_ICON[first] ?? '✨') : '✨';
 }
 
+type MergeChanges = {
+  newItem: ForgeItem;
+  added: string[];
+  removed: string[];
+  retained: string[];
+};
+
+function itemPropertyKey(property: ForgeItem['properties'][number]): string {
+  return `${property.kind}:${property.species_code ?? 'all'}`;
+}
+
+function compareMergeProperties(parents: ForgeItem[], result: ForgeItem): Omit<MergeChanges, 'newItem'> {
+  const before = new Map<string, ForgeItem['properties'][number]>();
+  for (const item of parents) {
+    for (const property of item.properties ?? []) before.set(itemPropertyKey(property), property);
+  }
+
+  const after = new Map<string, ForgeItem['properties'][number]>();
+  for (const property of result.properties ?? []) after.set(itemPropertyKey(property), property);
+
+  const added: string[] = [];
+  const removed: string[] = [];
+  const retained: string[] = [];
+  for (const [key, property] of after) {
+    const previous = before.get(key);
+    if (!previous) added.push(property.label);
+    else if (previous.value !== property.value) {
+      removed.push(previous.label);
+      added.push(property.label);
+    } else retained.push(property.label);
+  }
+  for (const [key, property] of before) {
+    if (!after.has(key)) removed.push(property.label);
+  }
+  return { added, removed, retained };
+}
+
 export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [mergeFirst, setMergeFirst] = useState<string | null>(null);
   const [pendingItem, setPendingItem] = useState<ForgeItem | null>(null);
+  const [mergeResult, setMergeResult] = useState<MergeChanges | null>(null);
 
   const allItems = gs.items;
   const items = pendingItem ? allItems.filter(i => i.id !== pendingItem.id) : allItems;
@@ -107,6 +145,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
     setBusy(true);
     try {
       const r = await apiForgeMerge(mergeFirst, item.id);
+      setMergeResult({ newItem: r.new_item, ...compareMergeProperties([item1, item], r.new_item) });
       onRefresh();
       const rLabel = RARITY_LABEL[r.new_item.rarity] ?? r.new_item.rarity;
       showToast(`Получен ${rLabel} артефакт с ${r.new_item.properties?.length} св-вами!`);
@@ -132,6 +171,35 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
           }}
         >
           {toast.msg}
+        </div>
+      )}
+
+      {mergeResult && (
+        <div className="card flex flex-col gap-3" style={{ border: '1px solid rgba(var(--c-gold-rgb),0.4)', background: 'rgba(var(--c-gold-rgb),0.08)' }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.8px] text-tg-hint">Результат слияния</p>
+              <p className="m-0 mt-1 font-extrabold truncate">{mergeResult.newItem.icon} {mergeResult.newItem.name}</p>
+            </div>
+            <button type="button" onClick={() => setMergeResult(null)} className="w-8 h-8 rounded-xl border-none bg-[var(--surface-subtle)] text-tg-text">×</button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {mergeResult.added.length > 0 && (
+              <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(var(--c-green-rgb),0.12)' }}>
+                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.6px]" style={{ color: 'var(--c-green)' }}>Добавились</p>
+                {mergeResult.added.map((label, index) => <p key={`added-${index}`} className="m-0 mt-1 text-[12px]">＋ {label}</p>)}
+              </div>
+            )}
+            {mergeResult.removed.length > 0 && (
+              <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(var(--c-red-rgb),0.10)' }}>
+                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.6px]" style={{ color: 'var(--c-red-soft)' }}>Исчезли или изменились</p>
+                {mergeResult.removed.map((label, index) => <p key={`removed-${index}`} className="m-0 mt-1 text-[12px]">− {label}</p>)}
+              </div>
+            )}
+            {mergeResult.added.length === 0 && mergeResult.removed.length === 0 && (
+              <p className="m-0 text-[12px] text-tg-hint">Набор бафов не изменился.</p>
+            )}
+          </div>
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ForgeItem, ForgeSet, PropertyKind } from '@/types';
 import { PROPERTY_ICON, PROPERTY_SHORT } from '@/data/itemProperties';
 import { fmt } from '@/utils/format';
@@ -209,6 +210,7 @@ export function ItemSelectPage({ items, selectedIds, onSelect, onApply, onBack }
   items: ForgeItem[]; setId: string; selectedIds: string[];
   onSelect: (id: string) => void; onApply: () => void; onBack: () => void;
 }) {
+  const [previewItem, setPreviewItem] = useState<ForgeItem | null>(null);
   const selectedItems = selectedIds.map(id => items.find(item => item.id === id)).filter((item): item is ForgeItem => Boolean(item));
   return (
     <div className="page-content-safe">
@@ -245,7 +247,7 @@ export function ItemSelectPage({ items, selectedIds, onSelect, onApply, onBack }
               className="card flex items-center gap-3 cursor-pointer"
               style={{ border: sel ? `1px solid ${color}` : undefined, background: sel ? `color-mix(in srgb, ${color} 9%, transparent)` : undefined }}>
               <span className="w-11 h-11 rounded-2xl grid place-items-center text-[25px] shrink-0" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>{forgeItemIcon(item)}</span>
-              <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-[6px] min-w-0">
                   <span className="font-bold text-sm truncate">{item.name}</span>
                   <span className="text-[11px] px-[6px] py-[1px] rounded" style={{ background: `color-mix(in srgb, ${RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)'} 13%, transparent)`, color: RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)' }}>
@@ -255,6 +257,14 @@ export function ItemSelectPage({ items, selectedIds, onSelect, onApply, onBack }
                 </div>
                 <p className="mt-[2px] mb-0 text-xs text-tg-hint truncate">Ур. {item.level} · {itemBonusSummary(item)}</p>
               </div>
+              <button
+                type="button"
+                onClick={(event) => { event.stopPropagation(); setPreviewItem(item); }}
+                className="shrink-0 px-2 py-1 rounded-lg border-none text-[10px] font-bold"
+                style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-blue)' }}
+              >
+                Подробнее
+              </button>
               <span className="w-7 h-7 rounded-full grid place-items-center text-sm font-bold" style={{ background: sel ? 'var(--c-green)' : 'var(--surface-subtle)', color: sel ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)' }}>
                 {sel ? '✓' : '+'}
               </span>
@@ -262,6 +272,34 @@ export function ItemSelectPage({ items, selectedIds, onSelect, onApply, onBack }
           );
         })}
       </div>
+
+      {previewItem && (
+        <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={() => setPreviewItem(null)} role="presentation">
+          <section
+            className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4"
+            onClick={event => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Свойства предмета ${previewItem.name}`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.8px] text-tg-hint">Предмет в сете</p>
+                <p className="m-0 mt-1 font-extrabold truncate">{previewItem.icon} {previewItem.name}</p>
+              </div>
+              <button type="button" onClick={() => setPreviewItem(null)} className="px-3 py-2 rounded-xl border-none bg-[var(--surface-subtle)] text-tg-text text-[12px] font-bold">Закрыть</button>
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              {(previewItem.properties ?? []).length > 0 ? previewItem.properties.map((property, index) => (
+                <div key={`${property.kind}-${property.species_code ?? 'all'}-${index}`} className="rounded-xl px-3 py-2 surface-subtle flex items-center gap-2">
+                  <span className="text-base">{PROPERTY_ICON[property.kind] ?? '✨'}</span>
+                  <span className="text-[13px] text-tg-text">{property.label}</span>
+                </div>
+              )) : <p className="m-0 text-[13px] text-tg-hint">У предмета нет свойств.</p>}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
