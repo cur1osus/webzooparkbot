@@ -424,8 +424,8 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
           onApplySet={(setId) => void runForgeAction(async () => {
             await apiForgeApplySet(setId);
           }, 'Ошибка применения сета')}
-          onCreateSet={() => void runForgeAction(async () => {
-            const result = await apiForgeCreateSet([]);
+          onCreateSet={(name) => void runForgeAction(async () => {
+            const result = await apiForgeCreateSet([], name);
             setSubPage({ type: 'forge_select', setId: result.set.id, selectedIds: [] });
           }, 'Ошибка создания сета')}
           onDeleteSet={(setId) => void runForgeAction(async () => {

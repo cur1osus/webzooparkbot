@@ -24,9 +24,10 @@ const RARITY_LABEL: Record<string, string> = {
 export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems, onItemDetail }: {
   items: ForgeItem[]; sets: ForgeSet[];
   busy: boolean; message: string | null;
-  onApplySet: (id: string) => void; onCreateSet: () => void; onDeleteSet: (id: string) => void;
+  onApplySet: (id: string) => void; onCreateSet: (name?: string) => void; onDeleteSet: (id: string) => void;
   onSelectItems: (id: string) => void; onItemDetail: (id: string) => void;
 }) {
+  const [newSetName, setNewSetName] = useState('');
   const activeItems = items.filter(i => i.is_active);
   const activeSet = sets.find(s => s.is_active) ?? null;
   const orderedSets = [...sets].sort((a, b) => Number(b.is_active) - Number(a.is_active));
@@ -106,13 +107,21 @@ export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, 
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={onCreateSet} disabled={busy || items.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
+          <button onClick={() => { onCreateSet(newSetName.trim() || undefined); setNewSetName(''); }} disabled={busy || items.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
             + Новый сет
           </button>
           <button onClick={() => activeSet ? onSelectItems(activeSet.id) : orderedSets[0] && onApplySet(orderedSets[0].id)} disabled={busy || orderedSets.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-green-rgb),0.16)', color: 'var(--c-green)' }}>
             {activeSet ? 'Настроить' : 'Применить'}
           </button>
         </div>
+        <input
+          value={newSetName}
+          onChange={event => setNewSetName(event.target.value)}
+          maxLength={32}
+          placeholder="Название нового сета, например «Дуэли»"
+          className="text-input text-[13px]"
+          aria-label="Название нового сета"
+        />
       </div>
 
       <div className="flex justify-between items-end">
@@ -128,7 +137,7 @@ export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, 
           <p className="m-0 text-[34px]">⚒️</p>
           <p className="mt-2 mb-0 font-bold text-sm">Сетов пока нет</p>
           <p className="mt-[4px] mb-3 text-xs text-tg-hint">Создай сет, чтобы быстро включать нужные бонусы.</p>
-          <button onClick={onCreateSet} disabled={busy || items.length === 0} className="px-4 py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)' }}>
+          <button onClick={() => onCreateSet()} disabled={busy || items.length === 0} className="px-4 py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)' }}>
             Создать сет
           </button>
         </div>
