@@ -430,7 +430,7 @@ def pack_price_usd_for_tier(
     """Return the current dollar price for a tier.
 
     The tier ladder sets the starting price, then each paid opening made by this player
-    season compounds the next price by 5%. `discount_mult` is applied last so the forge's
+    season compounds the next price by 30%. `discount_mult` is applied last so the forge's
     pack discount continues to work on the dynamic price.
     """
     if purchase_count < 0:

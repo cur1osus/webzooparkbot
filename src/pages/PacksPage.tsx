@@ -542,7 +542,7 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       <div>
         <p className="m-0 font-extrabold text-[17px]">🎁 Паки с животными</p>
         <p className="m-0 mt-[2px] text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Открой тир по лестнице · каждая следующая покупка до конца сезона дороже на 5%
+          Открой тир по лестнице · каждая следующая покупка до конца сезона дороже на 30%
         </p>
       </div>
 
