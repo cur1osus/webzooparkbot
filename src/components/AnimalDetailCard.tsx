@@ -78,10 +78,32 @@ function formatMultiplier(value: number): string {
   return `×${value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',')}`;
 }
 
-export function AnimalDetailCard({ animal, onClose }: { animal: Animal; onClose: () => void }) {
+export function AnimalDetailCard({ animal, onClose, onRelease }: {
+  animal: Animal;
+  onClose: () => void;
+  /** When provided, a "release" action is shown — a voluntary, irreversible cull.
+   *  Should resolve after the animal is gone (parent closes the card); rejects surface here. */
+  onRelease?: (animal: Animal) => Promise<void>;
+}) {
   // Advance `now` once a second so the countdown ticks live.
   const [now, setNow] = useState(() => Date.now());
   const [showIncomeDetails, setShowIncomeDetails] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  const handleRelease = async () => {
+    if (!onRelease || releasing) return;
+    setReleasing(true);
+    setReleaseError(null);
+    try {
+      await onRelease(animal);
+      // On success the parent unmounts this card; nothing else to do here.
+    } catch (e) {
+      setReleaseError((e as Error).message);
+      setReleasing(false);
+    }
+  };
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
@@ -288,6 +310,46 @@ export function AnimalDetailCard({ animal, onClose }: { animal: Animal; onClose:
           <div className="border-t" style={{ borderColor: 'var(--card-border)' }} />
           <InfoRow label="Сила в экспедициях" value={`⚔️ ${power}`} color="var(--c-gold)" />
         </div>
+
+        {/* ── Release ── a voluntary, irreversible cull for population control */}
+        {onRelease && (
+          <div>
+            {releaseError && (
+              <p className="m-0 mb-2 text-[11.5px]" style={{ color: 'var(--c-red)' }}>{releaseError}</p>
+            )}
+            {confirmRelease ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[11.5px] flex-1 leading-snug" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                  Отпустить навсегда? Животное исчезнет и перестанет приносить доход.
+                </span>
+                <button
+                  onClick={() => void handleRelease()}
+                  disabled={releasing}
+                  className="shrink-0 px-3 py-[8px] rounded-xl border-none font-bold text-[12px] cursor-pointer disabled:opacity-50"
+                  style={{ background: 'var(--c-red)', color: '#fff' }}
+                >
+                  {releasing ? '...' : 'Отпустить'}
+                </button>
+                <button
+                  onClick={() => setConfirmRelease(false)}
+                  disabled={releasing}
+                  className="shrink-0 px-3 py-[8px] rounded-xl border-none font-bold text-[12px] cursor-pointer"
+                  style={{ background: 'var(--surface-subtle-strong)', color: 'var(--tg-theme-hint-color)' }}
+                >
+                  Отмена
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmRelease(true)}
+                className="w-full py-[11px] rounded-xl font-bold text-[13px] cursor-pointer"
+                style={{ background: 'rgba(var(--c-red-rgb),0.1)', color: 'var(--c-red)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}
+              >
+                Отпустить животное
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

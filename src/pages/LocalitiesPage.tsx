@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Animal, GameState, Habitat, Locality, LocalitiesInfo } from '@/types';
-import { apiGetLocalities, apiBuyLocality, apiAssignLocality, apiReleaseAnimal } from '@/api';
+import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '@/api';
 import { fmt } from '@/utils/format';
 import { AnimalArt } from '@/components/AnimalArt';
 
@@ -225,8 +225,6 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   const [buying, setBuying]       = useState(false);
   const [selHabitat, setSelHab]   = useState<Habitat | null>(null);
   const [assigningTo, setAssigning] = useState<{ localityId: number; habitat: Habitat } | null>(null);
-  const [confirmRelease, setConfirmRelease] = useState<number | null>(null);
-  const [releasing, setReleasing]   = useState(false);
 
   const load = async () => {
     try {
@@ -272,22 +270,6 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
       await load();
     } catch (e) {
       setError((e as Error).message);
-    }
-  };
-
-  const handleRelease = async (animalId: number) => {
-    if (releasing) return;
-    setReleasing(true);
-    setError(null);
-    try {
-      await apiReleaseAnimal(animalId);
-      setConfirmRelease(null);
-      await load();
-      onRefresh();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setReleasing(false);
     }
   };
 
@@ -340,7 +322,7 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
               <p className="m-0 mb-2 font-bold text-[13px]">
                 Без местности
                 <span className="ml-2 font-normal text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {info.unassigned.length} шт. — без бонуса ×1.5, можно отпустить
+                  {info.unassigned.length} шт. — без бонуса ×1.5
                 </span>
               </p>
               <div
@@ -349,46 +331,14 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
               >
                 {info.unassigned.map(a => {
                   const hab = HABITAT_INFO[a.habitat];
-                  const confirming = confirmRelease === a.id;
                   return (
                     <div key={a.id} className="flex items-center gap-2 text-[12px]">
                       <AnimalArt animal={a} size={24} className="shrink-0" />
                       <span className="font-semibold truncate">{a.name}</span>
                       <span className="text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>{a.species_name} {hab.emoji}</span>
-                      {confirming ? (
-                        <span className="ml-auto flex items-center gap-[6px] shrink-0">
-                          <span className="text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Отпустить?</span>
-                          <button
-                            onClick={() => void handleRelease(a.id)}
-                            disabled={releasing}
-                            className="px-2 py-[3px] rounded-lg border-none font-bold text-[11px] cursor-pointer disabled:opacity-50"
-                            style={{ background: 'rgba(var(--c-red-rgb),0.15)', color: 'var(--c-red)' }}
-                          >
-                            {releasing ? '...' : 'Да'}
-                          </button>
-                          <button
-                            onClick={() => setConfirmRelease(null)}
-                            className="px-2 py-[3px] rounded-lg border-none font-bold text-[11px] cursor-pointer"
-                            style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent)', color: 'var(--tg-theme-hint-color)' }}
-                          >
-                            Нет
-                          </button>
-                        </span>
-                      ) : (
-                        <>
-                          <span className="ml-auto font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                            ₽{fmt(a.income)}/мин
-                          </span>
-                          <button
-                            onClick={() => setConfirmRelease(a.id)}
-                            title="Отпустить животное"
-                            className="shrink-0 w-6 h-6 rounded-full border-none grid place-items-center cursor-pointer text-[13px]"
-                            style={{ background: 'rgba(var(--c-red-rgb),0.1)', color: 'var(--c-red)' }}
-                          >
-                            ✕
-                          </button>
-                        </>
-                      )}
+                      <span className="ml-auto font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                        ₽{fmt(a.income)}/мин
+                      </span>
                     </div>
                   );
                 })}

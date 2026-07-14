@@ -8,7 +8,7 @@ import type { Animal, GameState, MaintenancePollStatus } from '@/types';
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
-import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiSetProfileAvatar } from '@/api';
+import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiReleaseAnimal, apiSetProfileAvatar } from '@/api';
 import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ACHIEVEMENT_TGS, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
@@ -456,7 +456,15 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
       )}
 
       {selectedAnimal && (
-        <AnimalDetailCard animal={selectedAnimal} onClose={() => setSelectedAnimal(null)} />
+        <AnimalDetailCard
+          animal={selectedAnimal}
+          onClose={() => setSelectedAnimal(null)}
+          onRelease={async animal => {
+            await apiReleaseAnimal(animal.id);
+            setSelectedAnimal(null);
+            onRefresh();
+          }}
+        />
       )}
     </div>
   );
