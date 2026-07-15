@@ -379,7 +379,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
               color: canBreed ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
             }}
           >
-            {breeding ? '🧬 Скрещиваем...' : cost !== null ? `🧬 Скрестить · ₽${fmt(cost)}` : '🧬 Скрестить'}
+            {breeding ? '🧬 Скрещиваем...' : '🧬 Скрестить'}
           </button>
 
           {!result && parent1 && parent2 && (!parent1.can_breed || !parent2.can_breed) && (
