@@ -421,10 +421,12 @@ PACK_REWARD_RANGES: dict[PackTier, PackRewardRange] = {
 
 # Price doubles per tier: rare is the cheap entry rung, each tier above costs twice as much.
 PACK_TIER_PRICE_MULTIPLIER: dict[PackTier, int] = {"rare": 1, "epic": 2, "legendary": 4, "mythic": 8}
-# Each paid opening makes the next paid pack 30% more expensive for that player this season.
-# The old 5% barely bit — a player could open dozens of packs a day for almost the entry
-# price. At 30% the fourth paid pack already costs ~2.2× the first, so pack-spam self-limits.
-PACK_PRICE_GROWTH_PER_PURCHASE = 1.30
+# Each paid opening makes the next paid pack more expensive for that player this season, by a
+# flat share of the *base* price (linear, not compounding). Compounding (1.30**n) exploded to
+# unreachable numbers for heavy buyers — a whale with 185 paid packs faced a $10^17 rare pack
+# and was permanently locked out. Linear growth keeps the price rising all season and always
+# reachable: the 4th paid pack costs ~2.4× the first, the 20th ~6×, the 185th ~65×.
+PACK_PRICE_GROWTH_PER_PURCHASE = 0.35
 # The rare (cheapest paid) pack costs this share of what a pack animal earns over its whole
 # life — the main early-game tuning knob.
 PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = 0.005
@@ -457,13 +459,14 @@ def pack_price_usd_for_tier(
     """Return the current dollar price for a tier.
 
     The tier ladder sets the starting price, then each paid opening made by this player
-    season compounds the next price by 30%. `discount_mult` is applied last so the forge's
-    pack discount continues to work on the dynamic price.
+    this season raises the next price linearly (by 35% of the base per prior opening).
+    `discount_mult` is applied last so the forge's pack discount continues to work on the
+    dynamic price.
     """
     if purchase_count < 0:
         raise ValueError("purchase_count cannot be negative")
     base_usd = max(1, round(PACK_BASE_PRICE_RUB / RATE_START_RUB_PER_USD))
-    raw = base_usd * PACK_TIER_PRICE_MULTIPLIER[tier] * (PACK_PRICE_GROWTH_PER_PURCHASE ** purchase_count)
+    raw = base_usd * PACK_TIER_PRICE_MULTIPLIER[tier] * (1 + PACK_PRICE_GROWTH_PER_PURCHASE * purchase_count)
     return max(1, round(raw * discount_mult))
 
 
