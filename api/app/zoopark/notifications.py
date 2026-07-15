@@ -19,6 +19,7 @@ from api.app.zoopark.daily_bonus import roll_daily_bonus_offer
 KIND_EXPEDITION_FINISHED = "expedition_finished"
 KIND_ANIMAL_DEATH = "animal_death"
 KIND_DAILY_BONUS_READY = "daily_bonus_ready"
+KIND_DISEASE_OUTBREAK = "disease_outbreak"
 def enqueue(
     session: Session,
     *,
@@ -60,6 +61,18 @@ def enqueue_animal_death(session: Session, player: Player, animal: Animal, *, re
         kind=KIND_ANIMAL_DEATH,
         dedupe_key=f"animal-death:{animal.id}",
         text=f"💀 {label} погибло. Причина: {reason}.",
+    )
+
+
+def enqueue_disease_outbreak(session: Session, player: Player, *, count: int, at: datetime) -> None:
+    # One event per outbreak instant. Two outbreaks can never share a second (they are gated
+    # by elapsed time), so the timestamp is a sufficient business id.
+    enqueue(
+        session,
+        player_id=player.id,
+        kind=KIND_DISEASE_OUTBREAK,
+        dedupe_key=f"outbreak:{player.id}:{int(at.timestamp())}",
+        text=f"🦠 Вспышка болезни в зоопарке! Заболело животных: {count}. Их доход упал вдвое — вылечи их у ветеринара.",
     )
 
 

@@ -136,3 +136,85 @@ class TestAccrual:
             assert income.accrue(session, row) == -100
             assert ledger.balance(row, "rub") == 0
             session.commit()
+
+
+class TestDiseaseOutbreak:
+    _GENES = {
+        "gene_survival": "high",
+        "gene_reproduction": "high",
+        "gene_appearance": "high",
+        "gene_size": "high",
+    }
+
+    def _stock_zoo(self, session, telegram_id, count):
+        from api.app.db.models import Player
+        from api.app.zoopark.progression import create_animal
+        from api.app.zoopark.season import ensure_player_season
+
+        row = session.query(Player).filter_by(telegram_id=telegram_id).one()
+        season = ensure_player_season(session, row)
+        for _ in range(count):
+            create_animal(
+                session,
+                player_id=row.id,
+                season_id=season.id,
+                origin="pack",
+                genes=dict(self._GENES),
+                habitat="forest",
+            )
+        return row
+
+    def _sick_count(self, telegram_id):
+        from api.app.db.models import Animal, Player
+
+        with get_session() as session:
+            player_id = session.query(Player).filter_by(telegram_id=telegram_id).one().id
+            return (
+                session.query(Animal)
+                .filter(Animal.player_id == player_id, Animal.sick_since.isnot(None))
+                .count()
+            )
+
+    def test_an_outbreak_sickens_a_share_of_a_crowded_locality(self, db, player, monkeypatch):
+        with get_session() as session:
+            row = self._stock_zoo(session, player, 10)
+            row.outbreak_checked_at = utcnow() - timedelta(days=10)
+            session.commit()
+
+        monkeypatch.setattr(income.random, "random", lambda: 0.0)  # force the roll to fire
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            income.sync_player_income(session, row)
+            session.commit()
+
+        # 30% of the 10-animal pool, rounded up.
+        assert self._sick_count(player) == 3
+
+    def test_the_first_sync_only_sets_the_anchor(self, db, player, monkeypatch):
+        with get_session() as session:
+            row = self._stock_zoo(session, player, 10)
+            row.outbreak_checked_at = None  # never checked
+            session.commit()
+
+        monkeypatch.setattr(income.random, "random", lambda: 0.0)  # would fire if it rolled
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            income.sync_player_income(session, row)
+            assert row.outbreak_checked_at is not None
+            session.commit()
+
+        assert self._sick_count(player) == 0
+
+    def test_a_small_zoo_is_spared(self, db, player, monkeypatch):
+        with get_session() as session:
+            row = self._stock_zoo(session, player, 5)  # below OUTBREAK_MIN_HEALTHY
+            row.outbreak_checked_at = utcnow() - timedelta(days=10)
+            session.commit()
+
+        monkeypatch.setattr(income.random, "random", lambda: 0.0)
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            income.sync_player_income(session, row)
+            session.commit()
+
+        assert self._sick_count(player) == 0

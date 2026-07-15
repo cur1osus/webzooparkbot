@@ -14,6 +14,8 @@ while every stored timestamp is. Times are always bound from Python.
 from __future__ import annotations
 
 import math
+import random
+from collections import defaultdict
 from datetime import datetime
 from math import trunc
 
@@ -34,6 +36,10 @@ from api.app.zoopark.catalog import (
     SICK_INCOME_MULT,
     SPECIES_BY_ID,
     SPECIES_RARITY_INCOME_MULT,
+    OUTBREAK_CHANCE_PER_DAY,
+    OUTBREAK_MIN_HEALTHY,
+    OUTBREAK_MIN_LOCALITY_HEALTHY,
+    OUTBREAK_SICKEN_FRACTION,
     development_effect_percent,
     locality_upkeep_discount,
     UPKEEP_BASE_PERCENT,
@@ -43,7 +49,7 @@ from api.app.zoopark.catalog import (
     Rarity,
     gene_income_mult,
 )
-from api.app.zoopark.notifications import enqueue_animal_death
+from api.app.zoopark.notifications import enqueue_animal_death, enqueue_disease_outbreak
 
 
 def alive_clause(now: datetime | None = None):
@@ -264,6 +270,55 @@ def accrue(session: Session, player: Player) -> int:
     return _accrue_until(session, player, utcnow())
 
 
+def _maybe_disease_outbreak(session: Session, player: Player, now: datetime) -> None:
+    """Roll for a passive disease outbreak over the time elapsed since the last check.
+
+    Frequency-independent: the per-check probability is `1 - (1 - daily_chance)^elapsed_days`,
+    which compounds across any number of sub-intervals to the same total, so polling more
+    often does not change how often outbreaks happen. When one fires it strikes a single
+    locality — the more animals crowded there, the more fall ill.
+    """
+    last = player.outbreak_checked_at
+    player.outbreak_checked_at = now
+    if last is None:
+        # First check for this player: establish the anchor, strike nothing.
+        return
+    elapsed_days = (now - last).total_seconds() / 86_400.0
+    if elapsed_days <= 0:
+        return
+
+    healthy = session.scalars(
+        select(Animal).where(
+            Animal.player_id == player.id,
+            alive_clause(now),
+            Animal.sick_since.is_(None),
+            Animal.id.not_in(on_expedition_subquery()),
+        )
+    ).all()
+    if len(healthy) < OUTBREAK_MIN_HEALTHY:
+        return
+
+    chance = OUTBREAK_CHANCE_PER_DAY * (1 - development_effect_percent(player.vet_level) / 100)
+    if chance <= 0:
+        return
+    probability = 1 - (1 - chance) ** elapsed_days
+    if random.random() >= probability:
+        return
+
+    by_locality: dict[int | None, list[Animal]] = defaultdict(list)
+    for animal in healthy:
+        by_locality[animal.locality_id].append(animal)
+    candidates = [group for group in by_locality.values() if len(group) >= OUTBREAK_MIN_LOCALITY_HEALTHY]
+    if not candidates:
+        return
+
+    struck = random.choice(candidates)
+    count = max(1, math.ceil(len(struck) * OUTBREAK_SICKEN_FRACTION))
+    for animal in random.sample(struck, min(count, len(struck))):
+        animal.sick_since = now
+    enqueue_disease_outbreak(session, player, count=count, at=now)
+
+
 def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None = None) -> tuple[int, int]:
     """Settle what the old rate owed, then recompute the rate.
 
@@ -296,6 +351,9 @@ def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None
         enqueue_animal_death(session, player, animal, reason="естественная смерть")
 
     _accrue_until(session, player, now)
+    # Roll for a passive outbreak before recomputing the rate, so newly sick animals are
+    # already reflected in the income this call stores.
+    _maybe_disease_outbreak(session, player, now)
     income, upkeep = calc_player_income(session, player.id, bonuses, now=now)
     player.income_rub_per_min = income
     player.upkeep_rub_per_min = upkeep

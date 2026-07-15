@@ -143,6 +143,9 @@ class Player(Base):
     income_rub_per_min: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     upkeep_rub_per_min: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     income_synced_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    # When the zoo was last rolled for a passive disease outbreak. NULL means "never" — the
+    # first sync sets it to now without striking, so nobody eats a retroactive window.
+    outbreak_checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True, default=utcnow)
 
     referrer: Mapped[Player | None] = relationship("Player", remote_side=[id])
     animals: Mapped[list[Animal]] = relationship(

@@ -257,6 +257,19 @@ SICK_INCOME_MULT = 0.5
 CURE_INCOME_HOURS = 10
 EXPEDITION_SICK_CHANCE = 0.25
 
+# Passive disease outbreaks — pressure that has nothing to do with expeditions. Each time a
+# zoo is synced, the time elapsed since the last check gives a chance an outbreak strikes a
+# single enclosure and sickens a share of the healthy animals housed there. Striking one
+# locality (not the whole zoo) makes crowding many animals into one enclosure a real risk and
+# rewards spreading them out. Small zoos are spared so it stays a late-game sink, and vet
+# levels lower the chance (reusing development_effect_percent, like the expedition roll).
+OUTBREAK_CHANCE_PER_DAY = 0.20
+OUTBREAK_SICKEN_FRACTION = 0.30
+OUTBREAK_MIN_HEALTHY = 8
+# A locality must hold at least this many healthy animals to be a candidate, so an outbreak
+# lands somewhere crowded rather than picking off a lone animal in an empty enclosure.
+OUTBREAK_MIN_LOCALITY_HEALTHY = 3
+
 # ─── Upkeep ───────────────────────────────────────────────────────────────────
 #
 # Not in the GDD. Ported from the Telegram bot (`sync_maintenance_cost`), because
