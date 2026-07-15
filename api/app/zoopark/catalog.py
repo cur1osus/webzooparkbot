@@ -263,7 +263,7 @@ EXPEDITION_SICK_CHANCE = 0.25
 # locality (not the whole zoo) makes crowding many animals into one enclosure a real risk and
 # rewards spreading them out. Small zoos are spared so it stays a late-game sink, and vet
 # levels lower the chance (reusing development_effect_percent, like the expedition roll).
-OUTBREAK_CHANCE_PER_DAY = 0.20
+OUTBREAK_CHANCE_PER_DAY = 0.60
 OUTBREAK_SICKEN_FRACTION = 0.30
 OUTBREAK_MIN_HEALTHY = 8
 # A locality must hold at least this many healthy animals to be a candidate, so an outbreak
