@@ -23,7 +23,7 @@ from api.app.db.models import (
     Player,
     utcnow,
 )
-from api.app.schemas.progression import AssignLocalityBody, BreedBody, BuyLocalityBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
@@ -538,6 +538,50 @@ def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
         return result
 
 
+def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> dict:
+    """Place every currently unassigned animal into the selected matching locality."""
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+
+        locality = session.scalars(
+            select(Locality)
+            .where(
+                Locality.id == body.locality_id,
+                Locality.player_id == player.id,
+                Locality.season_id == season.id,
+            )
+        ).first()
+        if locality is None:
+            raise HTTPException(404, "Местность не найдена")
+
+        animals = session.scalars(
+            select(Animal)
+            .where(
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                Animal.locality_id.is_(None),
+                Animal.habitat == locality.habitat,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
+            )
+            .with_for_update()
+        ).all()
+        for animal in animals:
+            animal.locality_id = locality.id
+
+        sync_player_income(session, player)
+        result = {
+            "ok": True,
+            "assigned_count": len(animals),
+            "income_rub_per_min": player.income_rub_per_min,
+        }
+        session.commit()
+        return result
+
+
 def release_animal(tg_id: int, body: ReleaseAnimalBody) -> dict:
     """Permanently remove an animal from the zoo so the player can cull their population.
 
@@ -703,11 +747,13 @@ def breed(tg_id: int, body: BreedBody) -> dict:
 
         bonuses = bonuses_module.load(session, player.id)
         sync_player_income(session, player, bonuses)
+        refreshed_animals = [animal_payload(animal, None, bonuses) for animal in available_animals(session, player.id, season.id)]
         result = {
             "ok": True,
             "success": succeeded,
             "rate": rate,
             "animal": animal_payload(child, None, bonuses) if child else None,
+            "animals": refreshed_animals,
             "inherited_genes": inherited_genes,
             "cost_rub": cost,
             "new_rub": ledger.balance(player, "rub"),

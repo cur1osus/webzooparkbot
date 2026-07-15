@@ -1,5 +1,6 @@
 import type {
   Animal,
+  AssignMatchingLocalityResult,
   AssignLocalityResult,
   BreedResult,
   BuyLocalityResult,
@@ -46,6 +47,11 @@ export const apiAssignLocality = (animal_id: number, locality_id: number | null)
   req<AssignLocalityResult>('/localities/assign', {
     method: 'POST',
     body: JSON.stringify({ animal_id, locality_id }),
+  });
+export const apiAssignMatchingLocality = (locality_id: number) =>
+  req<AssignMatchingLocalityResult>('/localities/assign-matching', {
+    method: 'POST',
+    body: JSON.stringify({ locality_id }),
   });
 /** Permanently remove an animal from the zoo — used to cull the population. Irreversible. */
 export const apiReleaseAnimal = (animal_id: number) =>

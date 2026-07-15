@@ -8,6 +8,10 @@ class AssignLocalityBody(BaseModel):
     locality_id: int | None = None
 
 
+class AssignMatchingLocalityBody(BaseModel):
+    locality_id: int = Field(gt=0)
+
+
 class ReleaseAnimalBody(BaseModel):
     animal_id: int = Field(gt=0)
 

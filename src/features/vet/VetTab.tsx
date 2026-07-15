@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AnimalArt } from '@/components/AnimalArt';
-import { apiCureAnimal } from '@/api';
+import { apiCureAllAnimals, apiCureAnimal } from '@/api';
 import type { Animal } from '@/types';
 import { fmt } from '@/utils/format';
 
@@ -19,10 +19,12 @@ export function VetTab({
 }) {
   const sick = animals.filter(a => a.is_sick);
   const [curingId, setCuringId] = useState<number | null>(null);
+  const [curingAll, setCuringAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const totalCureCost = sick.reduce((sum, animal) => sum + animal.cure_cost_usd, 0);
 
   const cure = async (id: number) => {
-    if (curingId !== null) return;
+    if (curingId !== null || curingAll) return;
     setCuringId(id);
     setError(null);
     try {
@@ -32,6 +34,20 @@ export function VetTab({
       setError(e instanceof Error ? e.message : 'Не удалось вылечить');
     } finally {
       setCuringId(null);
+    }
+  };
+
+  const cureAll = async () => {
+    if (curingAll || curingId !== null) return;
+    setCuringAll(true);
+    setError(null);
+    try {
+      await apiCureAllAnimals();
+      onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось вылечить животных');
+    } finally {
+      setCuringAll(false);
     }
   };
 
@@ -70,6 +86,15 @@ export function VetTab({
           $ {fmt(usd)}
         </span>
       </div>
+
+      <button
+        onClick={() => void cureAll()}
+        disabled={curingAll || curingId !== null || usd < totalCureCost}
+        className="w-full min-h-11 rounded-xl border-none font-extrabold text-[13px] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+        style={{ background: usd >= totalCureCost ? 'var(--c-green)' : 'var(--surface-subtle-strong)', color: usd >= totalCureCost ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)' }}
+      >
+        {curingAll ? 'Лечим всех...' : `Вылечить всех · $${fmt(totalCureCost)}`}
+      </button>
 
       {error && (
         <div

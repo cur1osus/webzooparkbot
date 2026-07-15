@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimalArt } from '@/components/AnimalArt';
 import { PageHeader } from '@/components/PageHeader';
@@ -15,6 +15,16 @@ function breedCostRub(a: Animal, b: Animal): number {
   return Math.round(BREED_COST_INCOME_HOURS * 60 * (a.base_income + b.base_income));
 }
 const BREED_TIER_INDEX: Record<GeneTier, number> = { low: 0, medium: 1, high: 2 };
+type PickerSort = 'new' | 'income' | 'rarity' | 'reproduction';
+const PICKER_SORTS: Array<{ id: PickerSort; label: string }> = [
+  { id: 'new',           label: 'Новые' },
+  { id: 'income',       label: 'Доход' },
+  { id: 'rarity',       label: 'Редкость' },
+  { id: 'reproduction', label: 'Размножение' },
+];
+const RARITY_RANK: Record<Animal['species_rarity'], number> = {
+  rare: 0, epic: 1, legendary: 2, mythic: 3,
+};
 
 function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
   if (!a || !b) return null;
@@ -191,30 +201,77 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
   onPick: (a: Animal) => void;
   onClose: () => void;
 }) {
-  const available = animals.filter(a => a.can_breed && a.id !== exclude);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<PickerSort>('new');
+  const available = useMemo(() => animals.filter(a => a.can_breed && a.id !== exclude), [animals, exclude]);
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    const matches = available.filter(a => !needle || `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle));
+    return [...matches].sort((a, b) => {
+      if (sort === 'income') return b.income - a.income;
+      if (sort === 'rarity') return RARITY_RANK[b.species_rarity] - RARITY_RANK[a.species_rarity] || b.income - a.income;
+      if (sort === 'reproduction') return BREED_TIER_INDEX[b.reproduction] - BREED_TIER_INDEX[a.reproduction] || b.income - a.income;
+      return new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || b.income - a.income;
+    });
+  }, [available, query, sort]);
 
   return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose}>
       <div className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[75vh] overflow-y-auto"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
-          <p className="m-0 font-extrabold text-[15px]">Выбери родителя</p>
+          <div>
+            <p className="m-0 font-extrabold text-[15px]">Выбери родителя</p>
+            <p className="m-0 mt-1 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+              {filtered.length} из {available.length} доступных
+            </p>
+          </div>
           <button onClick={onClose} aria-label="Закрыть" className="tap-target -mr-2 border-none bg-transparent text-[18px] cursor-pointer"
                   style={{ color: 'var(--tg-theme-hint-color)' }}>✕</button>
         </div>
+
+        {available.length > 0 && (
+          <>
+            <label className="flex items-center gap-2 min-h-11 rounded-xl px-3"
+                   style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent)' }}>
+              <span className="text-[16px]" aria-hidden="true">⌕</span>
+              <input
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Найти по имени или виду"
+                aria-label="Поиск животного"
+                className="min-w-0 flex-1 bg-transparent border-none outline-none text-[13px]"
+              />
+              {query && <button type="button" onClick={() => setQuery('')} aria-label="Очистить поиск" className="border-none bg-transparent text-[16px] cursor-pointer" style={{ color: 'var(--tg-theme-hint-color)' }}>×</button>}
+            </label>
+            <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Сортировка животных">
+              {PICKER_SORTS.map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => setSort(option.id)}
+                  role="tab"
+                  aria-selected={sort === option.id}
+                  className="shrink-0 min-h-10 rounded-xl border-none px-3 text-[11px] font-bold cursor-pointer"
+                  style={{ background: sort === option.id ? 'rgba(var(--c-purple-rgb),0.18)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)', color: sort === option.id ? 'var(--c-purple)' : 'var(--tg-theme-hint-color)' }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
         {available.length === 0 ? (
           <p className="text-center py-6 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Нет доступных животных<br />
             <span className="text-[11px]">Все уже скрещивались сегодня</span>
           </p>
-        ) : [...available]
-          // Compatible (same-species) animals float to the top so they're easy to find.
-          .sort((x, y) => {
-            if (!mateSpeciesCode) return 0;
-            return Number(y.species_code === mateSpeciesCode) - Number(x.species_code === mateSpeciesCode);
-          })
-          .map(a => {
+        ) : filtered.length === 0 ? (
+          <p className="text-center py-6 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Ничего не найдено
+          </p>
+        ) : filtered.map(a => {
           const rarity = SPECIES_RARITY_META[a.species_rarity];
           const incompatible = mateSpeciesCode !== null && a.species_code !== mateSpeciesCode;
           return (
@@ -286,8 +343,13 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
     try {
       const res = await apiBreed(parent1.id, parent2.id);
       setResult(res);
-      // Both parents are now `can_breed: false`.
-      const { animals: fresh } = await apiGetAnimals();
+      // The breed response already carries the refreshed list. Avoid a second list request
+      // before the global state refresh, which made rapid breeding feel like a reload.
+      const fresh = res.animals ?? animals.map(animal => (
+        animal.id === parent1.id || animal.id === parent2.id
+          ? { ...animal, can_breed: false }
+          : animal
+      ));
       setAnimals(fresh);
       const p1 = fresh.find(a => a.id === parent1.id);
       const p2 = fresh.find(a => a.id === parent2.id);

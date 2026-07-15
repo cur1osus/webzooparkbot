@@ -65,6 +65,10 @@ export interface CureResponse {
   income_rub_per_min: number;
 }
 
+export interface CureAllResponse extends CureResponse {
+  cured_count: number;
+}
+
 export interface MerchantOffer {
   slot: number;
   species_code: string;

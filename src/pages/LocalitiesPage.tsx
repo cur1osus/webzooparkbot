@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Animal, GameState, Habitat, Locality, LocalitiesInfo } from '@/types';
-import { apiGetLocalities, apiBuyLocality, apiAssignLocality } from '@/api';
+import { apiGetLocalities, apiBuyLocality, apiAssignLocality, apiAssignMatchingLocality } from '@/api';
 import { fmt } from '@/utils/format';
 import { AnimalArt } from '@/components/AnimalArt';
 
@@ -54,16 +54,19 @@ function AnimalChip({ animal, onRemove }: { animal: Animal; onRemove: () => void
 
 // ─── Locality card ─────────────────────────────────────────────────────────────
 
-function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
+function LocalityCard({ locality, unassigned, onAdd, onAssignMatching, assigningMatching, onRemove }: {
   locality: Locality;
-  unassignedCount: number;
+  unassigned: Animal[];
   onAdd: () => void;
+  onAssignMatching: () => void;
+  assigningMatching: boolean;
   onRemove: (id: number) => void;
 }) {
   const hab = HABITAT_INFO[locality.habitat];
   const totalIncome = locality.animals.reduce((s, a) => s + a.income, 0);
 
-  const canAdd = unassignedCount > 0;
+  const canAdd = unassigned.length > 0;
+  const matchingCount = unassigned.filter(animal => animal.habitat === locality.habitat).length;
   const hasAnimals = locality.animals.length > 0;
   const [collapsed, setCollapsed] = useState(hasAnimals);
   return (
@@ -130,6 +133,19 @@ function LocalityCard({ locality, unassignedCount, onAdd, onRemove }: {
           {locality.animals.map(a => (
             <AnimalChip key={a.id} animal={a} onRemove={() => onRemove(a.id)} />
           ))}
+        </div>
+      )}
+
+      {matchingCount > 0 && (
+        <div className="px-4 pb-3">
+          <button
+            onClick={onAssignMatching}
+            disabled={assigningMatching}
+            className="w-full min-h-11 rounded-xl border-none cursor-pointer font-extrabold text-[12px] disabled:opacity-55 disabled:cursor-wait"
+            style={{ background: `color-mix(in srgb, ${hab.color} 16%, transparent)`, color: hab.color, border: `1px solid color-mix(in srgb, ${hab.color} 30%, transparent)` }}
+          >
+            {assigningMatching ? 'Распределяем...' : `Распределить сразу · ${matchingCount}`}
+          </button>
         </div>
       )}
 
@@ -225,6 +241,7 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   const [buying, setBuying]       = useState(false);
   const [selHabitat, setSelHab]   = useState<Habitat | null>(null);
   const [assigningTo, setAssigning] = useState<{ localityId: number; habitat: Habitat } | null>(null);
+  const [assigningMatchingId, setAssigningMatchingId] = useState<number | null>(null);
 
   const load = async () => {
     try {
@@ -273,6 +290,21 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
     }
   };
 
+  const handleAssignMatching = async (localityId: number) => {
+    if (assigningMatchingId !== null) return;
+    setAssigningMatchingId(localityId);
+    setError(null);
+    try {
+      await apiAssignMatchingLocality(localityId);
+      await load();
+      onRefresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAssigningMatchingId(null);
+    }
+  };
+
   return (
     <div className="px-[14px] pt-4 pb-4 flex flex-col gap-4">
 
@@ -310,8 +342,10 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
             <LocalityCard
               key={loc.id}
               locality={loc}
-              unassignedCount={info.unassigned.length}
+              unassigned={info.unassigned}
               onAdd={() => setAssigning({ localityId: loc.id, habitat: loc.habitat })}
+              onAssignMatching={() => void handleAssignMatching(loc.id)}
+              assigningMatching={assigningMatchingId === loc.id}
               onRemove={id => void handleUnassign(id)}
             />
           ))}

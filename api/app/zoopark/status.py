@@ -187,7 +187,14 @@ def cure_animal(tg_id: int, body: CureBody) -> dict:
         if animal is None:
             raise HTTPException(404, "Животное не найдено")
         if animal.sick_since is None:
-            raise HTTPException(400, "Животное не болеет")
+            # The vet screen can outlive a refresh or another cure request. Treating this
+            # as a successful no-op prevents a stale button from showing a false error.
+            return {
+                "ok": True,
+                "cost_usd": 0,
+                "new_usd": ledger.balance(player, "usd"),
+                "income_rub_per_min": player.income_rub_per_min,
+            }
 
         # Recompute the price server-side (never trust the client), using the same locality
         # habitat the client saw in the animal payload.
@@ -206,6 +213,46 @@ def cure_animal(tg_id: int, body: CureBody) -> dict:
         result = {
             "ok": True,
             "cost_usd": cost_usd,
+            "new_usd": ledger.balance(player, "usd"),
+            "income_rub_per_min": player.income_rub_per_min,
+        }
+        session.commit()
+        return result
+
+
+def cure_all_animals(tg_id: int) -> dict:
+    """Cure every currently sick, live animal in one atomic purchase."""
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+
+        animals = session.scalars(
+            select(Animal)
+            .where(Animal.player_id == player.id, alive_clause(), Animal.sick_since.is_not(None))
+            .with_for_update()
+        ).all()
+        bonuses = bonuses_module.load(session, player.id)
+        locality_habitats = dict(
+            session.execute(
+                select(Locality.id, Locality.habitat).where(Locality.player_id == player.id)
+            ).all()
+        )
+        total_cost = sum(
+            cure_cost_usd(animal, locality_habitats.get(animal.locality_id), bonuses, player.vet_level)
+            for animal in animals
+        )
+
+        if total_cost:
+            ledger.spend(session, player, "usd", total_cost, "cure_animal")
+            for animal in animals:
+                animal.sick_since = None
+            sync_player_income(session, player, bonuses)
+
+        result = {
+            "ok": True,
+            "cured_count": len(animals),
+            "cost_usd": total_cost,
             "new_usd": ledger.balance(player, "usd"),
             "income_rub_per_min": player.income_rub_per_min,
         }

@@ -27,3 +27,8 @@ def bonus_claim(tg_id: TelegramId):
 @router.post("/api/animals/cure")
 def cure_animal(body: CureBody, tg_id: TelegramId):
     return status_service.cure_animal(tg_id, body)
+
+
+@router.post("/api/animals/cure-all")
+def cure_all_animals(tg_id: TelegramId):
+    return status_service.cure_all_animals(tg_id)

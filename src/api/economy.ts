@@ -1,4 +1,4 @@
-import type { BankInfo, BonusClaimResult, BonusOffer, CureResponse, ExchangeResult } from '@/types';
+import type { BankInfo, BonusClaimResult, BonusOffer, CureAllResponse, CureResponse, ExchangeResult } from '@/types';
 import { req } from './client';
 
 export const apiGetBank = () => req<BankInfo>('/bank');
@@ -16,3 +16,6 @@ export const apiClaimBonus = () => req<BonusClaimResult>('/bonus/claim', { metho
 
 export const apiCureAnimal = (animal_id: number) =>
   req<CureResponse>('/animals/cure', { method: 'POST', body: JSON.stringify({ animal_id }) });
+
+export const apiCureAllAnimals = () =>
+  req<CureAllResponse>('/animals/cure-all', { method: 'POST' });
