@@ -568,10 +568,14 @@ ITEM_RARITY_NAME: dict[ItemRarity, str] = {
 
 FORGE_CREATE_BASE_USD = 80_000
 FORGE_CREATE_PAW = 350
-# Each item the player has ever created makes the next one 15% more expensive. The counter
-# is the number of `forge_create` ledger entries (see `forge.forge_create`), so it only ever
-# rises — selling or merging an item away does not cheapen the next creation.
-FORGE_CREATE_GROWTH = 1.15
+# Each item the player has created (since the epoch below) makes the next one 20% of the base
+# more expensive — linear, not compounding. Compounding (1.15**n) re-explodes for heavy
+# forgers: at ~16 creations/day a whale hit an unreachable price within days, the same wall
+# the anchor was meant to avoid. Linear keeps the price rising monotonically while staying
+# reachable. The counter is the number of `forge_create` ledger entries (see
+# `forge.forge_create`), so it only ever rises — selling or merging an item away never
+# cheapens the next creation.
+FORGE_CREATE_GROWTH = 0.20
 FORGE_UPGRADE_BASE_USD = 5_000
 FORGE_UPGRADE_FAIL_PCT_PER_LEVEL = 8
 # Merging two items into one is a flat, deliberately steep dollar fee — set well above any
@@ -591,8 +595,9 @@ FORGE_CREATE_COUNTER_EPOCH = datetime(2026, 7, 14, 23, 45, 0, tzinfo=timezone.ut
 
 def forge_create_cost_usd(creations: int) -> int:
     """Dollar price to forge the *next* item, given how many the player has created since
-    `FORGE_CREATE_COUNTER_EPOCH`. Escalates 15% per prior creation, growing monotonically."""
-    return int(FORGE_CREATE_BASE_USD * (FORGE_CREATE_GROWTH ** max(0, creations)))
+    `FORGE_CREATE_COUNTER_EPOCH`. Escalates linearly by 20% of the base per prior creation,
+    growing monotonically."""
+    return int(FORGE_CREATE_BASE_USD * (1 + FORGE_CREATE_GROWTH * max(0, creations)))
 
 
 # Selling is a partial refund — never a profit. Resale returns 40% of the create price plus
