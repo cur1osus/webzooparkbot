@@ -244,7 +244,7 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
               />
               {query && <button type="button" onClick={() => setQuery('')} aria-label="Очистить поиск" className="border-none bg-transparent text-[16px] cursor-pointer" style={{ color: 'var(--tg-theme-hint-color)' }}>×</button>}
             </label>
-            <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Сортировка животных">
+            <div className="flex shrink-0 min-h-10 gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Сортировка животных">
               {PICKER_SORTS.map(option => (
                 <button
                   key={option.id}

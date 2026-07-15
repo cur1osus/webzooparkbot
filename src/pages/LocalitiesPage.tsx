@@ -137,7 +137,7 @@ function LocalityCard({ locality, unassigned, onAdd, onAssignMatching, assigning
       )}
 
       {matchingCount > 0 && (
-        <div className="px-4 pb-3">
+        <div className="px-4 pt-3 pb-3">
           <button
             onClick={onAssignMatching}
             disabled={assigningMatching}
