@@ -44,6 +44,7 @@ Reason = Literal[
     "locality_upgrade",
     "merchant_buy",
     "cure_animal",
+    "breed",
     "forge_create",
     "forge_upgrade",
     "forge_merge",

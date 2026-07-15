@@ -284,9 +284,10 @@ class TestDeathIsDerived:
 
 
 class TestBreeding:
-    def test_a_parent_breeds_once_a_day(self, db, player):
+    def test_a_parent_breeds_once_a_day(self, db, player, grant):
         from api.app.schemas.progression import BreedBody
 
+        grant(player, "rub", 10_000_000)  # breeding now costs rubles
         first = progression.open_pack(player)["animals"][0]
         with get_session() as session:
             parent = session.get(Animal, first["id"])
@@ -316,6 +317,69 @@ class TestBreeding:
                 "survival", "reproduction", "appearance", "size_trait"
             }
         with pytest.raises(Exception, match="уже скрещивалось"):
+            progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
+
+    def test_breeding_charges_rubles_on_the_attempt(self, db, player, grant):
+        from api.app.schemas.progression import BreedBody
+        from api.app.zoopark import ledger
+        from api.app.zoopark.catalog import breed_cost_rub
+        from api.app.zoopark.income import animal_base_income_rub_per_min
+
+        grant(player, "rub", 10_000_000)
+        first = progression.open_pack(player)["animals"][0]
+        with get_session() as session:
+            parent = session.get(Animal, first["id"])
+            mate = progression.create_animal(
+                session,
+                player_id=parent.player_id,
+                season_id=parent.season_id,
+                origin="pack",
+                genes={
+                    "gene_survival": parent.gene_survival,
+                    "gene_reproduction": parent.gene_reproduction,
+                    "gene_appearance": parent.gene_appearance,
+                    "gene_size": parent.gene_size,
+                },
+                habitat=parent.habitat,
+                species_id=parent.species_id,
+            )
+            expected = breed_cost_rub(
+                animal_base_income_rub_per_min(parent), animal_base_income_rub_per_min(mate)
+            )
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            before = ledger.balance(row, "rub")
+            parent_id, mate_id = parent.id, mate.id
+            session.commit()
+
+        result = progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
+        assert result["cost_rub"] == expected
+        # Income may accrue between the two reads, so assert the fee was withdrawn, not equality.
+        assert result["new_rub"] <= before - expected
+
+    def test_breeding_is_refused_without_the_fee(self, db, player):
+        from api.app.schemas.progression import BreedBody
+
+        first = progression.open_pack(player)["animals"][0]
+        with get_session() as session:
+            parent = session.get(Animal, first["id"])
+            mate = progression.create_animal(
+                session,
+                player_id=parent.player_id,
+                season_id=parent.season_id,
+                origin="pack",
+                genes={
+                    "gene_survival": parent.gene_survival,
+                    "gene_reproduction": parent.gene_reproduction,
+                    "gene_appearance": parent.gene_appearance,
+                    "gene_size": parent.gene_size,
+                },
+                habitat=parent.habitat,
+                species_id=parent.species_id,
+            )
+            parent_id, mate_id = parent.id, mate.id
+            session.commit()
+
+        with pytest.raises(Exception, match="Недостаточно средств"):
             progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
 
     def test_inheritance_favours_the_worse_gene(self):

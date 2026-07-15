@@ -47,6 +47,7 @@ from api.app.zoopark.catalog import (
     SPECIES_RARITY_WEIGHTS,
     BREED_WORSE_GENE_CHANCE,
     BREED_TIER_INDEX,
+    breed_cost_rub,
     GeneTier,
     Habitat,
     ANIMAL_NAME_POOL,
@@ -60,6 +61,7 @@ from api.app.zoopark.catalog import (
 )
 from api.app.zoopark.income import (
     alive_clause,
+    animal_base_income_rub_per_min,
     available_animals,
     on_expedition_subquery,
     sync_player_income,
@@ -625,6 +627,15 @@ def breed(tg_id: int, body: BreedBody) -> dict:
             if parent.last_bred_on == today:
                 raise HTTPException(400, "Одно из животных уже скрещивалось сегодня")
 
+        # Charged on the attempt, before the roll: breeding is a paid gamble, so investing in
+        # reproduction genes and the genetics track (which raise the success rate) is what keeps
+        # the fee from being wasted. Raises InsufficientFunds before anything mutates.
+        cost = breed_cost_rub(
+            animal_base_income_rub_per_min(parent_a),
+            animal_base_income_rub_per_min(parent_b),
+        )
+        ledger.spend(session, player, "rub", cost, "breed")
+
         genetics_bonus = development_effect_percent(player.genetics_level)
         rate = min(0.95, breed_success_rate(parent_a.gene_reproduction, parent_b.gene_reproduction) + genetics_bonus / 100)  # type: ignore[arg-type]
         worse_gene_chance = max(0.48, BREED_WORSE_GENE_CHANCE - genetics_bonus / 100)
@@ -698,6 +709,8 @@ def breed(tg_id: int, body: BreedBody) -> dict:
             "rate": rate,
             "animal": animal_payload(child, None, bonuses) if child else None,
             "inherited_genes": inherited_genes,
+            "cost_rub": cost,
+            "new_rub": ledger.balance(player, "rub"),
         }
         session.commit()
         return result

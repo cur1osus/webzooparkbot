@@ -8,6 +8,12 @@ import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
 
 const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
+// Mirrors BREED_COST_INCOME_HOURS: a breeding attempt costs this many hours of the two
+// parents' combined intrinsic income (their `base_income`), in rubles.
+const BREED_COST_INCOME_HOURS = 4;
+function breedCostRub(a: Animal, b: Animal): number {
+  return Math.round(BREED_COST_INCOME_HOURS * 60 * (a.base_income + b.base_income));
+}
 const BREED_TIER_INDEX: Record<GeneTier, number> = { low: 0, medium: 1, high: 2 };
 
 function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
@@ -296,7 +302,9 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   };
 
   const rate = breedRate(parent1, parent2, gs.genetics_level);
-  const canBreed = parent1?.can_breed && parent2?.can_breed && !breeding;
+  const cost = parent1 && parent2 ? breedCostRub(parent1, parent2) : null;
+  const canAfford = cost === null || gs.rub >= cost;
+  const canBreed = parent1?.can_breed && parent2?.can_breed && canAfford && !breeding;
 
   return (
     <div className="page-content-safe flex flex-col gap-4">
@@ -346,6 +354,19 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             </div>
           )}
 
+          {/* Cost of an attempt (charged whether or not it succeeds) */}
+          {cost !== null && (
+            <div className="rounded-2xl px-4 py-3 flex items-center justify-between"
+                 style={{ background: 'rgba(var(--c-green-rgb),0.08)', border: '1px solid rgba(var(--c-green-rgb),0.2)' }}>
+              <span className="text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                Стоимость попытки
+              </span>
+              <span className="text-[20px] font-extrabold" style={{ color: canAfford ? 'var(--c-green)' : 'var(--c-red)' }}>
+                ₽{fmt(cost)}
+              </span>
+            </div>
+          )}
+
           {/* Breed button */}
           <button
             onClick={() => void handleBreed()}
@@ -358,12 +379,18 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
               color: canBreed ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
             }}
           >
-            {breeding ? '🧬 Скрещиваем...' : '🧬 Скрестить'}
+            {breeding ? '🧬 Скрещиваем...' : cost !== null ? `🧬 Скрестить · ₽${fmt(cost)}` : '🧬 Скрестить'}
           </button>
 
           {!result && parent1 && parent2 && (!parent1.can_breed || !parent2.can_breed) && (
             <p className="m-0 text-center text-[12px]" style={{ color: 'var(--c-amber)' }}>
               ⚠️ Одно из животных уже скрещивалось сегодня
+            </p>
+          )}
+
+          {!result && parent1 && parent2 && parent1.can_breed && parent2.can_breed && !canAfford && (
+            <p className="m-0 text-center text-[12px]" style={{ color: 'var(--c-red)' }}>
+              ⚠️ Недостаточно рублей: нужно ₽{fmt(cost ?? 0)}
             </p>
           )}
 

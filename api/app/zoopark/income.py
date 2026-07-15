@@ -104,6 +104,21 @@ def animal_income(animal: Animal, locality_habitat: str | None, bonuses: Bonuses
     )
 
 
+def animal_base_income_rub_per_min(animal: Animal) -> int:
+    """The intrinsic worth of an animal — genes and species rarity only, with no habitat
+    bonus, no sickness penalty and no item multipliers. Breeding is priced off this so the
+    fee cannot be gamed by moving an animal out of its habitat or letting it fall ill."""
+    return animal_income_rub_per_min(
+        survival=animal.gene_survival,  # type: ignore[arg-type]
+        appearance=animal.gene_appearance,  # type: ignore[arg-type]
+        size=animal.gene_size,  # type: ignore[arg-type]
+        habitat_matches=False,
+        is_sick=False,
+        species_multiplier=1.0,
+        species_rarity=SPECIES_BY_ID[animal.species_id]["rarity"],
+    )
+
+
 def cure_cost_usd(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, vet_level: int = 0) -> int:
     """Price of curing this animal, in dollars: CURE_INCOME_HOURS of its *healthy* income
     (the sick penalty is excluded so the cost reflects the animal's real worth), converted

@@ -35,6 +35,7 @@ from api.app.zoopark.catalog import (
 )
 from api.app.zoopark.income import (
     alive_animals,
+    animal_base_income_rub_per_min,
     animal_income,
     cure_cost_usd,
     diversity_multiplier,
@@ -179,6 +180,9 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
         "is_sick": animal.sick_since is not None,
         "can_breed": animal.last_bred_on != day,
         "income": income_breakdown["total"],
+        # Intrinsic per-minute income (genes + rarity, no habitat/sickness/item bonuses) — the
+        # value breeding is priced from, so the client can preview the breeding fee.
+        "base_income": animal_base_income_rub_per_min(animal),
         "income_breakdown": income_breakdown,
         "cure_cost_usd": cure_cost_usd(animal, locality_habitat, bonuses, vet_level),
         "habitat_bonus": matches,

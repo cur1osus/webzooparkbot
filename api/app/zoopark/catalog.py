@@ -354,6 +354,19 @@ def breed_success_rate(reproduction_a: GeneTier, reproduction_b: GeneTier) -> fl
     return (BREED_BASE_SUCCESS_PCT + BREED_SUCCESS_PCT_PER_TIER * tiers) / 100
 
 
+# Breeding is no longer free: each attempt costs, in rubles, this many hours of the two
+# parents' combined *intrinsic* income (genes + rarity, no habitat/sickness/item bonuses).
+# It scales with how valuable the animals being bred are — cloning your best pair is the
+# priciest breed — gives rubles a sink that grows with the zoo, and is charged on every
+# attempt (success is not guaranteed), so genes/genetics that raise success save real money.
+BREED_COST_INCOME_HOURS = 4
+
+
+def breed_cost_rub(parent_income_a: int, parent_income_b: int) -> int:
+    """Ruble price of one breeding attempt from the parents' intrinsic per-minute incomes."""
+    return round(BREED_COST_INCOME_HOURS * 60 * (parent_income_a + parent_income_b))
+
+
 # ─── Localities ───────────────────────────────────────────────────────────────
 #
 # GDD §5: first is free and random, then Базовая цена × 1.5^(кол-во купленных).

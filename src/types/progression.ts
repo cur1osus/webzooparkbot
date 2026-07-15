@@ -40,6 +40,8 @@ export interface Animal {
   is_sick: boolean;
   can_breed: boolean;
   income: number;
+  /** Intrinsic income/min (genes + rarity only) — the value breeding is priced from. */
+  base_income: number;
   income_breakdown?: AnimalIncomeBreakdown;
   /** Price to cure this animal, in dollars (10 hours of its healthy income). */
   cure_cost_usd: number;
@@ -143,6 +145,8 @@ export interface BreedResult {
   rate: number;
   animal: Animal | null;
   inherited_genes?: InheritedGene[];
+  cost_rub?: number;
+  new_rub?: number;
 }
 
 export type InheritedGeneKey = 'survival' | 'reproduction' | 'appearance' | 'size_trait';
