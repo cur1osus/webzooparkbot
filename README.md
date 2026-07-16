@@ -132,7 +132,7 @@ state.
 ## Checks
 
 ```bash
-pytest api/tests -q                       # 131 tests, on the real schema in SQLite
+pytest api/tests -q                       # 174 tests, on the real schema in SQLite
 mypy api/app --ignore-missing-imports     # must stay clean
 ruff check api                            # bug-catching rules only
 npm run lint && npm test && npm run build # frontend
@@ -144,6 +144,17 @@ edge in solo games, every item property has a live consumer. Add to it when you 
 
 `api/tests/test_progression.py` guards the GDD: 40/40/20 gene rolls, the breeding table,
 and — the one the old code got wrong — that an expedition can actually be lost.
+
+It also guards the expedition ceiling. `combat_power` tops out at 18, so five animals topped
+out at 90 while the strongest possible beast was 57: every squad above 57 won 100% of
+encounters everywhere, five plain "medium" animals already scored 60, and because the beast's
+genes were rolled without reference to the squad, a 90-power squad drew the same reward as a
+60-power one. Power above the threshold bought nothing. Four things fix that and only work
+together — a player-chosen raid `depth` that multiplies the beast, graded outcomes on
+`squad_power / wild_power` instead of a cliff, overkill upgrading the catch's genes, and two
+power axes that are not genes (the forge's `expedition_power` and the `expedition`
+development track) because genes alone can never exceed 90. `TestSquadPowerIsWorthInvestingIn`
+pins each one, including that a full build clears the deepest raid and never dominates it.
 
 `api/tests/test_migration_matches_models.py` runs `alembic upgrade head` and diffs the
 result against `Base.metadata`. Autogenerate is off; nothing else stops the revision and

@@ -20,6 +20,7 @@ const baseState: GameState = {
   paw_coins: 0,
   vet_level: 0,
   genetics_level: 0,
+  expedition_level: 0,
   income_rub_per_min: 30,
   upkeep_rub_per_min: 10,
   income_synced_at: '2026-01-01T00:00:00.000Z',

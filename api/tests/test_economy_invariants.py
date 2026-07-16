@@ -13,13 +13,28 @@ from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import economy, games, ledger
 from api.app.zoopark.catalog import (
     BANK_FEE_PERCENT,
+    BASE_INCOME_RUB_PER_MIN,
     BONUS_REWARD_VALUES,
     BONUS_REWARD_WEIGHTS,
+    EXPEDITION_GRADES,
+    EXPEDITIONS,
     ITEM_PROPERTIES,
     ITEM_RARITY_DROP_WEIGHTS,
+    OUTBREAK_MIN_HEALTHY,
+    RARITIES,
     RATE_MAX_RUB_PER_USD,
     RATE_MIN_RUB_PER_USD,
     SOLO_WIN_CHANCE_PCT,
+    SPECIES_ID_BY_CODE,
+    SPECIES_RARITY_INCOME_MULT,
+    expected_gene_income_mult,
+    expected_lifespan_minutes,
+    expedition_gene_weights,
+    expedition_loot,
+    expedition_max_depth,
+    expedition_minutes,
+    expedition_rarity_weights,
+    expedition_wild_power_range,
     FORGE_CREATE_BASE_USD,
     FORGE_MAX_ITEM_LEVEL,
     FORGE_MERGE_COST_USD,
@@ -220,6 +235,74 @@ class TestMerchantIsPricedForTheRebasedEconomy:
         assert legendary > rare
 
 
+class TestExpeditionsDoNotMintCurrency:
+    """Expeditions gained a currency trophy when depth arrived: a raid that only ever paid
+    one animal could not scale with the zoo, but a raid that pays cash is a new faucet, and
+    the bank (rub → usd) has to stay the real source of dollars."""
+
+    def _grade(self, key: str):
+        return next(grade for grade in EXPEDITION_GRADES if grade["key"] == key)
+
+    def _expected_catch_lifetime_rub(self, habitat: str, depth: int) -> float:
+        """What the animal this raid captures will earn over its whole life, on average."""
+        gene_weights = expedition_gene_weights(habitat, depth)
+        rarity_weights = expedition_rarity_weights(habitat, depth)
+        rarity_mult = sum(rarity_weights[r] * SPECIES_RARITY_INCOME_MULT[r] for r in RARITIES)
+        return (
+            BASE_INCOME_RUB_PER_MIN
+            * expected_gene_income_mult(gene_weights)
+            * rarity_mult
+            * expected_lifespan_minutes(gene_weights)
+        )
+
+    @pytest.mark.parametrize("habitat", sorted(EXPEDITIONS))
+    def test_the_trophy_never_outgrows_the_catch(self, habitat):
+        """The captured animal is the reward; the trophy is a garnish on it. If cash ever
+        dwarfed the catch, depth would be farmed for rubles and the genetics loop — the
+        actual game — would become the side dish."""
+        for depth in range(1, expedition_max_depth(habitat) + 1):
+            _, _, mean_wild = expedition_wild_power_range(habitat, depth)
+            minutes = expedition_minutes(habitat, depth)
+            rub, _ = expedition_loot(round(mean_wild), minutes, self._grade("dominant"))
+            lifetime = self._expected_catch_lifetime_rub(habitat, depth)
+            assert rub < lifetime * 0.25, f"{habitat} depth {depth}: trophy is {rub / lifetime:.0%} of the catch"
+
+    def test_losing_pays_nothing(self):
+        for key in ("rout", "defeat"):
+            assert expedition_loot(999, 999, self._grade(key)) == (0, 0)
+
+    def test_only_a_dominant_win_mints_dollars(self):
+        """Same rule the packs follow: the bank stays the dollar funnel."""
+        for grade in EXPEDITION_GRADES:
+            _, usd = expedition_loot(180, 240, grade)
+            assert (usd > 0) == grade["pays_usd"], grade["key"]
+            assert grade["pays_usd"] == (grade["key"] == "dominant")
+
+    def test_the_dollar_trophy_stays_under_a_pack(self):
+        """The strongest beast in the game, dominated, must still not pay for a pack — or the
+        expedition would fund the pack economy the bank exists to gate."""
+        strongest = max(
+            expedition_wild_power_range(habitat, depth)[1]
+            for habitat in EXPEDITIONS
+            for depth in range(1, expedition_max_depth(habitat) + 1)
+        )
+        _, usd = expedition_loot(strongest, 24 * 60, self._grade("dominant"))
+        assert usd < pack_price_usd_for_tier("rare")
+
+    def test_a_deeper_raid_always_pays_more(self):
+        """Otherwise the depth ladder would have a rung nobody should ever climb — exactly the
+        inversion that made Antarctica strictly dominated by Fields before depth existed."""
+        payouts = [
+            expedition_loot(
+                round(expedition_wild_power_range("antarctica", depth)[2]),
+                expedition_minutes("antarctica", depth),
+                self._grade("victory"),
+            )[0]
+            for depth in range(1, 6)
+        ]
+        assert payouts == sorted(payouts) and payouts[0] > 0
+
+
 class TestEveryItemPropertyIsApplied:
     """C-4: the forge sold artefacts labelled "Общий доход +45%" for Telegram Stars, and
     nothing in the codebase ever read the number."""
@@ -296,19 +379,53 @@ class TestEveryItemPropertyIsApplied:
 
     def test_discount_upkeep_lowers_the_stored_maintenance_rate(self, db, player):
         from api.app.zoopark.core import me
-        from api.app.zoopark.progression import open_pack
 
-        open_pack(player)
+        _stock_zoo(player)
         before = me(player)["upkeep_rub_per_min"]
+        # The fixture is what makes the assertion below mean something. A single pack animal
+        # rolls its genes at random, and a weak roll earns so little that upkeep — 5% of
+        # income at the one-animal floor — truncates to 1 ₽/min, where a 30% discount rounds
+        # straight back to 1 and `after < before` fails against itself.
+        assert before > 1, "the fixture must produce an upkeep a discount can visibly lower"
+
         _activate(player, "discount_upkeep", 30)
         after = me(player)["upkeep_rub_per_min"]
-        assert after <= before
-        # A one-animal zoo can legitimately round its upkeep down to zero after the
-        # economy rebase; in that case there is no smaller integer to observe.
-        if before > 0:
-            assert after < before
+        assert after < before
         with get_session() as session:
             assert bonuses_module.load(session, 1).total("discount_upkeep") == 30
+
+
+def _stock_zoo(telegram_id: int, count: int = 7) -> None:
+    """A deterministic zoo whose upkeep is well clear of integer-rounding granularity.
+
+    Built directly rather than by opening packs, because a pack rolls genes at random and a
+    weak roll leaves upkeep at 1 ₽/min — a value no percentage discount can move. Kept below
+    `OUTBREAK_MIN_HEALTHY` so a passive disease outbreak cannot strike between two reads and
+    change the income the upkeep is derived from.
+    """
+    from api.app.zoopark.progression import create_animal
+    from api.app.zoopark.season import ensure_player_season
+
+    assert count < OUTBREAK_MIN_HEALTHY, "a larger zoo could take an outbreak mid-test"
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=telegram_id).one()
+        season = ensure_player_season(session, row)
+        for _ in range(count):
+            create_animal(
+                session,
+                player_id=row.id,
+                season_id=season.id,
+                origin="pack",
+                genes={
+                    "gene_survival": "high",
+                    "gene_reproduction": "high",
+                    "gene_appearance": "high",
+                    "gene_size": "high",
+                },
+                habitat="fields",
+                species_id=SPECIES_ID_BY_CODE["dragon"],
+            )
+        session.commit()
 
 
 def _activate(telegram_id: int, kind: str, value: int, species_id: int | None = None) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from random import SystemRandom
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +13,7 @@ from api.app.zoopark.catalog import (
     BONUS_KIND_WEIGHTS,
     BONUS_REWARD_VALUES,
     BONUS_REWARD_WEIGHTS,
+    Currency,
     HABITATS,
     SPECIES_BY_ID,
     SPECIES_IDS_BY_RARITY,
@@ -59,8 +61,12 @@ def roll_daily_bonus_offer(session: Session, player: Player) -> tuple[str, int, 
     if kind == "locality":
         return kind, 1, random.choice(available_localities)
 
+    # The two non-currency kinds returned above, so what is left is a `Currency`. The reward
+    # tables are keyed by that Literal, and `BONUS_KIND_WEIGHTS` is a plain `dict[str, int]`,
+    # so the narrowing has to be spelled out rather than inferred.
+    currency = cast(Currency, kind)
     amount = random.choices(
-        BONUS_REWARD_VALUES[kind],
-        weights=BONUS_REWARD_WEIGHTS[kind],
+        BONUS_REWARD_VALUES[currency],
+        weights=BONUS_REWARD_WEIGHTS[currency],
     )[0]
     return kind, amount, None

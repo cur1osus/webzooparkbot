@@ -111,6 +111,7 @@ class Player(Base):
         CheckConstraint("balance_paw >= 0", name="ck_players_balance_paw"),
         CheckConstraint("vet_level BETWEEN 0 AND 5", name="ck_players_vet_level"),
         CheckConstraint("genetics_level BETWEEN 0 AND 5", name="ck_players_genetics_level"),
+        CheckConstraint("expedition_level BETWEEN 0 AND 5", name="ck_players_expedition_level"),
         Index("ix_players_income", "income_rub_per_min"),
         MYSQL,
     )
@@ -138,6 +139,11 @@ class Player(Base):
     balance_paw: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     vet_level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     genetics_level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    # The expedition corps: the only development track that buys raw squad power, and so the
+    # only one that can carry a squad past what its genes alone allow (see catalog).
+    expedition_level: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=0, server_default="0"
+    )
 
     # Cached so the leaderboard is an indexed read instead of a full scan of every
     # animal of every player. Recomputed by `income.sync_player_income` on any change
@@ -409,21 +415,31 @@ class BreedingAttempt(Base):
 
 
 class Expedition(Base):
-    """GDD §7: only one active expedition at a time.
+    """GDD §7, with one expedition in flight per locality.
 
     `active_marker` is a stored generated column that is 1 while the expedition is
     unresolved and NULL afterwards. MySQL treats NULLs as distinct in a unique index,
-    so the constraint below makes "one active expedition per player per season" an
-    invariant of the database rather than a check the domain layer might forget.
+    so the constraint below makes "one active expedition per locality" an invariant of
+    the database rather than a check the domain layer might forget.
+
+    The unique key used to span (player, season) alone — one expedition at a time for the
+    whole zoo. That capped the feature's entire output at one animal per trip no matter how
+    large the zoo grew, so it faded to noise exactly as a player progressed. Keying on the
+    locality instead ties throughput to the five-locality infrastructure the player already
+    pays for, and keeps the natural rule that you cannot raid one place twice at once.
     """
 
     __tablename__ = "expeditions"
     __table_args__ = (
-        UniqueConstraint("player_id", "season_id", "active_marker", name="uq_expeditions_one_active"),
+        UniqueConstraint(
+            "player_id", "season_id", "locality_id", "active_marker",
+            name="uq_expeditions_one_active_per_locality",
+        ),
         CheckConstraint(
             "outcome IS NULL OR " + _one_of("outcome", ("victory", "defeat")),
             name="ck_expeditions_outcome",
         ),
+        CheckConstraint("depth BETWEEN 1 AND 5", name="ck_expeditions_depth"),
         MYSQL,
     )
 
@@ -433,6 +449,10 @@ class Expedition(Base):
     )
     season_id: Mapped[int] = mapped_column(Integer, ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False)
     locality_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("localities.id", ondelete="CASCADE"), nullable=False)
+
+    # How hard a raid the player chose. Stored because it sets the beast's power and the
+    # quality of the catch, and `finish_expedition` rolls both long after `start` returned.
+    depth: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1, server_default="1")
 
     started_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     ends_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)

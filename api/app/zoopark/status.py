@@ -118,10 +118,16 @@ def claim_bonus(tg_id: int) -> dict:
             raise HTTPException(400, "Бонус уже получен сегодня")
 
         new_balance = None
+        balance_field = None
         reward_name = None
         reward_emoji = None
         if offer.currency in ("rub", "usd", "paw"):
             currency: Currency = offer.currency  # type: ignore[assignment]
+            # Resolved here, off the same narrowing that produced the balance: `currency`
+            # widens back to `str` outside this branch, and the column is *not* held to the
+            # three currencies — `ck_daily_bonuses_currency` also permits the
+            # locality and animal kinds handled below.
+            balance_field = _CURRENCY_FIELD[currency]
             new_balance = ledger.grant(
                 session, player, currency, offer.amount, "daily_bonus", ref_table="daily_bonuses", ref_id=offer.id
             )
@@ -167,8 +173,8 @@ def claim_bonus(tg_id: int) -> dict:
             "reward_name": reward_name,
             "reward_emoji": reward_emoji,
         }
-        if new_balance is not None:
-            result[_CURRENCY_FIELD[offer.currency]] = new_balance
+        if new_balance is not None and balance_field is not None:
+            result[balance_field] = new_balance
         session.commit()
         return result
 
@@ -233,13 +239,21 @@ def cure_all_animals(tg_id: int) -> dict:
             .with_for_update()
         ).all()
         bonuses = bonuses_module.load(session, player.id)
-        locality_habitats = dict(
-            session.execute(
+        locality_habitats: dict[int, str] = {
+            locality_id: habitat
+            for locality_id, habitat in session.execute(
                 select(Locality.id, Locality.habitat).where(Locality.player_id == player.id)
             ).all()
-        )
+        }
+        # An animal standing outside any enclosure has no habitat to match against, and
+        # `locality_id` is nullable for exactly that case.
         total_cost = sum(
-            cure_cost_usd(animal, locality_habitats.get(animal.locality_id), bonuses, player.vet_level)
+            cure_cost_usd(
+                animal,
+                locality_habitats.get(animal.locality_id) if animal.locality_id is not None else None,
+                bonuses,
+                player.vet_level,
+            )
             for animal in animals
         )
 

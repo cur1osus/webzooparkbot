@@ -20,6 +20,7 @@ from api.app.zoopark.catalog import (
     BASE_INCOME_RUB_PER_MIN,
     DIVERSITY_BONUS_PERCENT_PER_SPECIES,
     GENE_INCOME_MULT,
+    GeneTier,
     HABITAT_MATCH_BONUS,
     ITEM_PROPERTIES,
     NICKNAME_COLORS,
@@ -141,10 +142,15 @@ def animal_income_breakdown(animal: Animal, locality_habitat: str | None, bonuse
     is_sick = animal.sick_since is not None
     species_multiplier = bonuses.species_income_multiplier(animal.species_id)
     rarity_multiplier = SPECIES_RARITY_INCOME_MULT[species["rarity"]]
+    # The columns are plain strings in the ORM; the multiplier tables are keyed by `GeneTier`.
+    # `ck_animals_gene_*` is what actually holds the column to those three values.
+    survival = cast(GeneTier, animal.gene_survival)
+    appearance = cast(GeneTier, animal.gene_appearance)
+    size = cast(GeneTier, animal.gene_size)
     factors = [
-        {"key": "survival", "label": "Выживаемость", "value": animal.gene_survival, "multiplier": GENE_INCOME_MULT["survival"][animal.gene_survival]},
-        {"key": "appearance", "label": "Внешность", "value": animal.gene_appearance, "multiplier": GENE_INCOME_MULT["appearance"][animal.gene_appearance]},
-        {"key": "size", "label": "Размер", "value": animal.gene_size, "multiplier": GENE_INCOME_MULT["size"][animal.gene_size]},
+        {"key": "survival", "label": "Выживаемость", "value": survival, "multiplier": GENE_INCOME_MULT["survival"][survival]},
+        {"key": "appearance", "label": "Внешность", "value": appearance, "multiplier": GENE_INCOME_MULT["appearance"][appearance]},
+        {"key": "size", "label": "Размер", "value": size, "multiplier": GENE_INCOME_MULT["size"][size]},
         {"key": "habitat", "label": "Родная среда", "value": "да" if matches else "нет", "multiplier": HABITAT_MATCH_BONUS if matches else 1.0},
         {"key": "sickness", "label": "Здоровье", "value": "болен" if is_sick else "здоров", "multiplier": SICK_INCOME_MULT if is_sick else 1.0},
         {"key": "species_item", "label": "Предметы вида", "value": "активные" if species_multiplier != 1.0 else "нет", "multiplier": species_multiplier},
@@ -297,6 +303,7 @@ def build_state(session: Session, player: Player) -> dict:
         "paw_coins": player.balance_paw,
         "vet_level": player.vet_level,
         "genetics_level": player.genetics_level,
+        "expedition_level": player.expedition_level,
         "income_rub_per_min": player.income_rub_per_min,
         "upkeep_rub_per_min": player.upkeep_rub_per_min,
         "income_synced_at": _iso(player.income_synced_at),

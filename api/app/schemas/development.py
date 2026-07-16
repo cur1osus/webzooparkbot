@@ -6,4 +6,4 @@ from pydantic import BaseModel
 
 
 class UpgradeDevelopmentBody(BaseModel):
-    kind: Literal["vet", "genetics"]
+    kind: Literal["vet", "genetics", "expedition"]

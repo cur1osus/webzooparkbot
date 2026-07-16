@@ -13,7 +13,7 @@ economy state that genuinely changes at runtime is the bank rate, which lives in
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 Rarity = Literal["rare", "epic", "mythic", "legendary"]
 Habitat = Literal["desert", "mountains", "forest", "fields", "antarctica"]
@@ -316,9 +316,13 @@ def development_effect_percent(level: int) -> int:
 # Global development tracks. They are capped: every level is useful, but no combination
 # can erase the upkeep sink or turn breeding into a guaranteed jackpot.
 DEVELOPMENT_MAX_LEVEL = 5
+DEVELOPMENT_KINDS: tuple[str, ...] = ("vet", "genetics", "expedition")
 DEVELOPMENT_UPGRADE_COSTS_RUB: dict[str, tuple[int, ...]] = {
     "vet": (0, 20_000, 100_000, 400_000, 1_500_000, 5_000_000),
     "genetics": (0, 30_000, 150_000, 600_000, 2_000_000, 7_000_000),
+    # The dearest track, because it is the only one that buys raw expedition power and so
+    # gates the deepest raids and their legendary-heavy tables.
+    "expedition": (0, 50_000, 250_000, 900_000, 3_000_000, 9_000_000),
 }
 
 
@@ -327,6 +331,21 @@ def development_upgrade_cost_rub(kind: str, level: int) -> int | None:
     if level >= DEVELOPMENT_MAX_LEVEL:
         return None
     return costs[level + 1]
+
+
+# The expedition corps deliberately does *not* reuse `development_effect_percent`: its 12%
+# cap is right for nudging a sickness roll, but a 12% squad bonus could not move a squad
+# past a depth the genes alone could not already clear, which is the whole point of the
+# track. Genes cap a five-animal squad at 90; this and the forge's `expedition_power` (60%
+# each) together take it to 198, just past the strongest possible depth-5 beast (182).
+EXPEDITION_CORPS_POWER_PERCENT_BY_LEVEL: tuple[int, ...] = (0, 8, 18, 30, 44, 60)
+
+
+def expedition_corps_power_percent(level: int) -> int:
+    normalized = int(level or 0)
+    return EXPEDITION_CORPS_POWER_PERCENT_BY_LEVEL[
+        min(max(normalized, 0), len(EXPEDITION_CORPS_POWER_PERCENT_BY_LEVEL) - 1)
+    ]
 
 # ─── Diversity ────────────────────────────────────────────────────────────────
 #
@@ -480,6 +499,26 @@ def pack_price_usd_for_tier(
 # therefore scaled by `EXPEDITION_WILD_SCALE`, which keeps the GDD's comparison and its
 # per-habitat difficulty ladder while making defeat reachable — and makes squad size
 # matter, which is what gives weak animals their GDD §9 role as cannon fodder.
+#
+# That scaling alone still left the feature with a hard, low ceiling. `combat_power` tops
+# out at 18 per animal, so a five-animal squad tops out at 90 while the strongest possible
+# beast was int(18 × 3.2) = 57: any squad above 57 won every encounter in every habitat,
+# 100% of the time. Five plain "medium" animals already score 60. Worse, the beast's genes
+# were rolled independently of the squad, so a 90-power squad and a 60-power squad drew the
+# identical reward — every point of power above 57 was worth exactly nothing.
+#
+# Four changes fix that, and they only work together:
+#
+#   1. `depth` — the player picks how hard the encounter is (`EXPEDITION_DEPTHS`). Depth
+#      multiplies the beast's power, so there is no fixed number to out-scale, and it also
+#      sets how good the catch is. A habitat caps the depth it can offer, which turns the
+#      difficulty ladder into an unlock ladder.
+#   2. Graded outcomes (`EXPEDITION_GRADES`) — the win/lose threshold becomes a ratio, so
+#      the edges are soft and overshoot keeps paying instead of falling off a cliff.
+#   3. Overkill (`expedition_gene_upgrade_chance`) — surplus power upgrades the catch's
+#      genes, which is what finally makes a stronger squad win a *better* animal.
+#   4. Two power axes that are not genes (the forge's `expedition_power` and the
+#      `expedition` development track), because genes alone can never exceed 90.
 
 EXPEDITION_SQUAD_MIN = 3
 EXPEDITION_SQUAD_MAX = 5
@@ -493,15 +532,257 @@ class ExpeditionDef(TypedDict):
     minutes: int
     # Плохое / Обычное / Хорошее — the wild animal's gene distribution.
     gene_weights: tuple[float, float, float]
+    # Species rarity of the beast this habitat holds. `roll_species_id` used to ignore the
+    # habitat entirely, so Antarctica dropped exactly the same species as Fields for four
+    # times the wall-clock — the hardest habitat paid the worst per hour and was strictly
+    # dominated. Rarity now climbs with the habitat, which is what pays for the longer trip.
+    rarity_weights: dict[Rarity, float]
+    # The deepest raid this habitat offers. This is the ladder: only Antarctica reaches
+    # `Логово`, and `Логово` is the only place the legendary-heavy rarity table appears.
+    max_depth: int
 
 
 EXPEDITIONS: dict[Habitat, ExpeditionDef] = {
-    "fields": {"minutes": 60, "gene_weights": (0.25, 0.45, 0.30)},
-    "desert": {"minutes": 120, "gene_weights": (0.20, 0.45, 0.35)},
-    "forest": {"minutes": 150, "gene_weights": (0.20, 0.45, 0.35)},
-    "mountains": {"minutes": 180, "gene_weights": (0.15, 0.45, 0.40)},
-    "antarctica": {"minutes": 240, "gene_weights": (0.10, 0.45, 0.45)},
+    "fields": {
+        "minutes": 60,
+        "gene_weights": (0.25, 0.45, 0.30),
+        "rarity_weights": {"rare": 0.70, "epic": 0.24, "mythic": 0.05, "legendary": 0.01},
+        "max_depth": 2,
+    },
+    "desert": {
+        "minutes": 120,
+        "gene_weights": (0.20, 0.45, 0.35),
+        "rarity_weights": {"rare": 0.55, "epic": 0.31, "mythic": 0.11, "legendary": 0.03},
+        "max_depth": 3,
+    },
+    "forest": {
+        "minutes": 150,
+        "gene_weights": (0.20, 0.45, 0.35),
+        "rarity_weights": {"rare": 0.50, "epic": 0.33, "mythic": 0.14, "legendary": 0.03},
+        "max_depth": 3,
+    },
+    "mountains": {
+        "minutes": 180,
+        "gene_weights": (0.15, 0.45, 0.40),
+        "rarity_weights": {"rare": 0.38, "epic": 0.36, "mythic": 0.20, "legendary": 0.06},
+        "max_depth": 4,
+    },
+    "antarctica": {
+        "minutes": 240,
+        "gene_weights": (0.10, 0.45, 0.45),
+        "rarity_weights": {"rare": 0.25, "epic": 0.35, "mythic": 0.28, "legendary": 0.12},
+        "max_depth": 5,
+    },
 }
+
+
+class ExpeditionDepthDef(TypedDict):
+    name: str
+    # Multiplies the beast's already-scaled power. This is the knob that removes the
+    # ceiling: there is no squad power that trivialises a depth-5 raid.
+    power_scale: float
+    # Deeper raids take longer, but nothing like linearly — an 8-hour wait is a wall, not a
+    # decision. The habitat's own `minutes` still carries most of the time cost.
+    minutes_scale: float
+    # How far this depth drags the habitat's gene and rarity tables toward the deep-raid
+    # targets below. Depth is what makes a hard fight worth taking.
+    quality_shift: float
+
+
+EXPEDITION_DEPTH_MIN = 1
+EXPEDITION_DEPTH_MAX = 5
+
+EXPEDITION_DEPTHS: dict[int, ExpeditionDepthDef] = {
+    1: {"name": "Разведка", "power_scale": 1.0, "minutes_scale": 1.00, "quality_shift": 0.00},
+    2: {"name": "Вылазка", "power_scale": 1.4, "minutes_scale": 1.15, "quality_shift": 0.15},
+    3: {"name": "Рейд", "power_scale": 1.9, "minutes_scale": 1.30, "quality_shift": 0.30},
+    4: {"name": "Глубокий рейд", "power_scale": 2.5, "minutes_scale": 1.45, "quality_shift": 0.50},
+    5: {"name": "Логово", "power_scale": 3.2, "minutes_scale": 1.60, "quality_shift": 0.70},
+}
+
+# What the tables blend *toward* at depth. Depth 1 leaves the habitat untouched, so an
+# early player sees exactly the balance that shipped before depth existed.
+EXPEDITION_DEPTH_GENE_TARGET: tuple[float, float, float] = (0.0, 0.35, 0.65)
+EXPEDITION_DEPTH_RARITY_TARGET: dict[Rarity, float] = {
+    "rare": 0.10, "epic": 0.28, "mythic": 0.37, "legendary": 0.25,
+}
+
+
+def _lerp(start: float, end: float, t: float) -> float:
+    return start * (1 - t) + end * t
+
+
+def expedition_max_depth(habitat: Habitat) -> int:
+    return EXPEDITIONS[habitat]["max_depth"]
+
+
+def normalize_expedition_depth(habitat: Habitat, depth: int) -> int:
+    """Clamp a requested depth into what this habitat actually offers."""
+    return min(max(int(depth), EXPEDITION_DEPTH_MIN), expedition_max_depth(habitat))
+
+
+def expedition_minutes(habitat: Habitat, depth: int) -> int:
+    spec = EXPEDITIONS[habitat]
+    return round(spec["minutes"] * EXPEDITION_DEPTHS[depth]["minutes_scale"])
+
+
+def expedition_gene_weights(habitat: Habitat, depth: int) -> tuple[float, float, float]:
+    shift = EXPEDITION_DEPTHS[depth]["quality_shift"]
+    base = EXPEDITIONS[habitat]["gene_weights"]
+    blended = tuple(_lerp(b, t, shift) for b, t in zip(base, EXPEDITION_DEPTH_GENE_TARGET))
+    return cast("tuple[float, float, float]", blended)
+
+
+def expedition_rarity_weights(habitat: Habitat, depth: int) -> dict[Rarity, float]:
+    shift = EXPEDITION_DEPTHS[depth]["quality_shift"]
+    base = EXPEDITIONS[habitat]["rarity_weights"]
+    return {r: _lerp(base[r], EXPEDITION_DEPTH_RARITY_TARGET[r], shift) for r in RARITIES}
+
+
+def expedition_wild_scale(depth: int) -> float:
+    return EXPEDITION_WILD_SCALE * EXPEDITION_DEPTHS[depth]["power_scale"]
+
+
+def expedition_wild_power_range(habitat: Habitat, depth: int) -> tuple[int, int, float]:
+    """(weakest, strongest, mean) beast this habitat and depth can field.
+
+    Exact rather than sampled — there are only 3³ gene combinations that matter to
+    `combat_power`. The client shows this against the squad's own power so the player can
+    read the likely grade *before* committing five earners to a raid. Choosing a depth blind
+    would be a coin flip, and a coin flip is not the decision this feature is meant to offer.
+    """
+    weights = expedition_gene_weights(habitat, depth)
+    scale = expedition_wild_scale(depth)
+    by_tier = dict(zip(GENE_TIERS, weights))
+    lowest = int(combat_power("low", "low", "low") * scale)
+    highest = int(combat_power("high", "high", "high") * scale)
+    mean = 0.0
+    for survival in GENE_TIERS:
+        for appearance in GENE_TIERS:
+            for size in GENE_TIERS:
+                probability = by_tier[survival] * by_tier[appearance] * by_tier[size]
+                mean += probability * int(combat_power(survival, appearance, size) * scale)
+    return max(1, lowest), max(1, highest), mean
+
+
+# ─── Expedition outcome grades ────────────────────────────────────────────────
+#
+# `squad_power >= wild_power` is a cliff: one point below it you lose an animal, one point
+# above it you take no damage at all, and a thousand points above it changes nothing. The
+# comparison is now a ratio, and the ratio picks a row here. Rows are ordered by
+# `min_ratio` ascending; `expedition_grade` walks them and takes the last one that fits.
+#
+# `outcome` in the database stays "victory"/"defeat" (see `ck_expeditions_outcome`); the
+# grade is the finer story told in `result_json`.
+
+
+class ExpeditionGradeDef(TypedDict):
+    key: str
+    label: str
+    min_ratio: float
+    captured: bool
+    # Only an outright rout still kills. A narrow loss costs the squad its health, not a life.
+    casualty: bool
+    # Scales `EXPEDITION_SICK_CHANCE` for the survivors: a bloodbath wounds, a clean win never does.
+    sick_multiplier: float
+    # Multiplies the currency trophy. Every capture pays one — gating the trophy on overkill
+    # alone would mean a depth-5 raid (which the best possible build wins at a ratio of only
+    # ~1.26) paid nothing while a trivial depth-1 farm always did, inverting the incentive
+    # the depth ladder exists to create.
+    loot_multiplier: float
+    # Dollars are the bank's job; only an outright dominant win mints any (see `expedition_loot`).
+    pays_usd: bool
+
+
+EXPEDITION_GRADES: tuple[ExpeditionGradeDef, ...] = (
+    {
+        "key": "rout", "label": "Разгром", "min_ratio": 0.0,
+        "captured": False, "casualty": True, "sick_multiplier": 2.0,
+        "loot_multiplier": 0.0, "pays_usd": False,
+    },
+    {
+        "key": "defeat", "label": "Отступление", "min_ratio": 0.75,
+        "captured": False, "casualty": False, "sick_multiplier": 1.0,
+        "loot_multiplier": 0.0, "pays_usd": False,
+    },
+    {
+        "key": "pyrrhic", "label": "Тяжёлая победа", "min_ratio": 0.95,
+        "captured": True, "casualty": False, "sick_multiplier": 1.5,
+        "loot_multiplier": 1.0, "pays_usd": False,
+    },
+    {
+        "key": "victory", "label": "Победа", "min_ratio": 1.15,
+        "captured": True, "casualty": False, "sick_multiplier": 0.0,
+        "loot_multiplier": 1.0, "pays_usd": False,
+    },
+    {
+        "key": "confident", "label": "Уверенная победа", "min_ratio": 1.6,
+        "captured": True, "casualty": False, "sick_multiplier": 0.0,
+        "loot_multiplier": 1.5, "pays_usd": False,
+    },
+    {
+        "key": "dominant", "label": "Доминация", "min_ratio": 2.2,
+        "captured": True, "casualty": False, "sick_multiplier": 0.0,
+        "loot_multiplier": 2.0, "pays_usd": True,
+    },
+)
+
+EXPEDITION_GRADE_KEYS: tuple[str, ...] = tuple(g["key"] for g in EXPEDITION_GRADES)
+
+
+def expedition_grade(ratio: float) -> ExpeditionGradeDef:
+    """The row `squad_power / wild_power` lands in. Never returns None: `rout` starts at 0."""
+    match = EXPEDITION_GRADES[0]
+    for grade in EXPEDITION_GRADES:
+        if ratio >= grade["min_ratio"]:
+            match = grade
+    return match
+
+
+# Surplus power upgrades the catch's genes — the single change that makes squad power worth
+# investing in past the win threshold. Ramps from `START` and saturates at `MAX`, so a
+# stronger squad always catches a better animal without ever guaranteeing an all-high one.
+EXPEDITION_OVERKILL_UPGRADE_START = 1.2
+EXPEDITION_OVERKILL_UPGRADE_SLOPE = 0.35
+EXPEDITION_OVERKILL_UPGRADE_MAX = 0.5
+# Only at `dominant`: crushing a raid far below your weight occasionally yields a second beast.
+EXPEDITION_DOMINANT_SECOND_CATCH_CHANCE = 0.35
+
+
+def expedition_gene_upgrade_chance(ratio: float) -> float:
+    """Per-gene chance that the catch's gene is bumped one tier, from how hard you won."""
+    raw = (ratio - EXPEDITION_OVERKILL_UPGRADE_START) * EXPEDITION_OVERKILL_UPGRADE_SLOPE
+    return min(max(raw, 0.0), EXPEDITION_OVERKILL_UPGRADE_MAX)
+
+
+# The currency trophy. It scales with the beast's power *and* the hours the squad was away,
+# so a six-hour depth-5 raid pays for the trip while an hourly depth-1 farm stays a trickle.
+#
+# The catch is the reward; this is a garnish on it, and the coefficient is chosen to keep it
+# one: across every habitat and depth the trophy runs 1–10% of what the captured animal will
+# itself earn over its life (up to ~19% on a dominant win). That is the bound
+# `test_the_trophy_never_outgrows_the_catch` holds it to.
+#
+# It is deliberately *not* bounded by the income the squad forgoes while away. A deep raid
+# does out-earn what five median animals would have made at home — that is the point of
+# risking them — and pretending otherwise would mean pricing the trophy into irrelevance.
+# The faucet is safe because it is gated: reaching the depths that pay well costs a 13M ₽
+# corps plus forge items, and at that stage the trophy is a few percent of the zoo's hourly
+# income, while `upkeep_rub_per_min` still scales with every animal the raid brings home.
+EXPEDITION_LOOT_RUB_PER_POWER_HOUR = 250
+# Dollars only at `dominant`, thin, and deliberately not scaled by duration: the bank
+# (rub → usd) stays the real dollar source, exactly as with packs.
+EXPEDITION_LOOT_USD_PER_POWER = 0.25
+
+
+def expedition_loot(wild_power: int, minutes: int, grade: ExpeditionGradeDef) -> tuple[int, int]:
+    """(rubles, dollars) won from a beast of `wild_power` after a `minutes`-long raid."""
+    if grade["loot_multiplier"] <= 0:
+        return 0, 0
+    hours = minutes / 60
+    rub = int(wild_power * EXPEDITION_LOOT_RUB_PER_POWER_HOUR * hours * grade["loot_multiplier"])
+    usd = int(wild_power * EXPEDITION_LOOT_USD_PER_POWER) if grade["pays_usd"] else 0
+    return rub, usd
 
 # ─── Merchant ─────────────────────────────────────────────────────────────────
 #
@@ -635,6 +916,7 @@ PropertyKind = Literal[
     "duel_moves",
     "duel_bonus",
     "bonus_rerolls",
+    "expedition_power",
 ]
 
 
@@ -756,6 +1038,21 @@ ITEM_PROPERTIES: dict[PropertyKind, PropertyDef] = {
             "mythical": (1, 4), "legendary": (1, 5),
         },
         "applies_to": "status.reroll_daily_bonus",
+    },
+    # The forge's half of the non-gene power axis. Capped at 60% so that even a perfect
+    # three-item loadout plus a maxed corps lands a full-gene squad at 198 — enough to
+    # clear a depth-5 raid reliably, never enough to dominate one.
+    "expedition_power": {
+        "label": "Сила в экспедиции",
+        "unit": "percent_bonus",
+        "per_species": False,
+        "cap": 60,
+        "weight": 15,
+        "ranges": {
+            "common": (4, 8), "rare": (8, 14), "epic": (14, 22),
+            "mythical": (20, 30), "legendary": (25, 40),
+        },
+        "applies_to": "progression.squad_power",
     },
 }
 

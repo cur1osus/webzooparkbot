@@ -1,4 +1,4 @@
-import type { Animal, GeneTier, Habitat } from '@/types';
+import type { Animal, ExpeditionGrade, GeneTier, Habitat } from '@/types';
 
 export type GeneKey = 'survival' | 'reproduction' | 'appearance' | 'size_trait';
 
@@ -7,7 +7,6 @@ export const HABITAT_INFO: Record<Habitat, {
   name: string;
   color: string;
   expeditionDifficulty: string;
-  expeditionReward: string;
 }> = {
   // Landscape icons (not animals) so a habitat never reads as a second creature next
   // to the animal art.
@@ -16,35 +15,30 @@ export const HABITAT_INFO: Record<Habitat, {
     name: 'Пустыня',
     color: 'var(--c-gold)',
     expeditionDifficulty: 'Средняя',
-    expeditionReward: 'Средний',
   },
   mountains: {
     emoji: '⛰️',
     name: 'Горы',
     color: 'var(--tg-theme-hint-color)',
     expeditionDifficulty: 'Высокая',
-    expeditionReward: 'Высокий',
   },
   forest: {
     emoji: '🌲',
     name: 'Густой лес',
     color: 'var(--c-green)',
     expeditionDifficulty: 'Средняя',
-    expeditionReward: 'Средний',
   },
   fields: {
     emoji: '🌾',
     name: 'Поля',
     color: 'var(--c-teal)',
     expeditionDifficulty: 'Низкая',
-    expeditionReward: 'Низкий',
   },
   antarctica: {
     emoji: '🏔️',
     name: 'Антарктида',
     color: 'var(--c-cyan)',
     expeditionDifficulty: 'Очень высокая',
-    expeditionReward: 'Очень высокий',
   },
 };
 
@@ -94,12 +88,63 @@ export function geneColor(key: GeneKey, value: GeneTier): string {
   return GENE_META[key][value].color;
 }
 
+/**
+ * One animal's raw combat power, 6 to 18. This is the gene half only — the server also
+ * applies the player's forge items and corps level, which `ExpeditionInfo.power_multiplier`
+ * carries. Use `squadPower` for the number the fight is actually decided on.
+ */
 export function expeditionPower(animal: Pick<Animal, 'size_trait' | 'survival' | 'appearance'>): number {
   return (
     COMBAT_TIER_WEIGHT[animal.size_trait] * 3 +
     COMBAT_TIER_WEIGHT[animal.survival] * 2 +
     COMBAT_TIER_WEIGHT[animal.appearance]
   );
+}
+
+/** Mirrors `progression.squad_power`: summed gene power, scaled by the player's bonuses. */
+export function squadPower(
+  animals: Pick<Animal, 'size_trait' | 'survival' | 'appearance'>[],
+  powerMultiplier = 1,
+): number {
+  return Math.trunc(animals.reduce((total, animal) => total + expeditionPower(animal), 0) * powerMultiplier);
+}
+
+/**
+ * Mirrors `catalog.EXPEDITION_GRADES`. The fight is decided on `squad_power / wild_power`
+ * rather than a win/lose threshold, so the player can read how much margin they have before
+ * committing — and see that surplus power still buys something.
+ */
+export const EXPEDITION_GRADE_META: Record<ExpeditionGrade, {
+  label: string;
+  minRatio: number;
+  color: string;
+  emoji: string;
+  blurb: string;
+}> = {
+  rout: { label: 'Разгром', minRatio: 0, color: 'var(--c-red)', emoji: '💀', blurb: 'Отряд разбит — одно животное погибнет.' },
+  defeat: { label: 'Отступление', minRatio: 0.75, color: 'var(--c-red-soft)', emoji: '🩸', blurb: 'Зверь уйдёт, отряд вернётся потрёпанным.' },
+  pyrrhic: { label: 'Тяжёлая победа', minRatio: 0.95, color: 'var(--c-amber)', emoji: '🥵', blurb: 'Захват ценой ранений.' },
+  victory: { label: 'Победа', minRatio: 1.15, color: 'var(--c-green)', emoji: '🏆', blurb: 'Чистый захват без потерь.' },
+  confident: { label: 'Уверенная победа', minRatio: 1.6, color: 'var(--c-teal)', emoji: '✨', blurb: 'Захват, трофей и шанс улучшить гены добычи.' },
+  dominant: { label: 'Доминация', minRatio: 2.2, color: 'var(--c-gold)', emoji: '👑', blurb: 'Двойной трофей, доллары и шанс на второго зверя.' },
+};
+
+const GRADES_BY_RATIO = (Object.keys(EXPEDITION_GRADE_META) as ExpeditionGrade[]).sort(
+  (a, b) => EXPEDITION_GRADE_META[a].minRatio - EXPEDITION_GRADE_META[b].minRatio,
+);
+
+/** The grade a ratio lands in — the same walk the server does. */
+export function expeditionGradeFor(ratio: number): ExpeditionGrade {
+  let match: ExpeditionGrade = GRADES_BY_RATIO[0];
+  for (const grade of GRADES_BY_RATIO) {
+    if (ratio >= EXPEDITION_GRADE_META[grade].minRatio) match = grade;
+  }
+  return match;
+}
+
+/** Mirrors `catalog.expedition_gene_upgrade_chance`: what overkill buys, as a fraction. */
+export function expeditionGeneUpgradeChance(ratio: number): number {
+  return Math.min(Math.max((ratio - 1.2) * 0.35, 0), 0.5);
 }
 
 export function lifeLeft(diesAt: string | null): { label: string; color: string } | null {

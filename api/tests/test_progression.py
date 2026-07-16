@@ -11,11 +11,23 @@ from api.app.db.models import Animal, Expedition, LedgerEntry, PackOpening, Play
 from api.app.zoopark import progression, social
 from api.app.zoopark.catalog import (
     BREED_TIER_INDEX,
+    EXPEDITION_GRADES,
+    EXPEDITION_SQUAD_MAX,
     EXPEDITION_SQUAD_MIN,
     GENE_ROLL_WEIGHTS,
+    ITEM_PROPERTIES,
     PACK_REWARD_RANGES,
     breed_success_rate,
     combat_power,
+    expedition_corps_power_percent,
+    expedition_gene_upgrade_chance,
+    expedition_gene_weights,
+    expedition_grade,
+    expedition_loot,
+    expedition_max_depth,
+    expedition_minutes,
+    expedition_rarity_weights,
+    expedition_wild_power_range,
 )
 from api.app.schemas.progression import StartExpeditionBody
 
@@ -154,20 +166,201 @@ class TestExpeditionsCanBeLost:
         assert win_rate("fields") > win_rate("mountains") > win_rate("antarctica")
 
 
+class TestSquadPowerIsWorthInvestingIn:
+    """The defect this whole subsystem was rebuilt around.
+
+    `combat_power` tops out at 18, so five animals topped out at 90 while the strongest
+    possible beast was int(18 × 3.2) = 57. Every squad above 57 won 100% of encounters in
+    every habitat — five plain "medium" animals already scored 60 — and because the beast's
+    genes were rolled without reference to the squad, a 90-power squad drew exactly the same
+    reward as a 60-power one. Power above the threshold bought *nothing*.
+    """
+
+    def test_depth_outruns_the_gene_ceiling(self):
+        """No squad, however perfect, trivialises the deepest raid."""
+        best_possible_squad = EXPEDITION_SQUAD_MAX * combat_power("high", "high", "high")
+        _, strongest_shallow, _ = expedition_wild_power_range("antarctica", 1)
+        _, strongest_deep, _ = expedition_wild_power_range("antarctica", 5)
+
+        assert best_possible_squad > strongest_shallow, "depth 1 must stay winnable on genes alone"
+        assert best_possible_squad < strongest_deep, "genes alone must never clear a depth-5 beast"
+
+    def test_the_two_non_gene_axes_reach_the_deepest_raid_and_no_further(self):
+        """The forge and the corps exist because genes cannot pay for depth. Together they
+        must clear a depth-5 raid reliably — and never dominate it, or the ceiling is back."""
+        maxed = 1 + (ITEM_PROPERTIES["expedition_power"]["cap"] + expedition_corps_power_percent(5)) / 100
+        full_build = int(EXPEDITION_SQUAD_MAX * combat_power("high", "high", "high") * maxed)
+        _, strongest, mean = expedition_wild_power_range("antarctica", 5)
+
+        assert expedition_grade(full_build / mean)["captured"], "a full build must beat an average lair beast"
+        assert full_build > strongest, "a full build must survive even the worst roll"
+        assert expedition_grade(full_build / mean)["key"] != "dominant", "depth 5 must never be farmable"
+
+    def test_surplus_power_buys_a_better_catch(self):
+        """Overkill upgrades the catch's genes — the mechanism that makes power pay past the
+        win threshold instead of falling off a cliff."""
+        assert expedition_gene_upgrade_chance(1.0) == 0
+        assert expedition_gene_upgrade_chance(1.2) == 0
+        ramp = [expedition_gene_upgrade_chance(r) for r in (1.4, 1.8, 2.2, 2.6)]
+        assert ramp == sorted(ramp) and ramp[0] > 0
+        assert expedition_gene_upgrade_chance(99) == pytest.approx(0.5), "must saturate, never guarantee"
+
+    def test_the_win_threshold_is_a_gradient_not_a_cliff(self):
+        grades = [expedition_grade(r)["key"] for r in (0.5, 0.8, 1.0, 1.3, 1.8, 2.5)]
+        assert grades == ["rout", "defeat", "pyrrhic", "victory", "confident", "dominant"]
+        # Only an outright rout still kills: a narrow loss costs health, not a life.
+        assert [g["key"] for g in EXPEDITION_GRADES if g["casualty"]] == ["rout"]
+
+    def test_a_squad_of_mediums_no_longer_wins_everything(self):
+        """The exact symptom: five medium animals used to beat every beast in the game."""
+        five_mediums = EXPEDITION_SQUAD_MAX * combat_power("medium", "medium", "medium")
+        _, strongest_deep, mean_deep = expedition_wild_power_range("antarctica", 5)
+        assert five_mediums < mean_deep
+        assert not expedition_grade(five_mediums / mean_deep)["captured"]
+
+
+class TestTheDifficultyLadderPaysForItself:
+    """`roll_species_id` ignored the habitat, so Antarctica dropped the same species as
+    Fields for four times the wall-clock. The hardest habitat paid the worst per hour and
+    was strictly dominated — nobody had a reason to leave Fields."""
+
+    def test_rarity_climbs_with_the_habitat(self):
+        legendary = [
+            expedition_rarity_weights(habitat, 1)["legendary"]
+            for habitat in ("fields", "desert", "mountains", "antarctica")
+        ]
+        assert legendary == sorted(legendary)
+        assert legendary[0] < legendary[-1]
+
+    def test_rarity_climbs_with_depth(self):
+        by_depth = [expedition_rarity_weights("antarctica", d)["legendary"] for d in range(1, 6)]
+        assert by_depth == sorted(by_depth) and by_depth[0] < by_depth[-1]
+
+    def test_only_the_hardest_habitat_reaches_the_richest_table(self):
+        """The habitat caps the depth it offers — that cap *is* the ladder."""
+        caps = {habitat: expedition_max_depth(habitat) for habitat in progression.EXPEDITIONS}
+        assert caps["fields"] < caps["desert"] <= caps["mountains"] < caps["antarctica"] == 5
+        best_fields = expedition_rarity_weights("fields", caps["fields"])["legendary"]
+        best_antarctica = expedition_rarity_weights("antarctica", caps["antarctica"])["legendary"]
+        assert best_fields < best_antarctica
+
+    def test_a_deeper_raid_is_stronger_slower_and_richer(self):
+        power = [expedition_wild_power_range("antarctica", d)[2] for d in range(1, 6)]
+        minutes = [expedition_minutes("antarctica", d) for d in range(1, 6)]
+        assert power == sorted(power) and minutes == sorted(minutes)
+
+    def test_depth_one_is_exactly_what_shipped_before_depth_existed(self):
+        """Every in-flight expedition keeps its odds across the migration."""
+        for habitat, spec in progression.EXPEDITIONS.items():
+            assert expedition_gene_weights(habitat, 1) == spec["gene_weights"]
+            assert expedition_minutes(habitat, 1) == spec["minutes"]
+
+
 class TestExpeditionLifecycle:
-    def _squad(self, telegram_id: int, grant) -> list[int]:
+    def _stock(self, telegram_id: int, grant, packs: int = 6) -> None:
         grant(telegram_id, "usd", 10 ** 9)  # paid packs cost dollars
         # Rare is always unlocked and reopenable; open it enough times to stock a squad.
-        for _ in range(6):
+        for _ in range(packs):
             progression.open_pack(telegram_id, "rare")
+
+    def _squad(self, telegram_id: int, grant) -> list[int]:
+        self._stock(telegram_id, grant)
         return [a["id"] for a in progression.get_expeditions(telegram_id)["available_animals"]][:3]
 
-    def test_only_one_expedition_may_be_active(self, db, player, grant):
+    def _free_squad(self, telegram_id: int, size: int = 3) -> list[int]:
+        """Three animals not already committed to a raid."""
+        return [a["id"] for a in progression.get_expeditions(telegram_id)["available_animals"]][:size]
+
+    def test_only_one_expedition_per_locality(self, db, player, grant):
         squad = self._squad(player, grant)
         locality_id = progression.list_localities(player)["localities"][0]["id"]
         progression.start_expedition(player, StartExpeditionBody(locality_id=locality_id, animal_ids=squad))
         with pytest.raises(Exception, match="экспедиц"):
-            progression.start_expedition(player, StartExpeditionBody(locality_id=locality_id, animal_ids=squad))
+            progression.start_expedition(
+                player, StartExpeditionBody(locality_id=locality_id, animal_ids=self._free_squad(player))
+            )
+
+    def test_localities_run_in_parallel(self, db, player, grant):
+        """One raid per zoo capped the feature's whole output at one animal per trip, so it
+        faded to noise exactly as the zoo grew. Throughput now follows locality investment."""
+        self._stock(player, grant, packs=14)
+        grant(player, "rub", 10 ** 9)
+        first, second = self._buy_two_localities(player)
+
+        progression.start_expedition(player, StartExpeditionBody(locality_id=first, animal_ids=self._free_squad(player)))
+        progression.start_expedition(player, StartExpeditionBody(locality_id=second, animal_ids=self._free_squad(player)))
+
+        info = progression.get_expeditions(player)
+        assert {e["locality_id"] for e in info["expeditions"]} == {first, second}
+        assert {loc["id"] for loc in info["localities"] if loc["busy"]} == {first, second}
+
+    def _buy_two_localities(self, telegram_id: int) -> tuple[int, int]:
+        from api.app.schemas.progression import BuyLocalityBody
+
+        taken = set(progression.list_localities(telegram_id)["habitats_taken"])
+        free = next(h for h in ("fields", "desert", "forest", "mountains", "antarctica") if h not in taken)
+        progression.buy_locality(telegram_id, BuyLocalityBody(habitat=free))
+        localities = progression.list_localities(telegram_id)["localities"]
+        return localities[0]["id"], localities[1]["id"]
+
+    def _locality_for(self, telegram_id: int, habitat: str) -> int:
+        """The player's locality in `habitat`, bought if the free starting roll missed it.
+
+        The first locality is random (GDD §5), so a test that merely hopes for one habitat
+        would skip most runs and assert nothing.
+        """
+        from api.app.schemas.progression import BuyLocalityBody
+
+        for locality in progression.list_localities(telegram_id)["localities"]:
+            if locality["habitat"] == habitat:
+                return locality["id"]
+        progression.buy_locality(telegram_id, BuyLocalityBody(habitat=habitat))
+        return next(
+            locality["id"]
+            for locality in progression.list_localities(telegram_id)["localities"]
+            if locality["habitat"] == habitat
+        )
+
+    def test_a_habitat_caps_the_depth_it_offers(self, db, player, grant):
+        """The cap is the ladder: Fields must not print Antarctica's legendary table."""
+        squad = self._squad(player, grant)
+        grant(player, "rub", 10 ** 9)
+        fields_id = self._locality_for(player, "fields")
+        fields = next(
+            loc for loc in progression.get_expeditions(player)["localities"] if loc["id"] == fields_id
+        )
+
+        assert fields["max_depth"] == 2
+        assert [option["depth"] for option in fields["depths"]] == [1, 2]
+        with pytest.raises(Exception, match="глубина"):
+            progression.start_expedition(
+                player, StartExpeditionBody(locality_id=fields_id, animal_ids=squad, depth=5)
+            )
+
+    def test_the_deepest_raid_is_reachable_where_the_ladder_allows_it(self, db, player, grant):
+        squad = self._squad(player, grant)
+        grant(player, "rub", 10 ** 9)
+        antarctica_id = self._locality_for(player, "antarctica")
+        started = progression.start_expedition(
+            player, StartExpeditionBody(locality_id=antarctica_id, animal_ids=squad, depth=5)
+        )["expedition"]
+        assert started["depth"] == 5
+        assert started["depth_name"] == "Логово"
+
+    def test_depth_lengthens_the_trip_and_strengthens_the_beast(self, db, player, grant):
+        squad = self._squad(player, grant)
+        localities = progression.get_expeditions(player)["localities"]
+        locality = localities[0]
+        if locality["max_depth"] < 2:
+            pytest.skip("this habitat offers a single depth")
+
+        started = progression.start_expedition(
+            player, StartExpeditionBody(locality_id=locality["id"], animal_ids=squad, depth=2)
+        )["expedition"]
+        assert started["depth"] == 2
+        shallow, deep = locality["depths"][0], locality["depths"][1]
+        assert deep["minutes"] > shallow["minutes"]
+        assert deep["wild_power_avg"] > shallow["wild_power_avg"]
 
     def test_a_squad_animal_cannot_be_listed_twice(self, db, player, grant):
         squad = self._squad(player, grant)
@@ -238,6 +431,38 @@ class TestExpeditionLifecycle:
         assert genetics["level"] == 1
         assert me(player)["vet_level"] == 1
         assert me(player)["genetics_level"] == 1
+
+    def test_the_trophy_comes_from_the_depth_not_the_clock(self, db, player, grant, monkeypatch):
+        """The trophy is priced off the raid's designed length. Reading the gap between
+        `started_at` and `ends_at` instead made it collapse to zero rubles whenever anything
+        shifted the timestamp — while still paying dollars, which do not scale with time."""
+        self._stock(player, grant, packs=14)
+        grant(player, "rub", 10 ** 9)
+        locality_id = self._locality_for(player, "fields")
+        squad = self._free_squad(player, size=EXPEDITION_SQUAD_MAX)
+        started = progression.start_expedition(
+            player, StartExpeditionBody(locality_id=locality_id, animal_ids=squad, depth=1)
+        )
+
+        # Pin the beast to the weakest one there is, so the squad certainly wins and this
+        # asserts on the trophy rather than on a gene roll.
+        weakest = ({k: "low" for k in ("gene_survival", "gene_reproduction", "gene_appearance", "gene_size")}, 1)
+        monkeypatch.setattr(progression, "wild_encounter", lambda *_args, **_kwargs: weakest)
+
+        # Land the raid the instant it launched — the shift the old code silently read as
+        # "this expedition took no time, so it earned nothing".
+        with get_session() as session:
+            expedition = session.query(Expedition).filter_by(id=started["expedition"]["id"]).one()
+            expedition.ends_at = expedition.started_at
+            session.commit()
+
+        result = progression.finish_expedition(player, started["expedition"]["id"])["result"]
+        assert result["grade"] == "dominant", "the weakest possible beast must be dominated"
+        expected_rub, expected_usd = expedition_loot(
+            result["wild_power"], expedition_minutes("fields", 1), expedition_grade(result["ratio"])
+        )
+        assert result["loot"] == {"rub": expected_rub, "usd": expected_usd}
+        assert result["loot"]["rub"] > 0, "a zeroed clock must not zero the trophy"
 
     def test_finishing_early_is_refused(self, db, player, grant):
         squad = self._squad(player, grant)

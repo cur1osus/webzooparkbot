@@ -26,12 +26,26 @@ from api.app.db.models import (
 from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
+from api.app.zoopark.bonuses import Bonuses
 from api.app.zoopark.catalog import (
+    EXPEDITION_DEPTH_MAX,
+    EXPEDITION_DEPTH_MIN,
+    EXPEDITION_DEPTHS,
+    EXPEDITION_DOMINANT_SECOND_CATCH_CHANCE,
     EXPEDITION_SICK_CHANCE,
     EXPEDITION_SQUAD_MAX,
     EXPEDITION_SQUAD_MIN,
-    EXPEDITION_WILD_SCALE,
     EXPEDITIONS,
+    expedition_corps_power_percent,
+    expedition_gene_upgrade_chance,
+    expedition_gene_weights,
+    expedition_grade,
+    expedition_loot,
+    expedition_max_depth,
+    expedition_minutes,
+    expedition_rarity_weights,
+    expedition_wild_power_range,
+    expedition_wild_scale,
     GENE_ROLL_WEIGHTS,
     GENE_TIERS,
     HABITATS,
@@ -42,6 +56,7 @@ from api.app.zoopark.catalog import (
     locality_upgrade_cost_rub,
     MAX_LOCALITIES,
     PackTier,
+    Rarity,
     SPECIES_IDS_BY_RARITY,
     SPECIES_BY_ID,
     SPECIES_RARITY_WEIGHTS,
@@ -112,11 +127,21 @@ def daily_gift_odds() -> list[dict]:
     ]
 
 
-def roll_species_id() -> int:
+def roll_species_id(rarity_weights: dict[Rarity, float] | None = None) -> int:
     """Roll a species independently from its genes; rarity affects the species income
-    multiplier while the genes still determine most of the animal's value."""
-    rarity = random.choices(list(SPECIES_RARITY_WEIGHTS), weights=list(SPECIES_RARITY_WEIGHTS.values()))[0]
+    multiplier while the genes still determine most of the animal's value.
+
+    `rarity_weights` defaults to the pack table. Expeditions pass their own, which is how a
+    habitat and a raid's depth finally decide what kind of beast lives there.
+    """
+    weights = rarity_weights or SPECIES_RARITY_WEIGHTS
+    rarity = random.choices(list(weights), weights=list(weights.values()))[0]
     return random.choice(SPECIES_IDS_BY_RARITY[rarity])
+
+
+def upgrade_gene(tier: GeneTier) -> GeneTier:
+    """One tier better, saturating at `high`."""
+    return GENE_TIERS[min(GENE_TIERS.index(tier) + 1, len(GENE_TIERS) - 1)]
 
 
 def dies_at_for(survival: GeneTier, now: datetime | None = None) -> datetime:
@@ -769,10 +794,11 @@ def roll_wild_gene(weights: tuple[float, float, float]) -> GeneTier:
     return random.choices(GENE_TIERS, weights=weights)[0]
 
 
-def wild_encounter(habitat: Habitat) -> tuple[dict[str, GeneTier], int]:
-    """The beast the squad meets. Its genes follow the habitat's Плохое/Обычное/Хорошее
-    split (GDD §7) and become the captured animal's genes on victory."""
-    weights = EXPEDITIONS[habitat]["gene_weights"]
+def wild_encounter(habitat: Habitat, depth: int = EXPEDITION_DEPTH_MIN) -> tuple[dict[str, GeneTier], int]:
+    """The beast the squad meets at this depth. Its genes follow the habitat's
+    Плохое/Обычное/Хорошее split (GDD §7), shifted toward the good end by depth, and become
+    the captured animal's genes on victory."""
+    weights = expedition_gene_weights(habitat, depth)
     genes = {
         "gene_survival": roll_wild_gene(weights),
         "gene_reproduction": roll_wild_gene(weights),
@@ -780,11 +806,25 @@ def wild_encounter(habitat: Habitat) -> tuple[dict[str, GeneTier], int]:
         "gene_size": roll_wild_gene(weights),
     }
     raw = combat_power(genes["gene_survival"], genes["gene_appearance"], genes["gene_size"])
-    return genes, int(raw * EXPEDITION_WILD_SCALE)
+    # Never 0 — the weakest beast is int(6 × 3.2 × 1.0) = 19 — but `_resolve` divides by it.
+    return genes, max(1, int(raw * expedition_wild_scale(depth)))
 
 
-def squad_power(animals: list[Animal]) -> int:
-    return sum(
+def squad_power_multiplier(bonuses: Bonuses | None, expedition_level: int = 0) -> float:
+    """The two non-gene power axes, summed. Genes cap a five-animal squad at 90; these carry
+    it to 198, which is what makes the deepest raids reachable at all (see catalog)."""
+    forge_percent = bonuses.expedition_power_percent() if bonuses is not None else 0
+    return 1 + (forge_percent + expedition_corps_power_percent(expedition_level)) / 100
+
+
+def squad_power(
+    animals: list[Animal],
+    bonuses: Bonuses | None = None,
+    expedition_level: int = 0,
+) -> int:
+    """Combined combat power of the squad, after the forge's `expedition_power` items and
+    the expedition corps track."""
+    genes_only = sum(
         combat_power(
             cast(GeneTier, a.gene_survival),
             cast(GeneTier, a.gene_appearance),
@@ -792,9 +832,56 @@ def squad_power(animals: list[Animal]) -> int:
         )
         for a in animals
     )
+    return int(genes_only * squad_power_multiplier(bonuses, expedition_level))
 
 
-def _resolve(session: Session, expedition: Expedition, player: Player, season_id: int) -> dict:
+def _wild_payload(genes: dict[str, GeneTier], species_id: int) -> dict[str, object]:
+    species = SPECIES_BY_ID[species_id]
+    # The client names the size gene `size_trait` everywhere else; keep it one name.
+    payload: dict[str, object] = {key.removeprefix("gene_"): value for key, value in genes.items()}
+    payload["size_trait"] = payload.pop("size")
+    payload.update(
+        {
+            "species_code": species["code"],
+            "species_name": species["name"],
+            "species_emoji": species["emoji"],
+            "species_rarity": species["rarity"],
+        }
+    )
+    return payload
+
+
+def _roll_captured_genes(
+    wild_genes: dict[str, GeneTier], ratio: float
+) -> tuple[dict[str, GeneTier], list[dict[str, str]]]:
+    """The catch's genes, and which of them overkill improved.
+
+    A squad that wins by a wide margin takes the beast in prime condition rather than barely
+    dragging it home. This is the whole answer to "power above the win threshold does
+    nothing": before this, a 90-power squad and a 60-power squad drew the identical reward,
+    because the beast's genes were rolled with no reference to who was fighting it.
+    """
+    chance = expedition_gene_upgrade_chance(ratio)
+    genes: dict[str, GeneTier] = {}
+    upgrades: list[dict[str, str]] = []
+    for key, value in wild_genes.items():
+        improved = upgrade_gene(value) if random.random() < chance else value
+        genes[key] = improved
+        if improved != value:
+            upgrades.append({"gene": key.removeprefix("gene_"), "from": value, "to": improved})
+    for upgrade in upgrades:
+        if upgrade["gene"] == "size":
+            upgrade["gene"] = "size_trait"
+    return genes, upgrades
+
+
+def _resolve(
+    session: Session,
+    expedition: Expedition,
+    player: Player,
+    season_id: int,
+    bonuses: Bonuses,
+) -> dict:
     squad = list(
         session.scalars(
             select(Animal)
@@ -803,57 +890,97 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
         ).all()
     )
     habitat: Habitat = expedition.locality.habitat  # type: ignore[assignment]
-    genes, wild_power = wild_encounter(habitat)
-    wild_species_id = roll_species_id()
-    wild_species = SPECIES_BY_ID[wild_species_id]
-    power = squad_power(squad)
+    depth = int(expedition.depth)
+    genes, wild_power = wild_encounter(habitat, depth)
+    rarity_weights = expedition_rarity_weights(habitat, depth)
+    wild_species_id = roll_species_id(rarity_weights)
+    power = squad_power(squad, bonuses, player.expedition_level)
+
+    # GDD §7's rule was `Сила отряда ≥ сила дикого` — a cliff. As a ratio it becomes a
+    # gradient: a narrow loss costs health rather than a life, and a wide win pays extra.
+    ratio = power / wild_power
+    grade = expedition_grade(ratio)
 
     now = utcnow()
-    # The client names the size gene `size_trait` everywhere else; keep it one name.
-    wild_payload: dict[str, object] = {key.removeprefix("gene_"): value for key, value in genes.items()}
-    wild_payload["size_trait"] = wild_payload.pop("size")
-    wild_payload.update(
-        {
-            "species_code": wild_species["code"],
-            "species_name": wild_species["name"],
-            "species_emoji": wild_species["emoji"],
-            "species_rarity": wild_species["rarity"],
-        }
-    )
     result: dict = {
         "squad_power": power,
         "wild_power": wild_power,
-        "wild": wild_payload,
+        "wild": _wild_payload(genes, wild_species_id),
         "habitat": habitat,
+        "depth": depth,
+        "depth_name": EXPEDITION_DEPTHS[depth]["name"],
+        "ratio": round(ratio, 2),
+        "grade": grade["key"],
+        "grade_label": grade["label"],
+        # `outcome` stays the two-valued column the schema checks; `grade` is the finer story.
+        "outcome": "victory" if grade["captured"] else "defeat",
     }
+    expedition.outcome = result["outcome"]
 
-    # GDD §7: "Сила отряда ≥ сила дикого → Захват!". The beast is scaled by
-    # EXPEDITION_WILD_SCALE so that the comparison can actually go either way.
-    if power >= wild_power:
-        captured = create_animal(
-            session,
-            player_id=player.id,
-            season_id=season_id,
-            origin="expedition",
-            genes=genes,
-            habitat=habitat,
-            species_id=wild_species_id,
+    alive = [a for a in squad if a.removed_at is None]
+    victim: Animal | None = None
+    if grade["casualty"] and alive:
+        victim = random.choice(alive)
+        victim.removed_at = now
+        victim.removal_reason = "expedition_loss"
+        victim.sick_since = None
+        enqueue_animal_death(session, player, victim, reason="expedition_loss")
+    result["killed_animal_id"] = victim.id if victim else None
+    result["sick_animal_ids"] = _wound_survivors(
+        alive, victim, now, player.vet_level, grade["sick_multiplier"]
+    )
+
+    captured: list[Animal] = []
+    if grade["captured"]:
+        caught_genes, upgrades = _roll_captured_genes(genes, ratio)
+        captured.append(
+            create_animal(
+                session,
+                player_id=player.id,
+                season_id=season_id,
+                origin="expedition",
+                genes=caught_genes,
+                habitat=habitat,
+                species_id=wild_species_id,
+            )
         )
-        expedition.outcome = "victory"
-        result["outcome"] = "victory"
-        result["captured_animal_id"] = captured.id
-    else:
-        expedition.outcome = "defeat"
-        result["outcome"] = "defeat"
-        alive = [a for a in squad if a.removed_at is None]
-        victim = random.choice(alive) if alive else None
-        if victim is not None:
-            victim.removed_at = now
-            victim.removal_reason = "expedition_loss"
-            victim.sick_since = None
-            enqueue_animal_death(session, player, victim, reason="expedition_loss")
-        result["killed_animal_id"] = victim.id if victim else None
-        result["sick_animal_ids"] = _wound_survivors(alive, victim, now, player.vet_level)
+        result["gene_upgrades"] = upgrades
+        # Crushing a raid far below your weight occasionally flushes out a second beast. It
+        # rolls fresh from the same tables — it is a bonus, not a copy of the first catch.
+        if grade["key"] == "dominant" and random.random() < EXPEDITION_DOMINANT_SECOND_CATCH_CHANCE:
+            extra_genes, _ = wild_encounter(habitat, depth)
+            captured.append(
+                create_animal(
+                    session,
+                    player_id=player.id,
+                    season_id=season_id,
+                    origin="expedition",
+                    genes=extra_genes,
+                    habitat=habitat,
+                    species_id=roll_species_id(rarity_weights),
+                )
+            )
+
+        # The raid's *designed* length, not the gap between the stored timestamps. Reading
+        # the row would make the trophy depend on wall-clock that anything may shift — a
+        # test, an admin fix, a future "finish early" feature — and a shifted `ends_at`
+        # silently paid zero rubles while still paying dollars, which do not scale with time.
+        loot_rub, loot_usd = expedition_loot(wild_power, expedition_minutes(habitat, depth), grade)
+        if loot_rub:
+            ledger.grant(
+                session, player, "rub", loot_rub, "expedition_loot",
+                ref_table="expeditions", ref_id=expedition.id,
+            )
+        if loot_usd:
+            ledger.grant(
+                session, player, "usd", loot_usd, "expedition_loot",
+                ref_table="expeditions", ref_id=expedition.id,
+            )
+        result["loot"] = {"rub": loot_rub, "usd": loot_usd}
+
+    result["captured_animal_ids"] = [a.id for a in captured]
+    # Kept until all deployed clients read the list.
+    result["captured_animal_id"] = captured[0].id if captured else None
 
     expedition.resolved_at = now
     expedition.result_json = json.dumps(result, ensure_ascii=False)
@@ -861,9 +988,21 @@ def _resolve(session: Session, expedition: Expedition, player: Player, season_id
     return result
 
 
-def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime, vet_level: int = 0) -> list[int]:
+def _wound_survivors(
+    squad: list[Animal],
+    victim: Animal | None,
+    now: datetime,
+    vet_level: int = 0,
+    sick_multiplier: float = 1.0,
+) -> list[int]:
+    """Wound the survivors. `sick_multiplier` comes from the grade: a clean win passes 0 and
+    hurts nobody, a rout passes 2.0."""
     wounded: list[int] = []
-    sickness_chance = EXPEDITION_SICK_CHANCE * (1 - development_effect_percent(vet_level) / 100)
+    sickness_chance = (
+        EXPEDITION_SICK_CHANCE * sick_multiplier * (1 - development_effect_percent(vet_level) / 100)
+    )
+    if sickness_chance <= 0:
+        return wounded
     for animal in squad:
         if (victim is not None and animal.id == victim.id) or animal.sick_since is not None:
             continue
@@ -874,17 +1013,77 @@ def _wound_survivors(squad: list[Animal], victim: Animal | None, now: datetime, 
     return wounded
 
 
-def _open_expedition(session: Session, player_id: int, season_id: int) -> Expedition | None:
-    return session.scalars(
-        select(Expedition)
-        .where(
-            Expedition.player_id == player_id,
-            Expedition.season_id == season_id,
-            (Expedition.resolved_at.is_(None)) | (Expedition.acknowledged_at.is_(None)),
+def _open_expeditions(session: Session, player_id: int, season_id: int) -> list[Expedition]:
+    """Every expedition still in flight or holding a result the player has not read.
+
+    One per locality, so this is a list rather than the single row it used to be.
+    """
+    return list(
+        session.scalars(
+            select(Expedition)
+            .where(
+                Expedition.player_id == player_id,
+                Expedition.season_id == season_id,
+                (Expedition.resolved_at.is_(None)) | (Expedition.acknowledged_at.is_(None)),
+            )
+            .order_by(Expedition.started_at.asc())
+        ).all()
+    )
+
+
+def _expedition_payload(session: Session, expedition: Expedition, bonuses: Bonuses) -> dict:
+    squad = session.scalars(
+        select(Animal)
+        .join(ExpeditionMember, ExpeditionMember.animal_id == Animal.id)
+        .where(ExpeditionMember.expedition_id == expedition.id)
+    ).all()
+    result = json.loads(expedition.result_json) if expedition.result_json else None
+    if result:
+        ids = result.get("captured_animal_ids") or (
+            [result["captured_animal_id"]] if result.get("captured_animal_id") else []
         )
-        .order_by(Expedition.started_at.desc())
-        .limit(1)
-    ).first()
+        caught = [animal for animal in (session.get(Animal, i) for i in ids) if animal]
+        if caught:
+            result["captured_animals"] = [animal_payload(a, None, bonuses) for a in caught]
+            result["captured_animal"] = result["captured_animals"][0]
+    depth = int(expedition.depth)
+    return {
+        "id": expedition.id,
+        "locality_id": expedition.locality_id,
+        "habitat": expedition.locality.habitat,
+        "depth": depth,
+        "depth_name": EXPEDITION_DEPTHS[depth]["name"],
+        "started_at": expedition.started_at.isoformat(),
+        "ends_at": expedition.ends_at.isoformat(),
+        "status": "active" if expedition.resolved_at is None else "finished",
+        "animals": [animal_payload(a, None, bonuses) for a in squad],
+        "result": result,
+    }
+
+
+def _depth_options(habitat: Habitat) -> list[dict]:
+    """What raids this habitat offers, for the client's depth picker."""
+    options = []
+    for depth in range(EXPEDITION_DEPTH_MIN, expedition_max_depth(habitat) + 1):
+        low, high, mean = expedition_wild_power_range(habitat, depth)
+        options.append(
+            {
+                "depth": depth,
+                "name": EXPEDITION_DEPTHS[depth]["name"],
+                "minutes": expedition_minutes(habitat, depth),
+                # The beast's power band, so the picker can forecast the grade against the
+                # squad the player has actually selected rather than making them guess.
+                "wild_power_min": low,
+                "wild_power_max": high,
+                "wild_power_avg": round(mean),
+                # Whole percents, so the picker can state what the depth actually buys.
+                "rarity_percent": {
+                    rarity: round(weight * 100, 1)
+                    for rarity, weight in expedition_rarity_weights(habitat, depth).items()
+                },
+            }
+        )
+    return options
 
 
 def get_expeditions(tg_id: int) -> dict:
@@ -901,40 +1100,38 @@ def get_expeditions(tg_id: int) -> dict:
             .order_by(Locality.purchased_at.asc())
         ).all()
 
-        expedition = _open_expedition(session, player.id, season.id)
-        active = None
-        if expedition is not None:
-            # Reading never resolves: two concurrent GETs used to roll the outcome twice
-            # and hand out two reward animals.
-            squad = session.scalars(
-                select(Animal)
-                .join(ExpeditionMember, ExpeditionMember.animal_id == Animal.id)
-                .where(ExpeditionMember.expedition_id == expedition.id)
-            ).all()
-            result = json.loads(expedition.result_json) if expedition.result_json else None
-            if result and result.get("captured_animal_id"):
-                captured = session.get(Animal, result["captured_animal_id"])
-                if captured:
-                    result["captured_animal"] = animal_payload(captured, None, bonuses)
-            active = {
-                "id": expedition.id,
-                "habitat": expedition.locality.habitat,
-                "started_at": expedition.started_at.isoformat(),
-                "ends_at": expedition.ends_at.isoformat(),
-                "status": "active" if expedition.resolved_at is None else "finished",
-                "animals": [animal_payload(a, None, bonuses) for a in squad],
-                "result": result,
-            }
+        # Reading never resolves: two concurrent GETs used to roll the outcome twice
+        # and hand out two reward animals.
+        open_expeditions = _open_expeditions(session, player.id, season.id)
+        payloads = [_expedition_payload(session, e, bonuses) for e in open_expeditions]
+        busy_locality_ids = {e.locality_id for e in open_expeditions}
 
         squad_pool = available_animals(session, player.id, season.id)
         session.commit()
         return {
-            "active": active,
-            "localities": [{"id": loc.id, "habitat": loc.habitat} for loc in localities],
+            "expeditions": payloads,
+            # Kept until all deployed clients read the list.
+            "active": payloads[0] if payloads else None,
+            "localities": [
+                {
+                    "id": loc.id,
+                    "habitat": loc.habitat,
+                    "busy": loc.id in busy_locality_ids,
+                    "max_depth": expedition_max_depth(cast(Habitat, loc.habitat)),
+                    "depths": _depth_options(cast(Habitat, loc.habitat)),
+                }
+                for loc in localities
+            ],
             "available_animals": [animal_payload(a, None, bonuses) for a in squad_pool],
             "expedition_minutes": {habitat: spec["minutes"] for habitat, spec in EXPEDITIONS.items()},
             "squad_min": EXPEDITION_SQUAD_MIN,
             "squad_max": EXPEDITION_SQUAD_MAX,
+            "depth_min": EXPEDITION_DEPTH_MIN,
+            "depth_max": EXPEDITION_DEPTH_MAX,
+            # The squad-power multiplier the player currently carries, so the client can show
+            # the same number the server will compute rather than guessing from genes alone.
+            "power_multiplier": round(squad_power_multiplier(bonuses, player.expedition_level), 2),
+            "expedition_level": player.expedition_level,
         }
 
 
@@ -951,9 +1148,6 @@ def start_expedition(tg_id: int, body: StartExpeditionBody) -> dict:
             raise HTTPException(404, "Нет игрока")
         season = ensure_player_season(session, player)
 
-        if _open_expedition(session, player.id, season.id) is not None:
-            raise HTTPException(400, "Уже есть активная или незавершённая экспедиция")
-
         locality = session.scalars(
             select(Locality).where(
                 Locality.id == body.locality_id,
@@ -963,6 +1157,21 @@ def start_expedition(tg_id: int, body: StartExpeditionBody) -> dict:
         ).first()
         if not locality:
             raise HTTPException(404, "Местность не найдена")
+        habitat = cast(Habitat, locality.habitat)
+
+        # One raid per locality, not one per zoo: parallel expeditions are what tie the
+        # feature's output to the size of the zoo instead of leaving it a flat one-animal
+        # trickle. An unread result still holds its locality, so nothing is lost unseen.
+        if any(e.locality_id == locality.id for e in _open_expeditions(session, player.id, season.id)):
+            raise HTTPException(400, "В этой местности уже идёт экспедиция")
+
+        # The habitat caps the depth it offers — this is the difficulty ladder, and it is
+        # what stops Fields from printing the legendary-heavy table Antarctica exists for.
+        if not (EXPEDITION_DEPTH_MIN <= body.depth <= expedition_max_depth(habitat)):
+            raise HTTPException(
+                400, f"Здесь доступна глубина 1–{expedition_max_depth(habitat)}"
+            )
+        depth = body.depth
 
         squad = session.scalars(
             select(Animal).where(
@@ -981,15 +1190,17 @@ def start_expedition(tg_id: int, body: StartExpeditionBody) -> dict:
             player_id=player.id,
             season_id=season.id,
             locality_id=locality.id,
+            depth=depth,
             started_at=now,
-            ends_at=now + timedelta(minutes=EXPEDITIONS[locality.habitat]["minutes"]),  # type: ignore[index]
+            ends_at=now + timedelta(minutes=expedition_minutes(habitat, depth)),
         )
         session.add(expedition)
         try:
             session.flush()
         except IntegrityError as exc:
-            # `uq_expeditions_one_active` — someone started one between the check and here.
-            raise HTTPException(400, "Уже есть активная экспедиция") from exc
+            # `uq_expeditions_one_active_per_locality` — someone started one here between
+            # the check above and this flush.
+            raise HTTPException(400, "В этой местности уже идёт экспедиция") from exc
 
         for animal in squad:
             session.add(ExpeditionMember(expedition_id=expedition.id, animal_id=animal.id))
@@ -1001,19 +1212,27 @@ def start_expedition(tg_id: int, body: StartExpeditionBody) -> dict:
             "ok": True,
             "expedition": {
                 "id": expedition.id,
+                "locality_id": locality.id,
                 "habitat": locality.habitat,
+                "depth": depth,
+                "depth_name": EXPEDITION_DEPTHS[depth]["name"],
                 "started_at": expedition.started_at.isoformat(),
                 "ends_at": expedition.ends_at.isoformat(),
                 "status": "active",
                 "animals": [animal_payload(a, None, bonuses) for a in squad],
                 "result": None,
             },
+            # What the squad will actually be worth in the fight, so the client never has to
+            # re-derive the multiplier the server applied.
+            "squad_power": squad_power(list(squad), bonuses, player.expedition_level),
         }
         session.commit()
         return result
 
 
-def finish_expedition(tg_id: int) -> dict:
+def finish_expedition(tg_id: int, expedition_id: int | None = None) -> dict:
+    """Resolve one finished expedition. `expedition_id=None` takes the oldest one that is
+    ready, which is what a client with no id in hand means."""
     with get_session() as session:
         player = get_player(session, tg_id, for_update=True)
         if not player:
@@ -1022,42 +1241,54 @@ def finish_expedition(tg_id: int) -> dict:
 
         # FOR UPDATE plus the `resolved_at` re-check make finishing idempotent: the second
         # caller blocks, then sees the expedition already resolved.
-        expedition = session.scalars(
+        now = utcnow()
+        unresolved = (
             select(Expedition)
             .where(
                 Expedition.player_id == player.id,
                 Expedition.season_id == season.id,
                 Expedition.resolved_at.is_(None),
             )
-            .order_by(Expedition.started_at.desc())
+            .order_by(Expedition.started_at.asc())
             .with_for_update()
-            .limit(1)
-        ).first()
+        )
+        if expedition_id is not None:
+            expedition = session.scalars(unresolved.where(Expedition.id == expedition_id).limit(1)).first()
+        else:
+            # Without an id, take the oldest raid that has actually landed — a zoo running
+            # five in parallel would otherwise be refused because the oldest is still out.
+            expedition = session.scalars(unresolved.where(Expedition.ends_at <= now).limit(1)).first()
+            if expedition is None and session.scalars(unresolved.limit(1)).first() is not None:
+                raise HTTPException(400, "Экспедиция ещё не завершена")
         if not expedition:
             raise HTTPException(400, "Нет активной экспедиции")
-        if utcnow() < expedition.ends_at:
+        if now < expedition.ends_at:
             raise HTTPException(400, "Экспедиция ещё не завершена")
 
-        result = _resolve(session, expedition, player, season.id)
-
         bonuses = bonuses_module.load(session, player.id)
+        result = _resolve(session, expedition, player, season.id, bonuses)
+
         sync_player_income(session, player, bonuses)
-        if result.get("captured_animal_id"):
-            captured = session.get(Animal, result["captured_animal_id"])
-            if captured:
-                result["captured_animal"] = animal_payload(captured, None, bonuses)
+        caught = [
+            animal
+            for animal in (session.get(Animal, i) for i in result.get("captured_animal_ids", []))
+            if animal
+        ]
+        if caught:
+            result["captured_animals"] = [animal_payload(a, None, bonuses) for a in caught]
+            result["captured_animal"] = result["captured_animals"][0]
 
         session.commit()
         return {"ok": True, "result": result}
 
 
-def dismiss_expedition(tg_id: int) -> dict:
+def dismiss_expedition(tg_id: int, expedition_id: int | None = None) -> dict:
     with get_session() as session:
         player = get_player(session, tg_id)
         if not player:
             raise HTTPException(404, "Нет игрока")
         season = ensure_player_season(session, player)
-        expedition = session.scalars(
+        stmt = (
             select(Expedition)
             .where(
                 Expedition.player_id == player.id,
@@ -1065,8 +1296,12 @@ def dismiss_expedition(tg_id: int) -> dict:
                 Expedition.resolved_at.is_not(None),
                 Expedition.acknowledged_at.is_(None),
             )
+            .order_by(Expedition.started_at.asc())
             .with_for_update()
-        ).first()
+        )
+        if expedition_id is not None:
+            stmt = stmt.where(Expedition.id == expedition_id)
+        expedition = session.scalars(stmt.limit(1)).first()
         if expedition is not None:
             expedition.acknowledged_at = utcnow()
         session.commit()

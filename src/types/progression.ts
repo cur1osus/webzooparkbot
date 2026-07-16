@@ -170,12 +170,33 @@ export interface InheritedGene {
   parent_b_value: GeneTier;
 }
 
+/**
+ * How decisively the fight went. `squad_power / wild_power` picks the grade, so overshoot
+ * keeps paying instead of falling off the old binary win/lose cliff.
+ */
+export type ExpeditionGrade = 'rout' | 'defeat' | 'pyrrhic' | 'victory' | 'confident' | 'dominant';
+
+export type ExpeditionGeneKey = 'survival' | 'reproduction' | 'appearance' | 'size_trait';
+
+/** A gene the squad's surplus power improved on the catch, relative to the beast met. */
+export interface ExpeditionGeneUpgrade {
+  gene: ExpeditionGeneKey;
+  from: GeneTier;
+  to: GeneTier;
+}
+
 export interface ExpeditionResult {
   outcome: 'victory' | 'defeat';
+  grade: ExpeditionGrade;
+  grade_label: string;
+  /** `squad_power / wild_power`, rounded — what picked the grade. */
+  ratio: number;
   squad_power: number;
-  /** Already scaled by the wild multiplier — compare it directly against `squad_power`. */
+  /** Already scaled by the wild multiplier and the depth — compare directly against `squad_power`. */
   wild_power: number;
   habitat: Habitat;
+  depth: number;
+  depth_name: string;
   wild: {
     species_code: string;
     species_name: string;
@@ -186,6 +207,12 @@ export interface ExpeditionResult {
     appearance: GeneTier;
     size_trait: GeneTier;
   };
+  /** Present on a capture; empty when overkill improved nothing. */
+  gene_upgrades?: ExpeditionGeneUpgrade[];
+  loot?: { rub: number; usd: number };
+  captured_animal_ids?: number[];
+  captured_animals?: Animal[];
+  /** First catch, retained for clients released before a dominant win could yield two. */
   captured_animal_id?: number;
   captured_animal?: Animal;
   killed_animal_id?: number | null;
@@ -194,7 +221,10 @@ export interface ExpeditionResult {
 
 export interface ActiveExpedition {
   id: number;
+  locality_id: number;
   habitat: Habitat;
+  depth: number;
+  depth_name: string;
   started_at: string;
   ends_at: string;
   status: 'active' | 'finished';
@@ -202,18 +232,48 @@ export interface ActiveExpedition {
   result: ExpeditionResult | null;
 }
 
+/** One raid a habitat offers. Deeper means a stronger beast and a better catch. */
+export interface ExpeditionDepthOption {
+  depth: number;
+  name: string;
+  minutes: number;
+  /** The beast's power band — forecast the grade against this before committing a squad. */
+  wild_power_min: number;
+  wild_power_max: number;
+  wild_power_avg: number;
+  rarity_percent: Record<SpeciesRarity, number>;
+}
+
+export interface ExpeditionLocality {
+  id: number;
+  habitat: Habitat;
+  /** A raid is already out here, or its result has not been read yet. */
+  busy: boolean;
+  max_depth: number;
+  depths: ExpeditionDepthOption[];
+}
+
 export interface ExpeditionInfo {
+  /** One raid per locality may be in flight, so this is a list. */
+  expeditions: ActiveExpedition[];
+  /** First expedition, retained for clients released before parallel raids. */
   active: ActiveExpedition | null;
-  localities: Array<{ id: number; habitat: Habitat }>;
+  localities: ExpeditionLocality[];
   available_animals: Animal[];
   expedition_minutes: Record<Habitat, number>;
   squad_min: number;
   squad_max: number;
+  depth_min: number;
+  depth_max: number;
+  /** Squad power multiplier from forge items and the corps track — the server applies this. */
+  power_multiplier: number;
+  expedition_level: number;
 }
 
 export interface ExpeditionStartResponse {
   ok: boolean;
   expedition: ActiveExpedition;
+  squad_power: number;
 }
 
 export interface ExpeditionFinishResponse {

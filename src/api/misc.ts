@@ -4,6 +4,7 @@ import type {
   AssignLocalityResult,
   BreedResult,
   BuyLocalityResult,
+  DevelopmentTrack,
   DonateInfo,
   ExpeditionFinishResponse,
   ExpeditionInfo,
@@ -39,8 +40,8 @@ export const apiBuyLocality = (habitat: string) =>
   req<BuyLocalityResult>('/localities/buy', { method: 'POST', body: JSON.stringify({ habitat }) });
 export const apiUpgradeLocality = (localityId: number) =>
   req<UpgradeLocalityResult>('/localities/upgrade', { method: 'POST', body: JSON.stringify({ locality_id: localityId }) });
-export const apiUpgradeDevelopment = (kind: 'vet' | 'genetics') =>
-  req<{ ok: boolean; kind: 'vet' | 'genetics'; level: number; next_cost_rub: number | null; new_rub: number }>(
+export const apiUpgradeDevelopment = (kind: DevelopmentTrack) =>
+  req<{ ok: boolean; kind: DevelopmentTrack; level: number; next_cost_rub: number | null; new_rub: number }>(
     '/development/upgrade', { method: 'POST', body: JSON.stringify({ kind }) },
   );
 export const apiAssignLocality = (animal_id: number, locality_id: number | null) =>
@@ -61,13 +62,23 @@ export const apiReleaseAnimal = (animal_id: number) =>
   });
 
 export const apiGetExpeditions = () => req<ExpeditionInfo>('/expeditions');
-export const apiStartExpedition = (locality_id: number, animal_ids: number[]) =>
+/** `depth` picks how hard the raid is; the habitat caps it (see `ExpeditionLocality.max_depth`). */
+export const apiStartExpedition = (locality_id: number, animal_ids: number[], depth = 1) =>
   req<ExpeditionStartResponse>('/expeditions/start', {
     method: 'POST',
-    body: JSON.stringify({ locality_id, animal_ids }),
+    body: JSON.stringify({ locality_id, animal_ids, depth }),
   });
-export const apiFinishExpedition = () => req<ExpeditionFinishResponse>('/expeditions/finish', { method: 'POST' });
-export const apiDismissExpedition = () => req<{ ok: boolean }>('/expeditions/dismiss', { method: 'POST' });
+/** Omitting the id resolves the oldest raid that has landed. */
+export const apiFinishExpedition = (expedition_id?: number) =>
+  req<ExpeditionFinishResponse>('/expeditions/finish', {
+    method: 'POST',
+    body: JSON.stringify({ expedition_id: expedition_id ?? null }),
+  });
+export const apiDismissExpedition = (expedition_id?: number) =>
+  req<{ ok: boolean }>('/expeditions/dismiss', {
+    method: 'POST',
+    body: JSON.stringify({ expedition_id: expedition_id ?? null }),
+  });
 
 export const apiBreed = (animal_id_1: number, animal_id_2: number) =>
   req<BreedResult>('/breed', { method: 'POST', body: JSON.stringify({ animal_id_1, animal_id_2 }) });

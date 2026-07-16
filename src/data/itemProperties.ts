@@ -14,6 +14,7 @@ export const PROPERTY_ICON: Record<PropertyKind, string> = {
   duel_moves: '🎲',
   duel_bonus: '⚡️',
   bonus_rerolls: '🎁',
+  expedition_power: '🧭',
 };
 
 export const PROPERTY_SHORT: Record<PropertyKind, string> = {
@@ -26,6 +27,7 @@ export const PROPERTY_SHORT: Record<PropertyKind, string> = {
   duel_moves: 'Броски в дуэли',
   duel_bonus: 'Счёт в дуэли',
   bonus_rerolls: 'Перебросы',
+  expedition_power: 'Сила в экспедиции',
 };
 
 /** Paw-coin price of forging an item (the USD price is server-authoritative — it escalates

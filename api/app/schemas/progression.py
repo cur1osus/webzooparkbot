@@ -37,3 +37,15 @@ class UpgradeLocalityBody(BaseModel):
 class StartExpeditionBody(BaseModel):
     locality_id: int = Field(gt=0)
     animal_ids: list[int] = Field(min_length=1, max_length=16)
+    # How hard a raid to take. The habitat's own cap is enforced in the domain layer, which
+    # is the only place that knows it; this bound just keeps nonsense out of the model.
+    depth: int = Field(default=1, ge=1, le=5)
+
+
+class FinishExpeditionBody(BaseModel):
+    # None resolves the oldest expedition that is ready — what a client with no id means.
+    expedition_id: int | None = Field(default=None, gt=0)
+
+
+class DismissExpeditionBody(BaseModel):
+    expedition_id: int | None = Field(default=None, gt=0)

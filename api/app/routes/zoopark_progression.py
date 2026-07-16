@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, OpenPackBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, DismissExpeditionBody, FinishExpeditionBody, OpenPackBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import progression as progression_service
 
 router = APIRouter(tags=["progression"])
@@ -70,10 +70,10 @@ def start_expedition(body: StartExpeditionBody, tg_id: TelegramId):
 
 
 @router.post("/api/expeditions/finish")
-def finish_expedition(tg_id: TelegramId):
-    return progression_service.finish_expedition(tg_id)
+def finish_expedition(tg_id: TelegramId, body: FinishExpeditionBody = FinishExpeditionBody()):
+    return progression_service.finish_expedition(tg_id, body.expedition_id)
 
 
 @router.post("/api/expeditions/dismiss")
-def dismiss_expedition(tg_id: TelegramId):
-    return progression_service.dismiss_expedition(tg_id)
+def dismiss_expedition(tg_id: TelegramId, body: DismissExpeditionBody = DismissExpeditionBody()):
+    return progression_service.dismiss_expedition(tg_id, body.expedition_id)

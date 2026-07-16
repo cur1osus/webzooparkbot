@@ -54,6 +54,11 @@ class Bonuses:
         """A lower rate means fewer rubles per dollar, so the discount helps the buyer."""
         return 1 - self.total("discount_bank") / 100
 
+    def expedition_power_percent(self) -> int:
+        """Percent added to the squad's combat power. Already capped by `load`; clamped again
+        so a hand-built `Bonuses` in a test cannot hand a squad negative power."""
+        return max(self.total("expedition_power"), 0)
+
 
 EMPTY = Bonuses()
 

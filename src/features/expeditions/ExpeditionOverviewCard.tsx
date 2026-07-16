@@ -1,17 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGetExpeditions } from '@/api';
 import type { ExpeditionInfo } from '@/types';
 import { formatCountdown } from '@/utils/format';
 
 function expeditionStatusText(info: ExpeditionInfo | null, nowMs: number): string {
-  const active = info?.active;
   if (!info) return 'Загружаем сводку...';
-  if (!active) return `${info.localities.length} направл. · отряд 3–5 животных`;
-  if (active.status === 'finished') return 'Результат готов';
-  if (nowMs === 0) return 'В пути';
-  const leftMs = new Date(active.ends_at).getTime() - nowMs;
-  return leftMs > 0 ? `В пути · ${formatCountdown(leftMs / 1000)}` : 'Можно завершить';
+  const running = info.expeditions ?? [];
+  const free = info.localities.filter(locality => !locality.busy).length;
+  if (running.length === 0) return `${free} свободных направл. · отряд 3–5 животных`;
+
+  const done = running.filter(e => e.status === 'finished').length;
+  if (done > 0) return done === running.length ? `Результатов готово: ${done}` : `${done} готово · ${running.length - done} в пути`;
+  if (nowMs === 0) return `В пути: ${running.length}`;
+
+  // Several raids can be out at once, so count down to the one that lands first.
+  const remaining = running.map(e => new Date(e.ends_at).getTime() - nowMs);
+  const ready = remaining.filter(leftMs => leftMs <= 0).length;
+  if (ready > 0) return `Можно завершить: ${ready}`;
+  return `В пути: ${running.length} · ближайшая ${formatCountdown(Math.min(...remaining) / 1000)}`;
 }
 
 export function ExpeditionOverviewCard({ onOpen }: { onOpen: () => void }) {
@@ -27,18 +34,25 @@ export function ExpeditionOverviewCard({ onOpen }: { onOpen: () => void }) {
     return () => window.clearInterval(timer);
   }, []);
 
-  const active = info?.active;
+  // Memoised because the effect below depends on it: a fresh `[]` every render would
+  // reschedule the refetch timer on every tick.
+  const expeditions = useMemo(() => info?.expeditions ?? [], [info?.expeditions]);
+  const anyFinished = expeditions.some(e => e.status === 'finished');
+  const anyRunning = expeditions.some(e => e.status === 'active');
 
   useEffect(() => {
-    if (!active || active.status !== 'active') return undefined;
-    const leftMs = new Date(active.ends_at).getTime() - Date.now();
-    if (leftMs <= 0) {
+    const pending = expeditions
+      .filter(e => e.status === 'active')
+      .map(e => new Date(e.ends_at).getTime() - Date.now());
+    if (pending.length === 0) return undefined;
+    if (pending.some(leftMs => leftMs <= 0)) {
       void refetch();
       return undefined;
     }
-    const timeout = window.setTimeout(() => void refetch(), leftMs + 250);
+    // Wake up for whichever raid lands first, not just the one that started first.
+    const timeout = window.setTimeout(() => void refetch(), Math.min(...pending) + 250);
     return () => window.clearTimeout(timeout);
-  }, [active, refetch]);
+  }, [expeditions, refetch]);
 
   return (
     <button
@@ -54,13 +68,13 @@ export function ExpeditionOverviewCard({ onOpen }: { onOpen: () => void }) {
           {error instanceof Error ? error.message : expeditionStatusText(info, nowMs)}
         </p>
       </div>
-      {active?.status === 'finished' && (
+      {anyFinished && (
         <span className="text-[11px] font-bold px-2 py-[4px] rounded-full"
               style={{ background: 'rgba(var(--c-green-rgb),0.14)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.25)' }}>
           Готово
         </span>
       )}
-      {active?.status === 'active' && (
+      {!anyFinished && anyRunning && (
         <span className="text-[11px] font-bold px-2 py-[4px] rounded-full"
               style={{ background: 'rgba(var(--c-blue-rgb),0.14)', color: 'var(--c-cyan)', border: '1px solid rgba(var(--c-cyan-rgb),0.28)' }}>
           В пути

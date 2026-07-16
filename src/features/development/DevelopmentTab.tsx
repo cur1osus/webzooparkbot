@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { GameState, Habitat, LocalitiesInfo } from '@/types';
+import type { DevelopmentTrack, GameState, Habitat, LocalitiesInfo } from '@/types';
 import { apiGetLocalities, apiUpgradeDevelopment, apiUpgradeLocality } from '@/api';
 import { fmt } from '@/utils/format';
 
@@ -11,7 +11,7 @@ const HABITATS: Record<Habitat, { emoji: string; name: string; color: string }> 
   antarctica: { emoji: '🏔️', name: 'Антарктида', color: 'var(--c-cyan)' },
 };
 
-type GlobalTrack = 'vet' | 'genetics';
+type GlobalTrack = DevelopmentTrack;
 type TrackLevel = { level: number; cost: number; effects: string[] };
 
 const TRACKS: Record<GlobalTrack, {
@@ -45,6 +45,22 @@ const TRACKS: Record<GlobalTrack, {
       { level: 3, cost: 600_000, effects: ['к шансу успешного скрещивания добавляется 6%', 'шанс получить слабейший ген ниже на 6%'] },
       { level: 4, cost: 2_000_000, effects: ['к шансу успешного скрещивания добавляется 9%', 'шанс получить слабейший ген ниже на 9%'] },
       { level: 5, cost: 7_000_000, effects: ['к шансу успешного скрещивания добавляется 12%', 'шанс получить слабейший ген ниже на 12%'] },
+    ],
+  },
+  // Mirrors `catalog.EXPEDITION_CORPS_POWER_PERCENT_BY_LEVEL`. Unlike the other two tracks
+  // this one is not a gentle nudge: genes cap a five-animal squad at 90 power, so without a
+  // multiplier no amount of breeding could ever reach the deepest raids.
+  expedition: {
+    icon: '🧭',
+    title: 'Экспедиционный корпус',
+    summary: 'Отряд бьёт сильнее, чем позволяют гены, — и открывает глубокие рейды.',
+    accent: 'var(--c-gold)',
+    levels: [
+      { level: 1, cost: 50_000, effects: ['сила отряда выше на 8%'] },
+      { level: 2, cost: 250_000, effects: ['сила отряда выше на 18%'] },
+      { level: 3, cost: 900_000, effects: ['сила отряда выше на 30%'] },
+      { level: 4, cost: 3_000_000, effects: ['сила отряда выше на 44%'] },
+      { level: 5, cost: 9_000_000, effects: ['сила отряда выше на 60%'] },
     ],
   },
 };
@@ -155,12 +171,12 @@ export function DevelopmentTab({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   return (
     <div className="px-[14px] pt-3 pb-5 flex flex-col gap-3">
       <div className="rounded-[22px] p-4" style={{ background: 'radial-gradient(circle at 100% 0%, rgba(var(--c-gold-rgb),0.24), transparent 48%), linear-gradient(145deg, rgba(var(--c-gold-rgb),0.12), var(--surface-subtle) 68%)', border: '1px solid rgba(var(--c-gold-rgb),0.28)' }}>
-        <div className="flex items-center gap-2"><span className="text-[25px]">🏗️</span><div><p className="m-0 font-extrabold text-[16px]">Развитие зоопарка</p><p className="m-0 mt-1 text-[11px] text-tg-hint">Выбирай, куда направить рубли: стабильность, генетику или содержание.</p></div></div>
+        <div className="flex items-center gap-2"><span className="text-[25px]">🏗️</span><div><p className="m-0 font-extrabold text-[16px]">Развитие зоопарка</p><p className="m-0 mt-1 text-[11px] text-tg-hint">Выбирай, куда направить рубли: стабильность, генетику, экспедиции или содержание.</p></div></div>
       </div>
 
       {error && <div className="rounded-xl px-3 py-2 text-[12px]" style={{ color: 'var(--c-red-soft)', background: 'rgba(var(--c-red-rgb),0.11)', border: '1px solid rgba(var(--c-red-rgb),0.25)' }}>⚠️ {error}</div>}
 
-      <div><p className="m-0 mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Глобальные направления</p><div className="flex flex-col gap-2"><TrackCard kind="vet" level={gs.vet_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('vet')} /><TrackCard kind="genetics" level={gs.genetics_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('genetics')} /></div></div>
+      <div><p className="m-0 mb-2 px-1 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Глобальные направления</p><div className="flex flex-col gap-2"><TrackCard kind="vet" level={gs.vet_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('vet')} /><TrackCard kind="genetics" level={gs.genetics_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('genetics')} /><TrackCard kind="expedition" level={gs.expedition_level} busy={busy !== null} onUpgrade={() => void upgradeTrack('expedition')} /></div></div>
 
       <div>
         <div className="flex items-baseline justify-between gap-3 mb-2 px-1"><p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px] text-tg-hint">Инфраструктура местностей</p><span className="text-[10px] text-tg-hint">до 5 уровней</span></div>

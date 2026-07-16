@@ -14,7 +14,7 @@ from api.app.zoopark.catalog import (
 from api.app.zoopark.profile import get_player
 
 
-_LEVEL_FIELD = {"vet": "vet_level", "genetics": "genetics_level"}
+_LEVEL_FIELD = {"vet": "vet_level", "genetics": "genetics_level", "expedition": "expedition_level"}
 
 
 def upgrade(tg_id: int, body: UpgradeDevelopmentBody) -> dict:
