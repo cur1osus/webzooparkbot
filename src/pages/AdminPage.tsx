@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { AdminCurrency } from '@/api/core';
-import { apiAdminCreateAchievement, apiAdminEndMaintenance, apiAdminGrant, apiAdminOverview, apiAdminSetStatus, apiAdminStartMaintenance } from '@/api';
+import { apiAdminCreateAchievement, apiAdminDeleteAchievement, apiAdminEndMaintenance, apiAdminGrant, apiAdminOverview, apiAdminSetStatus, apiAdminStartMaintenance } from '@/api';
 import type { AdminCustomAchievement, AdminOverview, AdminPlayer, MaintenanceStatus } from '@/types';
 import { fmt, formatCountdown } from '@/utils/format';
 
@@ -158,6 +158,7 @@ function AchievementCreator({ data, onChanged }: { data: AdminOverview; onChange
   const [recipientPlayers, setRecipientPlayers] = useState<AdminPlayer[]>(data.players_list);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
 
   useEffect(() => {
@@ -226,6 +227,21 @@ function AchievementCreator({ data, onChanged }: { data: AdminOverview; onChange
     }
   };
 
+  const deleteAchievement = async (achievement: AdminCustomAchievement) => {
+    if (!window.confirm(`Удалить медаль «${achievement.title}»? Она исчезнет у всех игроков.`)) return;
+    setDeletingId(achievement.id);
+    setMessage(null);
+    try {
+      await apiAdminDeleteAchievement(achievement.id);
+      setMessage({ text: 'Медаль удалена', error: false });
+      onChanged();
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Не удалось удалить медаль', error: true });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <form onSubmit={event => void submit(event)} className="card" style={{ border: '1px solid rgba(var(--c-gold-rgb),0.34)', background: 'linear-gradient(145deg, rgba(var(--c-gold-rgb),0.10), var(--surface-subtle) 58%)' }}>
@@ -279,17 +295,17 @@ function AchievementCreator({ data, onChanged }: { data: AdminOverview; onChange
 
       <div className="card">
         <div className="flex items-center justify-between gap-3"><div><p className="m-0 text-[14px] font-extrabold">Созданные медали</p><p className="m-0 mt-1 text-[11px] text-tg-hint">Они добавляются в коллекцию игроков автоматически.</p></div><span className="text-[12px] font-extrabold text-tg-hint">{data.custom_achievements.length}</span></div>
-        {data.custom_achievements.length === 0 ? <p className="m-0 mt-3 text-[12px] text-tg-hint">Пока нет кастомных достижений.</p> : <div className="mt-3 flex flex-col gap-2">{data.custom_achievements.map(achievement => <CustomAchievementRow key={achievement.id} achievement={achievement} />)}</div>}
+        {data.custom_achievements.length === 0 ? <p className="m-0 mt-3 text-[12px] text-tg-hint">Пока нет кастомных достижений.</p> : <div className="mt-3 flex flex-col gap-2">{data.custom_achievements.map(achievement => <CustomAchievementRow key={achievement.id} achievement={achievement} onDelete={deleteAchievement} deleting={deletingId === achievement.id} />)}</div>}
       </div>
     </div>
   );
 }
 
-function CustomAchievementRow({ achievement }: { achievement: AdminCustomAchievement }) {
+function CustomAchievementRow({ achievement, onDelete, deleting }: { achievement: AdminCustomAchievement; onDelete: (achievement: AdminCustomAchievement) => void; deleting: boolean }) {
   return <div className="flex items-center gap-3 rounded-xl p-2" style={{ background: 'var(--surface-subtle)' }}>
     <img src={achievement.image_url} alt="" className="h-12 w-12 shrink-0 rounded-xl object-contain" style={{ background: 'var(--input-bg)' }} />
     <div className="min-w-0 flex-1"><p className="m-0 truncate text-[13px] font-extrabold">{achievement.title}</p><p className="m-0 mt-1 truncate text-[11px] text-tg-hint">{achievement.description}</p></div>
-    <span className="shrink-0 text-right text-[10px] font-bold text-tg-hint">{achievement.audience === 'all' ? 'всем' : `${achievement.recipient_count} чел.`}</span>
+    <div className="flex shrink-0 flex-col items-end gap-1"><span className="text-right text-[10px] font-bold text-tg-hint">{achievement.audience === 'all' ? 'всем' : `${achievement.recipient_count} чел.`}</span><button type="button" onClick={() => onDelete(achievement)} disabled={deleting} className="rounded-lg border-none px-2 py-1 text-[10px] font-extrabold" style={{ color: 'var(--c-red-soft)', background: 'rgba(var(--c-red-rgb),0.12)' }}>{deleting ? 'Удаляем…' : 'Удалить'}</button></div>
   </div>;
 }
 

@@ -9,7 +9,7 @@ import secrets
 from datetime import timedelta
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 
 from api.app.core.config import ADMIN_TG_IDS
 from api.app.db.connection import get_session
@@ -216,6 +216,30 @@ def custom_achievement_image(achievement_id: str):
         if achievement is None:
             raise HTTPException(404, "Изображение не найдено")
         return achievement.image_data, achievement.image_mime
+
+
+def delete_custom_achievement(admin_tg_id: int, achievement_id: str) -> dict:
+    require_admin(admin_tg_id)
+    with get_session() as session:
+        achievement = session.get(CustomAchievement, achievement_id, with_for_update=True)
+        if achievement is None:
+            raise HTTPException(404, "Медаль не найдена")
+
+        # A profile avatar is stored as a compact achievement:<id> reference. Clear it
+        # before removing the catalogue row so nobody is left with a broken avatar.
+        players = session.scalars(
+            select(Player).where(Player.profile_emoji == f"achievement:{achievement_id}").with_for_update()
+        ).all()
+        for player in players:
+            player.profile_emoji = None
+        session.execute(
+            delete(CustomAchievementRecipient).where(
+                CustomAchievementRecipient.achievement_id == achievement_id
+            )
+        )
+        session.delete(achievement)
+        session.commit()
+        return {"ok": True, "id": achievement_id}
 
 
 def grant_currency(admin_tg_id: int, telegram_id: int, body: AdminGrantBody) -> dict:

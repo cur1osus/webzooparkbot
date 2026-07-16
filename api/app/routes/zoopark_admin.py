@@ -24,6 +24,11 @@ def admin_create_achievement(body: AdminCreateAchievementBody, tg_id: TelegramId
     return admin_service.create_custom_achievement(tg_id, body)
 
 
+@router.delete("/achievements/{achievement_id}")
+def admin_delete_achievement(achievement_id: str, tg_id: TelegramId):
+    return admin_service.delete_custom_achievement(tg_id, achievement_id)
+
+
 @router.post("/players/{telegram_id}/status")
 def admin_status(telegram_id: int, body: AdminPlayerStatusBody, tg_id: TelegramId):
     return admin_service.set_player_status(tg_id, telegram_id, body.status)

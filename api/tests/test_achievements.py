@@ -6,7 +6,7 @@ from api.app.zoopark.core import me
 from api.app.zoopark.core import set_profile_avatar
 from api.app.schemas.core import ProfileAvatarBody
 from api.app.zoopark import progression, social
-from api.app.zoopark.admin import create_custom_achievement, custom_achievement_image
+from api.app.zoopark.admin import create_custom_achievement, custom_achievement_image, delete_custom_achievement
 from api.app.zoopark.core import register
 from api.app.schemas.admin import AdminCreateAchievementBody
 from api.app.schemas.core import RegisterBody
@@ -87,3 +87,10 @@ def test_admin_can_open_custom_achievement_for_selected_player(db, player):
     with pytest.raises(Exception, match="Сначала открой"):
         set_profile_avatar(player, ProfileAvatarBody(avatar=f"achievement:{created['id']}"))
     assert set_profile_avatar(1002, ProfileAvatarBody(avatar=f"achievement:{created['id']}"))["profile_emoji"] == f"achievement:{created['id']}"
+
+    assert delete_custom_achievement(474701274, created["id"]) == {"ok": True, "id": created["id"]}
+    deleted_state = me(1002)
+    assert deleted_state["profile_emoji"] is None
+    assert all(item["id"] != created["id"] for item in deleted_state["achievements"])
+    with pytest.raises(Exception, match="Изображение не найдено"):
+        custom_achievement_image(created["id"])

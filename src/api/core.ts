@@ -70,6 +70,9 @@ export const apiAdminCreateAchievement = (payload: {
   body: JSON.stringify(payload),
 });
 
+export const apiAdminDeleteAchievement = (achievementId: string) =>
+  req<{ ok: true; id: string }>(`/admin/achievements/${achievementId}`, { method: 'DELETE' });
+
 export const apiAdminGetMaintenance = () => req<MaintenanceStatus>('/admin/maintenance');
 export const apiAdminStartMaintenance = (durationMinutes: number, message: string) =>
   req<MaintenanceStatus>('/admin/maintenance', {
