@@ -353,7 +353,18 @@ export function ItemDetailPage({ item, onActivate, onSell, onBack }: {
             style={{ background: item.is_active ? 'var(--surface-subtle)' : 'rgba(var(--c-green-rgb),0.15)', color: item.is_active ? 'var(--tg-theme-hint-color)' : 'var(--c-green)' }}>
             {item.is_active ? 'Деактивировать' : 'Активировать'}
           </button>
-          <button onClick={onSell} className="flex-1 py-3 rounded-[10px] border-none bg-[rgba(var(--c-orange-rgb),0.15)] text-[var(--c-orange)] font-bold text-sm">Продать ${fmt(item.sell_price_usd)}</button>
+          {/* A found item refunds no create price, so its sell price is 0 at level 0.
+              Offering "Продать $0" would read as a bug rather than as the rule it is. */}
+          <button
+            onClick={onSell}
+            disabled={item.sell_price_usd <= 0}
+            className="flex-1 py-3 rounded-[10px] border-none font-bold text-sm disabled:cursor-not-allowed"
+            style={item.sell_price_usd > 0
+              ? { background: 'rgba(var(--c-orange-rgb),0.15)', color: 'var(--c-orange)' }
+              : { background: 'var(--surface-subtle)', color: 'var(--tg-theme-hint-color)' }}
+          >
+            {item.sell_price_usd > 0 ? `Продать $${fmt(item.sell_price_usd)}` : 'Найден — не продаётся'}
+          </button>
         </div>
       </div>
     </div>

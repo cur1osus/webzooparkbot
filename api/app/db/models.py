@@ -48,6 +48,7 @@ from api.app.zoopark.catalog import (
     GAME_KINDS,
     GENE_TIERS,
     HABITATS,
+    ITEM_ORIGINS,
     ITEM_RARITIES,
     PROPERTY_KINDS,
     RARITIES,
@@ -530,6 +531,7 @@ class Item(Base):
     __tablename__ = "items"
     __table_args__ = (
         CheckConstraint(_one_of("rarity", ITEM_RARITIES), name="ck_items_rarity"),
+        CheckConstraint(_one_of("origin", ITEM_ORIGINS), name="ck_items_origin"),
         CheckConstraint("level >= 0", name="ck_items_level"),
         Index("ix_items_player_active", "player_id", "is_active"),
         MYSQL,
@@ -540,6 +542,13 @@ class Item(Base):
         BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False
     )
     rarity: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Where the item came from, and therefore what selling it may refund. A forged item cost
+    # $80k+ and refunds 40% of that; an item found on a raid cost nothing, so refunding a
+    # create price would be minting money rather than returning it. Not derivable from
+    # anything else once the item exists, which is why it is stored.
+    origin: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="forge", server_default="forge"
+    )
     level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     emoji: Mapped[str] = mapped_column(String(16), nullable=False)

@@ -784,6 +784,44 @@ def expedition_loot(wild_power: int, minutes: int, grade: ExpeditionGradeDef) ->
     usd = int(wild_power * EXPEDITION_LOOT_USD_PER_POWER) if grade["pays_usd"] else 0
     return rub, usd
 
+
+# ─── Expedition item drops ────────────────────────────────────────────────────
+#
+# The forge was the only place an item could exist, which left `expedition_power` — the
+# property that makes deep raids reachable at all — behind a 9.2%-per-slot roll on an $80k+
+# purchase that escalates with every creation. The deepest raids were therefore gated on
+# forge luck rather than on play. Raids now drop their own items, closing the loop: raid →
+# item → more squad power → deeper raid → better items.
+#
+# The drop is per capture, so a lost raid yields nothing, and the odds climb with depth. A
+# dropped item is `ItemOrigin` "expedition" and so cannot be sold for the create price it
+# never cost (see `item_sell_price_usd`) — it is a power reward, not a currency faucet, and
+# the forge keeps its job as the dollar sink.
+EXPEDITION_ITEM_DROP_CHANCE_BY_DEPTH: dict[int, float] = {
+    1: 0.02, 2: 0.05, 3: 0.09, 4: 0.14, 5: 0.20,
+}
+# Weights over `common, rare, epic, mythical` — legendary stays merge-only, exactly as it is
+# for the forge's own rolls. Depth 1 is almost entirely commons, so an hourly shallow farm
+# cannot out-produce a real raid.
+EXPEDITION_ITEM_RARITY_WEIGHTS_BY_DEPTH: dict[int, tuple[float, float, float, float]] = {
+    1: (0.80, 0.18, 0.02, 0.00),
+    2: (0.65, 0.27, 0.07, 0.01),
+    3: (0.50, 0.33, 0.14, 0.03),
+    4: (0.35, 0.35, 0.22, 0.08),
+    5: (0.20, 0.33, 0.32, 0.15),
+}
+
+
+def expedition_item_drop_chance(depth: int, grade: ExpeditionGradeDef) -> float:
+    """Chance this raid also yields an item. Nothing drops off a raid that caught nothing."""
+    if not grade["captured"]:
+        return 0.0
+    return EXPEDITION_ITEM_DROP_CHANCE_BY_DEPTH[depth]
+
+
+def expedition_item_rarity_weights(depth: int) -> tuple[float, float, float, float]:
+    return EXPEDITION_ITEM_RARITY_WEIGHTS_BY_DEPTH[depth]
+
 # ─── Merchant ─────────────────────────────────────────────────────────────────
 #
 # Not in the GDD. An offer is one concrete animal with visible genes, so it is priced
@@ -886,13 +924,23 @@ def forge_create_cost_usd(creations: int) -> int:
 # and merging is a flat $100k fee: both dwarf the 40% resale, so no create/merge→sell loop
 # turns a profit. Resale is rarity-independent (you pay the same to create any rarity), so
 # only the level (upgrade investment) raises the price.
+#
+# "Refund" is the load-bearing word, and it is why `ItemOrigin` exists. Every item used to
+# come from the forge, so there was always an $80k purchase to refund 40% of. An item found
+# on an expedition was never bought — refunding its create price would hand out $32 000 of
+# pure profit per drop and make raid-farming the most lucrative thing in the game by an
+# order of magnitude. A found item therefore refunds only what the player actually sank into
+# it: its upgrade levels.
+ItemOrigin = Literal["forge", "expedition"]
+ITEM_ORIGINS: tuple[ItemOrigin, ...] = ("forge", "expedition")
+
 FORGE_SELL_REFUND_RATE = 0.4
 FORGE_SELL_PER_LEVEL_USD = int(FORGE_UPGRADE_BASE_USD * FORGE_SELL_REFUND_RATE)
 
 
-def item_sell_price_usd(rarity: ItemRarity, level: int) -> int:
+def item_sell_price_usd(rarity: ItemRarity, level: int, origin: ItemOrigin = "forge") -> int:
     del rarity  # resale is rarity-independent — see note above
-    base = round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE)
+    base = round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE) if origin == "forge" else 0
     return base + max(0, level) * FORGE_SELL_PER_LEVEL_USD
 
 

@@ -10,7 +10,7 @@ import pytest
 from api.app.db.connection import get_session
 from api.app.db.models import DailyBonus, Item, ItemProperty, Locality, Player, utcnow
 from api.app.zoopark import bonuses as bonuses_module
-from api.app.zoopark import economy, games, ledger
+from api.app.zoopark import economy, forge, games, ledger
 from api.app.zoopark.catalog import (
     BANK_FEE_PERCENT,
     BASE_INCOME_RUB_PER_MIN,
@@ -30,6 +30,8 @@ from api.app.zoopark.catalog import (
     expected_gene_income_mult,
     expected_lifespan_minutes,
     expedition_gene_weights,
+    expedition_item_drop_chance,
+    expedition_item_rarity_weights,
     expedition_loot,
     expedition_max_depth,
     expedition_minutes,
@@ -49,6 +51,7 @@ from api.app.zoopark.catalog import (
     pack_price_usd_for_tier,
 )
 from api.app.schemas.economy import BankExchangeBody
+from api.app.schemas.forge import ForgeMergeBody
 
 
 class TestBankIsOneWay:
@@ -301,6 +304,76 @@ class TestExpeditionsDoNotMintCurrency:
             for depth in range(1, 6)
         ]
         assert payouts == sorted(payouts) and payouts[0] > 0
+
+
+class TestFoundItemsAreNotACurrencyFaucet:
+    """Resale is a *refund*: 40% of the $80k an item cost to forge. Once expeditions began
+    dropping items, that framing became load-bearing — a found item cost nothing, so paying
+    it the create price back would mint $32 000 per drop out of thin air and make raid
+    farming the most lucrative action in the game by an order of magnitude."""
+
+    def test_a_found_item_refunds_nothing_it_did_not_cost(self):
+        for rarity in ITEM_RARITIES:
+            assert item_sell_price_usd(rarity, 0, "expedition") == 0
+            assert item_sell_price_usd(rarity, 0, "forge") > 0
+
+    def test_a_found_item_still_refunds_the_upgrades_bought_for_it(self):
+        """Upgrade levels *are* paid for in dollars, so they are a real refund."""
+        bare = item_sell_price_usd("epic", 0, "expedition")
+        upgraded = item_sell_price_usd("epic", 3, "expedition")
+        assert upgraded > bare
+        # And never more than was sunk in: upgrading to level 3 costs far more than it returns.
+        spent = sum(FORGE_UPGRADE_BASE_USD * (level + 1) for level in range(3))
+        assert upgraded < spent
+
+    def test_forge_resale_is_unchanged_for_bought_items(self):
+        assert item_sell_price_usd("common", 0) == item_sell_price_usd("common", 0, "forge")
+        assert item_sell_price_usd("common", 0, "forge") == round(FORGE_CREATE_BASE_USD * 0.4)
+
+    def test_a_found_item_cannot_be_laundered_into_a_sellable_one(self, db, player, grant):
+        """Merging a found item must not hand back a forged one. It loses money today only
+        because the $100k fee happens to exceed the $32k resale — an accident of two numbers,
+        not a rule. The origin carries through instead."""
+        grant(player, "usd", 10 ** 9)
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            first = forge.roll_expedition_item(session, row.id, depth=3)
+            second = forge.roll_expedition_item(session, row.id, depth=3)
+            first_id, second_id = first.id, second.id
+            session.commit()
+
+        merged = forge.forge_merge(player, ForgeMergeBody(item_id1=first_id, item_id2=second_id))
+        with get_session() as session:
+            item = session.query(Item).filter_by(id=int(merged["new_item"]["id"])).one()
+            assert item.origin == "expedition"
+        assert merged["new_item"]["sell_price_usd"] == 0
+
+    def test_a_dropped_item_is_marked_found(self, db, player):
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            item = forge.roll_expedition_item(session, row.id, depth=5)
+            assert item.origin == "expedition"
+            assert item.rarity != "legendary", "legendary stays merge-only, as with forged rolls"
+            assert item.properties, "a dropped item must actually carry properties"
+            session.rollback()
+
+    def test_nothing_drops_off_a_raid_that_caught_nothing(self):
+        for grade in EXPEDITION_GRADES:
+            for depth in range(1, 6):
+                chance = expedition_item_drop_chance(depth, grade)
+                assert (chance > 0) == grade["captured"], f"{grade['key']} d{depth}"
+
+    def test_deeper_raids_drop_more_and_better(self):
+        captured = next(g for g in EXPEDITION_GRADES if g["key"] == "victory")
+        chances = [expedition_item_drop_chance(d, captured) for d in range(1, 6)]
+        assert chances == sorted(chances) and chances[0] > 0
+        # Weight of the two best droppable rarities must climb with depth.
+        best = [sum(expedition_item_rarity_weights(d)[2:]) for d in range(1, 6)]
+        assert best == sorted(best) and best[0] < best[-1]
+
+    def test_every_depth_rarity_table_is_a_distribution(self):
+        for depth in range(1, 6):
+            assert sum(expedition_item_rarity_weights(depth)) == pytest.approx(1.0)
 
 
 class TestEveryItemPropertyIsApplied:

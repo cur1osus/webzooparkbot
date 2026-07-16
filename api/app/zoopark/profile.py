@@ -99,7 +99,8 @@ def item_payload(item: Item) -> dict:
         "rarity": item.rarity,
         "level": item.level,
         "is_active": bool(item.is_active),
-        "sell_price_usd": item_sell_price_usd(item.rarity, item.level),  # type: ignore[arg-type]
+        "origin": item.origin,
+        "sell_price_usd": item_sell_price_usd(item.rarity, item.level, item.origin),  # type: ignore[arg-type]
         "properties": _property_payload(item),
     }
 

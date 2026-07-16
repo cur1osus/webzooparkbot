@@ -44,7 +44,9 @@ from api.app.zoopark.catalog import (
     PROPERTY_KINDS,
     SPECIES,
     SPECIES_ID_BY_CODE,
+    ItemOrigin,
     ItemRarity,
+    expedition_item_rarity_weights,
     PropertyKind,
     item_sell_price_usd,
 )
@@ -91,9 +93,29 @@ def _item_name(rarity: ItemRarity) -> tuple[str, str]:
     return f"{ITEM_RARITY_NAME[rarity]} артефакт", ITEM_RARITY_ICON[rarity]
 
 
-def _add_item(session: Session, player_id: int, rarity: ItemRarity, properties: list[tuple[PropertyKind, int, int | None]]) -> Item:
+def roll_expedition_item(session: Session, player_id: int, depth: int) -> Item:
+    """Create the item a raid at `depth` found, owned by the player and inactive.
+
+    Lives here rather than in `progression` so there stays exactly one place that knows how
+    an item is rolled and written. The rarity table is the depth's, not the forge's, and the
+    origin marks it as found — which is what stops it being sold for a price it never cost.
+    """
+    rarity = random.choices(_DROPPABLE_RARITIES, weights=expedition_item_rarity_weights(depth))[0]
+    return _add_item(session, player_id, rarity, _roll_properties(rarity), origin="expedition")
+
+
+def _add_item(
+    session: Session,
+    player_id: int,
+    rarity: ItemRarity,
+    properties: list[tuple[PropertyKind, int, int | None]],
+    origin: ItemOrigin = "forge",
+) -> Item:
     name, emoji = _item_name(rarity)
-    item = Item(player_id=player_id, rarity=rarity, level=0, name=name, emoji=emoji, is_active=False)
+    item = Item(
+        player_id=player_id, rarity=rarity, level=0, name=name, emoji=emoji,
+        is_active=False, origin=origin,
+    )
     session.add(item)
     session.flush()
     for kind, value, species_id in properties:
@@ -268,12 +290,18 @@ def forge_merge(tg_id: int, body: ForgeMergeBody) -> dict:
 
         properties = _merge_properties(list(item_a.properties), list(item_b.properties))
         rarity = ITEM_RARITY_BY_PROPERTY_COUNT[max(1, len(properties))]
+        # A found item stays found through a merge. Laundering one into a sellable "forge"
+        # item is a loss today only because the $100k fee happens to exceed the $32k resale —
+        # an accident of two numbers, not a rule. Carrying the origin makes it a rule.
+        origin: ItemOrigin = (
+            "expedition" if "expedition" in (item_a.origin, item_b.origin) else "forge"
+        )
 
         session.delete(item_a)
         session.delete(item_b)
         session.flush()
 
-        new_item = _add_item(session, player.id, rarity, properties)
+        new_item = _add_item(session, player.id, rarity, properties, origin)
         payload = item_payload(new_item)
         sync_player_income(session, player)
         result = {
@@ -298,7 +326,7 @@ def forge_sell(tg_id: int, body: ForgeItemIdBody) -> dict:
         if not item:
             raise HTTPException(404, "Предмет не найден")
 
-        earned = item_sell_price_usd(item.rarity, item.level)  # type: ignore[arg-type]
+        earned = item_sell_price_usd(item.rarity, item.level, item.origin)  # type: ignore[arg-type]
         session.delete(item)
         session.flush()
         ledger.grant(session, player, "usd", earned, "forge_sell")

@@ -202,6 +202,27 @@ function ResultCard({ expedition, result }: { expedition: ActiveExpedition; resu
           </div>
         )}
 
+        {result.item && (
+          <div className="rounded-xl px-3 py-[10px] flex items-center gap-3"
+               style={{ background: 'rgba(var(--c-purple-rgb),0.1)', border: '1px solid rgba(var(--c-purple-rgb),0.28)' }}>
+            <span className="text-[24px] shrink-0">{result.item.icon}</span>
+            <div className="min-w-0 flex-1">
+              <p className="m-0 text-[12px] font-bold" style={{ color: 'var(--c-purple)' }}>
+                НАЙДЕН АРТЕФАКТ
+              </p>
+              <p className="m-0 text-[13px] font-extrabold truncate">{result.item.name}</p>
+              <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                {result.item.properties
+                  .map(p => `${p.label} +${p.value}${p.unit === 'flat' ? '' : '%'}`)
+                  .join(' · ')}
+              </p>
+              <p className="m-0 mt-[2px] text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                Найденный артефакт нельзя продать — активируй его в кузнице.
+              </p>
+            </div>
+          </div>
+        )}
+
         {caught.length > 0 && (
           <div>
             <p className="m-0 mb-2 text-[12px] font-bold" style={{ color: grade.color }}>

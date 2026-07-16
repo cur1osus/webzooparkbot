@@ -40,6 +40,7 @@ from api.app.zoopark.catalog import (
     expedition_gene_upgrade_chance,
     expedition_gene_weights,
     expedition_grade,
+    expedition_item_drop_chance,
     expedition_loot,
     expedition_max_depth,
     expedition_minutes,
@@ -81,8 +82,9 @@ from api.app.zoopark.income import (
     on_expedition_subquery,
     sync_player_income,
 )
+from api.app.zoopark.forge import roll_expedition_item
 from api.app.zoopark.notifications import enqueue_animal_death, enqueue_expedition_finished
-from api.app.zoopark.profile import animal_payload, get_player
+from api.app.zoopark.profile import animal_payload, get_player, item_payload
 from api.app.zoopark.season import ensure_player_season
 
 random = SystemRandom()
@@ -977,6 +979,14 @@ def _resolve(
                 ref_table="expeditions", ref_id=expedition.id,
             )
         result["loot"] = {"rub": loot_rub, "usd": loot_usd}
+
+        # The raid may also turn up an artefact. Until now the forge was the only place an
+        # item could exist, which left `expedition_power` — the property the deepest raids
+        # need — behind a 9.2%-per-slot roll on an escalating $80k purchase. A found item is
+        # marked as such and so can never be sold for the create price it did not cost.
+        if random.random() < expedition_item_drop_chance(depth, grade):
+            found = roll_expedition_item(session, player.id, depth)
+            result["item"] = item_payload(found)
 
     result["captured_animal_ids"] = [a.id for a in captured]
     # Kept until all deployed clients read the list.

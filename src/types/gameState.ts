@@ -38,6 +38,10 @@ export interface ItemProperty {
 
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythical' | 'legendary';
 
+/** Where an item came from. A found item was never bought, so selling it refunds no
+ *  create price — only the upgrade levels the player paid for. See `item_sell_price_usd`. */
+export type ItemOrigin = 'forge' | 'expedition';
+
 export interface ForgeItem {
   id: string;
   name: string;
@@ -45,7 +49,8 @@ export interface ForgeItem {
   rarity: ItemRarity;
   level: number;
   is_active: boolean;
-  /** Dollars this item sells back for at its current rarity and level. */
+  origin: ItemOrigin;
+  /** Dollars this item sells back for at its current rarity, level and origin. */
   sell_price_usd: number;
   properties: ItemProperty[];
 }

@@ -1,3 +1,5 @@
+import type { ForgeItem } from './gameState';
+
 export type GeneTier = 'low' | 'medium' | 'high';
 export type Habitat = 'desert' | 'mountains' | 'forest' | 'fields' | 'antarctica';
 export type SpeciesRarity = 'rare' | 'epic' | 'mythic' | 'legendary';
@@ -210,6 +212,8 @@ export interface ExpeditionResult {
   /** Present on a capture; empty when overkill improved nothing. */
   gene_upgrades?: ExpeditionGeneUpgrade[];
   loot?: { rub: number; usd: number };
+  /** An artefact the raid turned up. Only on a capture, and rarer the shallower the raid. */
+  item?: ForgeItem;
   captured_animal_ids?: number[];
   captured_animals?: Animal[];
   /** First catch, retained for clients released before a dominant win could yield two. */
