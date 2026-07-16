@@ -208,12 +208,18 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
     const needle = query.trim().toLocaleLowerCase();
     const matches = available.filter(a => !needle || `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle));
     return [...matches].sort((a, b) => {
+      // Keep possible partners at the top after the first parent is chosen.
+      // The picker still shows other species below them so the search remains useful.
+      if (mateSpeciesCode) {
+        const compatibleOrder = Number(b.species_code === mateSpeciesCode) - Number(a.species_code === mateSpeciesCode);
+        if (compatibleOrder !== 0) return compatibleOrder;
+      }
       if (sort === 'income') return b.income - a.income;
       if (sort === 'rarity') return RARITY_RANK[b.species_rarity] - RARITY_RANK[a.species_rarity] || b.income - a.income;
       if (sort === 'reproduction') return BREED_TIER_INDEX[b.reproduction] - BREED_TIER_INDEX[a.reproduction] || b.income - a.income;
       return new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || b.income - a.income;
     });
-  }, [available, query, sort]);
+  }, [available, mateSpeciesCode, query, sort]);
 
   return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose}>
