@@ -38,7 +38,7 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
       aria-hidden="true"
     >
       {achievementImage ? (
-        <img src={achievementImage} alt="" className="h-full w-full object-contain p-1" />
+        <img src={achievementImage} alt="" className="h-full w-full object-cover" />
       ) : achievementTgs ? (
         <TgsPlayer src={achievementTgs} loop />
       ) : (

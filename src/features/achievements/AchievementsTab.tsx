@@ -90,7 +90,7 @@ function AchievementCard({
           }}
         >
           {achievement.image_url ? (
-            <img src={achievement.image_url} alt="" className="h-full w-full object-contain p-1" />
+            <img src={achievement.image_url} alt="" className="h-full w-full object-cover" />
           ) : (
             <TgsPlayer src={art} size={56} loop />
           )}

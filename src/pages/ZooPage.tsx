@@ -196,7 +196,7 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
               <div className="w-10 h-10 rounded-full overflow-hidden"
                 style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
                 {profileAchievementId && (ACHIEVEMENT_TGS[profileAchievementId] || customAchievementImage(profileAchievementId)) ? (
-                  customAchievementImage(profileAchievementId) ? <img src={customAchievementImage(profileAchievementId) ?? undefined} alt="" className="h-full w-full object-contain p-1" /> :
+                  customAchievementImage(profileAchievementId) ? <img src={customAchievementImage(profileAchievementId) ?? undefined} alt="" className="h-full w-full object-cover" /> :
                   <TgsPlayer src={ACHIEVEMENT_TGS[profileAchievementId]} loop />
                 ) : (
                   <div className="grid h-full w-full place-items-center">
