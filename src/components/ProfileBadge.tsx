@@ -1,7 +1,9 @@
 import type { CSSProperties } from 'react';
 import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
+import { getDefaultProfileAnimal } from '@/data/profileAnimals';
 import { profileFrameClass } from '@/data/profileFrames';
 import { TgsPlayer } from '@/components/TgsPlayer';
+import { AnimalArt } from '@/components/AnimalArt';
 
 export type ProfileBadgeTone = 'default' | 'gold' | 'silver' | 'bronze' | 'blue';
 
@@ -12,6 +14,8 @@ interface ProfileBadgeProps {
   className?: string;
   /** Purchased avatar frame id; draws a decorative ring on the badge rim. */
   frame?: string | null;
+  /** Player id used to choose the same stable random animal as the home profile fallback. */
+  fallbackTgId?: number;
 }
 
 /**
@@ -19,12 +23,13 @@ interface ProfileBadgeProps {
  * The data contract stays intentionally small: a badge may be an achievement TGS,
  * a Telegram/custom emoji, or the neutral zoo mark until more cosmetics are added.
  */
-export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', className = '', frame }: ProfileBadgeProps) {
+export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', className = '', frame, fallbackTgId }: ProfileBadgeProps) {
   const achievementId = profileEmoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? profileEmoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
   const achievementTgs = achievementId ? ACHIEVEMENT_TGS[achievementId] : null;
   const achievementImage = achievementId ? customAchievementImage(achievementId) : null;
+  const fallbackAnimal = fallbackTgId === undefined ? null : getDefaultProfileAnimal(fallbackTgId);
   const toneClass = `profile-badge-${tone}`;
 
   const badge = (
@@ -41,6 +46,8 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
         <img src={achievementImage} alt="" className="h-full w-full object-cover" />
       ) : achievementTgs ? (
         <TgsPlayer src={achievementTgs} loop />
+      ) : !profileEmoji && fallbackAnimal ? (
+        <AnimalArt animal={fallbackAnimal} size={size} />
       ) : (
         <span className="profile-badge-glyph">{profileEmoji || '🐾'}</span>
       )}

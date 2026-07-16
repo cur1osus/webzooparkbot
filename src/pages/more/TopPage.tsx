@@ -80,7 +80,7 @@ function PublicProfileSheet({
                 <div className={`profile-wallpaper ${wallpaperClass(profile.profile_wallpaper)}`} aria-hidden="true" />
               )}
               <div className="relative z-[1] flex items-center gap-[13px] w-full min-w-0">
-                <ProfileBadge profileEmoji={profile.profile_emoji} size={86} tone={rankTone(profile.rank)} frame={profile.profile_frame} />
+                <ProfileBadge profileEmoji={profile.profile_emoji} fallbackTgId={profile.tg_id} size={86} tone={rankTone(profile.rank)} frame={profile.profile_frame} />
                 <div className="min-w-0 flex-1">
                   <PlayerName entry={{ ...profile, is_me: entry.is_me }} size="large" />
                   <p className="m-0 mt-1 text-[12px] text-tg-hint">#{profile.rank} место в рейтинге</p>
@@ -214,7 +214,7 @@ function PodiumCard({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: To
     >
       <WallpaperLayer wallpaper={entry.profile_wallpaper} className="profile-wallpaper--podium" />
       <RankMark rank={entry.rank} podium />
-      <ProfileBadge profileEmoji={entry.profile_emoji} size={winner ? 76 : 58} tone={rankTone(entry.rank)} frame={entry.profile_frame} />
+      <ProfileBadge profileEmoji={entry.profile_emoji} fallbackTgId={entry.tg_id} size={winner ? 76 : 58} tone={rankTone(entry.rank)} frame={entry.profile_frame} />
       <div className="top-podium-copy">
         <PlayerName entry={entry} size={winner ? 'large' : 'normal'} />
         <span className="top-income-value">+{fmt(entry.income_rub_per_min)} ₽<small>/мин</small></span>
@@ -236,7 +236,7 @@ function PlayerRow({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: Top
         <div className={`profile-wallpaper profile-wallpaper--row ${wallpaperClass(entry.profile_wallpaper)}`} aria-hidden="true" />
       )}
       <RankMark rank={entry.rank} />
-      <ProfileBadge profileEmoji={entry.profile_emoji} size={42} frame={entry.profile_frame} />
+      <ProfileBadge profileEmoji={entry.profile_emoji} fallbackTgId={entry.tg_id} size={42} frame={entry.profile_frame} />
       <div className="top-player-main">
         <div className="flex items-center gap-2 min-w-0">
           <PlayerName entry={entry} />
@@ -275,7 +275,7 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
 
         <button type="button" className="top-hero-leader" onClick={() => onSelect(leader)} aria-label={`Открыть профиль ${leader.nickname}`}>
           <WallpaperLayer wallpaper={leader.profile_wallpaper} className="profile-wallpaper--hero" />
-          <ProfileBadge profileEmoji={leader.profile_emoji} size={52} tone="gold" frame={leader.profile_frame} />
+          <ProfileBadge profileEmoji={leader.profile_emoji} fallbackTgId={leader.tg_id} size={52} tone="gold" frame={leader.profile_frame} />
           <div className="min-w-0 flex-1">
             <p className="top-label m-0">лидер прямо сейчас</p>
             <PlayerName entry={leader} size="large" />
