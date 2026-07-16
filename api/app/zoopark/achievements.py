@@ -12,7 +12,17 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from api.app.db.models import Animal, BreedingAttempt, Expedition, LedgerEntry, Locality, Player, SoloStats
+from api.app.db.models import (
+    Animal,
+    BreedingAttempt,
+    CustomAchievement,
+    CustomAchievementRecipient,
+    Expedition,
+    LedgerEntry,
+    Locality,
+    Player,
+    SoloStats,
+)
 
 
 @dataclass(frozen=True)
@@ -113,6 +123,44 @@ def list_achievements(session: Session, player: Player) -> list[dict]:
             "value": min(values[definition.id], definition.target),
             "target": definition.target,
             "completed": values[definition.id] >= definition.target,
+            "image_url": None,
         }
         for definition in ACHIEVEMENTS
-    ]
+    ] + _custom_achievements(session, player.id)
+
+
+def _custom_achievements(session: Session, player_id: int) -> list[dict]:
+    recipient_ids = set(
+        session.scalars(
+            select(CustomAchievementRecipient.achievement_id).where(
+                CustomAchievementRecipient.player_id == player_id
+            )
+        ).all()
+    )
+    rows = session.execute(
+        select(
+            CustomAchievement.id,
+            CustomAchievement.title,
+            CustomAchievement.description,
+            CustomAchievement.audience,
+        ).order_by(CustomAchievement.created_at.asc(), CustomAchievement.id.asc())
+    ).all()
+    result = []
+    for achievement_id, title, description, audience in rows:
+        completed = audience == "all" or achievement_id in recipient_ids
+        result.append(
+            {
+                "id": achievement_id,
+                "title": title,
+                "description": description,
+                "value": 1 if completed else 0,
+                "target": 1,
+                "completed": completed,
+                "image_url": f"/api/achievements/{achievement_id}/image",
+            }
+        )
+    return result
+
+
+def is_known_achievement(session: Session, achievement_id: str) -> bool:
+    return achievement_id in {item.id for item in ACHIEVEMENTS} or session.get(CustomAchievement, achievement_id) is not None

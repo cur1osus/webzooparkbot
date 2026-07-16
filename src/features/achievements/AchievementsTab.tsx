@@ -89,7 +89,11 @@ function AchievementCard({
             border: '2px solid color-mix(in srgb, var(--c-gold) 18%, transparent)',
           }}
         >
-          <TgsPlayer src={art} size={56} loop />
+          {achievement.image_url ? (
+            <img src={achievement.image_url} alt="" className="h-full w-full object-contain p-1" />
+          ) : (
+            <TgsPlayer src={art} size={56} loop />
+          )}
         </div>
         <span
           className="absolute -bottom-[2px] right-[1px] grid h-[20px] min-w-[20px] place-items-center rounded-full px-1 text-[10px] font-black"

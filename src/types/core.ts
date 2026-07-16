@@ -64,6 +64,17 @@ export interface AdminOverview {
   bank_rate: number | null;
   maintenance: MaintenanceStatus;
   players_list: AdminPlayer[];
+  custom_achievements: AdminCustomAchievement[];
+}
+
+export interface AdminCustomAchievement {
+  id: string;
+  title: string;
+  description: string;
+  audience: 'all' | 'selected';
+  recipient_count: number;
+  image_url: string;
+  created_at: string;
 }
 
 export interface AdminGrantResult {

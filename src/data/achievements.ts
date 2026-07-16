@@ -21,3 +21,7 @@ export const ACHIEVEMENT_TGS: Record<string, string> = {
 export function profileAchievementValue(id: string): string {
   return `${PROFILE_ACHIEVEMENT_PREFIX}${id}`;
 }
+
+export function customAchievementImage(id: string): string | null {
+  return id.startsWith('custom_') ? `/api/achievements/${id}/image` : null;
+}

@@ -183,10 +183,6 @@ def set_profile_avatar(tg_id: int, body: ProfileAvatarBody) -> dict:
         if not avatar.startswith(PROFILE_ACHIEVEMENT_PREFIX):
             raise HTTPException(400, "Неизвестная аватарка профиля")
         achievement_id = avatar.removeprefix(PROFILE_ACHIEVEMENT_PREFIX)
-        if achievement_id not in {item.id for item in achievements_module.ACHIEVEMENTS}:
-            # Keep the format check separate from the completion check below. The
-            # catalogue is the single source of truth for which IDs may be selected.
-            raise HTTPException(400, "Неизвестное достижение")
 
     with get_session() as session:
         player = get_player(session, tg_id, for_update=True)
@@ -194,6 +190,8 @@ def set_profile_avatar(tg_id: int, body: ProfileAvatarBody) -> dict:
             raise HTTPException(404, "Пользователь не найден")
 
         if avatar is not None:
+            if not achievements_module.is_known_achievement(session, achievement_id):
+                raise HTTPException(400, "Неизвестное достижение")
             available = {
                 item["id"]: item["completed"]
                 for item in achievements_module.list_achievements(session, player)

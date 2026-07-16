@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from api.app.routes._auth import TelegramId
 from api.app.schemas.core import (
@@ -11,6 +11,7 @@ from api.app.schemas.core import (
     RegisterBody,
 )
 from api.app.zoopark import core as core_service
+from api.app.zoopark import admin as admin_service
 
 router = APIRouter(tags=["core"])
 
@@ -29,6 +30,12 @@ def config(tg_id: TelegramId):
 @router.get("/api/me")
 def me(tg_id: TelegramId):
     return core_service.me(tg_id)
+
+
+@router.get("/api/achievements/{achievement_id}/image")
+def achievement_image(achievement_id: str):
+    image_data, image_mime = admin_service.custom_achievement_image(achievement_id)
+    return Response(content=image_data, media_type=image_mime, headers={"Cache-Control": "public, max-age=3600"})
 
 
 @router.get("/api/maintenance")

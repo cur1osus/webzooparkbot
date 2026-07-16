@@ -59,6 +59,17 @@ export const apiAdminSetStatus = (telegramId: number, status: 'active' | 'banned
     body: JSON.stringify({ status }),
   });
 
+export const apiAdminCreateAchievement = (payload: {
+  title: string;
+  description: string;
+  audience: 'all' | 'selected';
+  player_tg_ids: number[];
+  image_data: string;
+}) => req<{ ok: true; id: string; image_url: string }>('/admin/achievements', {
+  method: 'POST',
+  body: JSON.stringify(payload),
+});
+
 export const apiAdminGetMaintenance = () => req<MaintenanceStatus>('/admin/maintenance');
 export const apiAdminStartMaintenance = (durationMinutes: number, message: string) =>
   req<MaintenanceStatus>('/admin/maintenance', {

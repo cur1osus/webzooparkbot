@@ -8,6 +8,7 @@ export interface Achievement {
   value: number;
   target: number;
   completed: boolean;
+  image_url: string | null;
 }
 
 /** Which effect an item property has. Every one of these is read somewhere on the server. */
@@ -20,7 +21,11 @@ export type PropertyKind =
   | 'discount_bank'
   | 'duel_moves'
   | 'duel_bonus'
-  | 'bonus_rerolls';
+  | 'bonus_rerolls'
+  | 'expedition_power';
+
+/** The three global development tracks the Zoo's Development tab sells. */
+export type DevelopmentTrack = 'vet' | 'genetics' | 'expedition';
 
 export interface ItemProperty {
   kind: PropertyKind;
@@ -81,8 +86,11 @@ export interface GameState {
   paw_coins: number;
   vet_level: number;
   genetics_level: number;
+  /** The expedition corps — the only track that buys raw squad power. */
+  expedition_level: number;
 
   income_rub_per_min: number;
+
   /** Upkeep grows with the size of the zoo. Net income is income minus this. */
   upkeep_rub_per_min: number;
   income_synced_at: string;

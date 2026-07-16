@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { AdminCurrency } from '@/api/core';
-import { apiAdminEndMaintenance, apiAdminGrant, apiAdminOverview, apiAdminSetStatus, apiAdminStartMaintenance } from '@/api';
-import type { AdminOverview, AdminPlayer, MaintenanceStatus } from '@/types';
+import { apiAdminCreateAchievement, apiAdminEndMaintenance, apiAdminGrant, apiAdminOverview, apiAdminSetStatus, apiAdminStartMaintenance } from '@/api';
+import type { AdminCustomAchievement, AdminOverview, AdminPlayer, MaintenanceStatus } from '@/types';
 import { fmt, formatCountdown } from '@/utils/format';
 
-type AdminTab = 'overview' | 'players';
+type AdminTab = 'overview' | 'players' | 'achievements';
 
 const CURRENCY_META: Record<AdminCurrency, { label: string; icon: string; color: string }> = {
   rub: { label: 'Рубли', icon: '₽', color: 'var(--c-green)' },
@@ -112,6 +112,185 @@ function MaintenanceCard({ status, onChanged }: { status: MaintenanceStatus; onC
       {actionError && <p className="m-0 mt-2 text-[11px]" style={{ color: 'var(--c-red-soft)' }}>{actionError}</p>}
     </div>
   );
+}
+
+function readAchievementImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      reject(new Error('Выбери файл изображения'));
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const maxSide = 900;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Не удалось обработать изображение'));
+        return;
+      }
+      context.fillStyle = '#101411';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.88));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Не удалось прочитать изображение'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function AchievementCreator({ data, onChanged }: { data: AdminOverview; onChanged: () => void }) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [audience, setAudience] = useState<'all' | 'selected'>('all');
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imageName, setImageName] = useState<string | null>(null);
+  const [recipientSearch, setRecipientSearch] = useState('');
+  const [recipientPlayers, setRecipientPlayers] = useState<AdminPlayer[]>(data.players_list);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!recipientSearch.trim()) {
+      setRecipientPlayers(data.players_list);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void apiAdminOverview(recipientSearch).then(result => setRecipientPlayers(result.players_list)).catch(() => setRecipientPlayers([]));
+    }, 260);
+    return () => window.clearTimeout(timer);
+  }, [data.players_list, recipientSearch]);
+
+  const chooseImage = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      setMessage(null);
+      setImageData(await readAchievementImage(file));
+      setImageName(file.name);
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Не удалось загрузить фото', error: true });
+    }
+  };
+
+  const toggleRecipient = (tgId: number) => {
+    setSelectedIds(current => {
+      const next = new Set(current);
+      if (next.has(tgId)) next.delete(tgId);
+      else next.add(tgId);
+      return next;
+    });
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!imageData) {
+      setMessage({ text: 'Добавь изображение для медали', error: true });
+      return;
+    }
+    if (audience === 'selected' && selectedIds.size === 0) {
+      setMessage({ text: 'Выбери хотя бы одного получателя', error: true });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      await apiAdminCreateAchievement({
+        title,
+        description,
+        audience,
+        player_tg_ids: audience === 'selected' ? [...selectedIds] : [],
+        image_data: imageData,
+      });
+      setTitle('');
+      setDescription('');
+      setAudience('all');
+      setImageData(null);
+      setImageName(null);
+      setSelectedIds(new Set<number>());
+      setMessage({ text: audience === 'all' ? 'Медаль открыта всем игрокам' : `Медаль выдана ${selectedIds.size} игрокам`, error: false });
+      onChanged();
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : 'Не удалось создать достижение', error: true });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <form onSubmit={event => void submit(event)} className="card" style={{ border: '1px solid rgba(var(--c-gold-rgb),0.34)', background: 'linear-gradient(145deg, rgba(var(--c-gold-rgb),0.10), var(--surface-subtle) 58%)' }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="m-0 text-[15px] font-extrabold">Новое достижение</p>
+            <p className="m-0 mt-1 text-[11px] text-tg-hint">Фото автоматически ужмётся и не исказится на медали.</p>
+          </div>
+          <span className="text-[24px] leading-none">✦</span>
+        </div>
+
+        <div className="mt-3 flex gap-3">
+          <label className="grid h-[92px] w-[92px] shrink-0 cursor-pointer place-items-center overflow-hidden rounded-2xl text-center" style={{ background: 'var(--input-bg)', border: '1px dashed rgba(var(--c-gold-rgb),0.45)' }}>
+            {imageData ? <img src={imageData} alt="Предпросмотр медали" className="h-full w-full object-contain p-1" /> : <span className="px-2 text-[11px] font-bold text-tg-hint">＋<br />Добавить фото</span>}
+            <input type="file" accept="image/*" className="sr-only" onChange={event => void chooseImage(event.target.files?.[0])} />
+          </label>
+          <div className="min-w-0 flex-1 flex flex-col gap-2">
+            <input required value={title} onChange={event => setTitle(event.target.value)} maxLength={80} placeholder="Название медали" className="w-full rounded-xl border-none px-3 py-2 text-[13px] font-bold" style={{ background: 'var(--input-bg)', color: 'var(--tg-theme-text-color)' }} />
+            <textarea required value={description} onChange={event => setDescription(event.target.value)} maxLength={180} rows={2} placeholder="За что она выдаётся" className="w-full resize-none rounded-xl border-none px-3 py-2 text-[12px]" style={{ background: 'var(--input-bg)', color: 'var(--tg-theme-text-color)' }} />
+            {imageName && <span className="truncate text-[10px] text-tg-hint">{imageName}</span>}
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {([['all', 'Всем игрокам', 'Откроется сразу у всех'], ['selected', 'Выбранным', 'Только отмеченным аккаунтам']] as const).map(([id, label, hint]) => (
+            <button key={id} type="button" onClick={() => setAudience(id)} className="rounded-xl px-3 py-2 text-left" style={{ border: `1px solid ${audience === id ? 'rgba(var(--c-gold-rgb),0.55)' : 'var(--surface-overlay-border)'}`, background: audience === id ? 'rgba(var(--c-gold-rgb),0.13)' : 'var(--surface-subtle)', color: 'var(--tg-theme-text-color)' }}>
+              <span className="block text-[12px] font-extrabold">{label}</span>
+              <span className="mt-1 block text-[10px] text-tg-hint">{hint}</span>
+            </button>
+          ))}
+        </div>
+
+        {audience === 'selected' && <div className="mt-3 rounded-xl p-2" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}>
+          <input value={recipientSearch} onChange={event => setRecipientSearch(event.target.value)} placeholder="Найти аккаунт по нику или Telegram ID" className="w-full rounded-lg border-none px-3 py-2 text-[12px]" style={{ background: 'var(--input-bg)', color: 'var(--tg-theme-text-color)' }} />
+          <div className="mt-2 flex max-h-[190px] flex-col gap-1 overflow-y-auto">
+            {recipientPlayers.map(player => <label key={player.tg_id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2" style={{ background: selectedIds.has(player.tg_id) ? 'rgba(var(--c-blue-rgb),0.16)' : 'transparent' }}>
+              <input type="checkbox" checked={selectedIds.has(player.tg_id)} onChange={() => toggleRecipient(player.tg_id)} />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-bold">{player.nickname}</span>
+              <span className="shrink-0 text-[10px] text-tg-hint">{player.username ? `@${player.username}` : player.tg_id}</span>
+            </label>)}
+            {recipientPlayers.length === 0 && <p className="m-0 p-2 text-[11px] text-tg-hint">Аккаунт не найден</p>}
+          </div>
+          <p className="m-0 mt-1 text-[10px] text-tg-hint">Выбрано: {selectedIds.size}</p>
+        </div>}
+
+        <div className="mt-3 flex items-center gap-2">
+          <button type="submit" disabled={busy} className="rounded-xl border-none px-4 py-2 text-[12px] font-extrabold" style={{ background: 'var(--c-gold)', color: '#241c08' }}>{busy ? 'Создаём…' : 'Создать и открыть'}</button>
+          {message && <span className="text-[11px]" style={{ color: message.error ? 'var(--c-red-soft)' : 'var(--c-green)' }}>{message.text}</span>}
+        </div>
+      </form>
+
+      <div className="card">
+        <div className="flex items-center justify-between gap-3"><div><p className="m-0 text-[14px] font-extrabold">Созданные медали</p><p className="m-0 mt-1 text-[11px] text-tg-hint">Они добавляются в коллекцию игроков автоматически.</p></div><span className="text-[12px] font-extrabold text-tg-hint">{data.custom_achievements.length}</span></div>
+        {data.custom_achievements.length === 0 ? <p className="m-0 mt-3 text-[12px] text-tg-hint">Пока нет кастомных достижений.</p> : <div className="mt-3 flex flex-col gap-2">{data.custom_achievements.map(achievement => <CustomAchievementRow key={achievement.id} achievement={achievement} />)}</div>}
+      </div>
+    </div>
+  );
+}
+
+function CustomAchievementRow({ achievement }: { achievement: AdminCustomAchievement }) {
+  return <div className="flex items-center gap-3 rounded-xl p-2" style={{ background: 'var(--surface-subtle)' }}>
+    <img src={achievement.image_url} alt="" className="h-12 w-12 shrink-0 rounded-xl object-contain" style={{ background: 'var(--input-bg)' }} />
+    <div className="min-w-0 flex-1"><p className="m-0 truncate text-[13px] font-extrabold">{achievement.title}</p><p className="m-0 mt-1 truncate text-[11px] text-tg-hint">{achievement.description}</p></div>
+    <span className="shrink-0 text-right text-[10px] font-bold text-tg-hint">{achievement.audience === 'all' ? 'всем' : `${achievement.recipient_count} чел.`}</span>
+  </div>;
 }
 
 function PlayerRow({ player, selected, onSelect, asOf }: { player: AdminPlayer; selected: boolean; onSelect: () => void; asOf?: string }) {
@@ -258,7 +437,7 @@ export function AdminPage() {
       </div>
 
       <div className="flex rounded-2xl p-1" style={{ background: 'var(--surface-subtle)', border: '1px solid var(--surface-overlay-border)' }}>
-        {([['overview', 'Сводка'], ['players', 'Игроки']] as const).map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className="flex-1 rounded-xl py-2 border-none text-[12px] font-extrabold" style={{ background: tab === id ? 'rgba(var(--c-gold-rgb),0.15)' : 'transparent', color: tab === id ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-hint-color)' }}>{label}</button>)}
+        {([['overview', 'Сводка'], ['players', 'Игроки'], ['achievements', 'Медали']] as const).map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className="flex-1 rounded-xl py-2 border-none text-[12px] font-extrabold" style={{ background: tab === id ? 'rgba(var(--c-gold-rgb),0.15)' : 'transparent', color: tab === id ? 'var(--tg-theme-text-color)' : 'var(--tg-theme-hint-color)' }}>{label}</button>)}
       </div>
 
       {loading && !data && <div className="card text-center text-[13px] text-tg-hint">Загружаем данные панели…</div>}
@@ -284,6 +463,8 @@ export function AdminPage() {
         <p className="m-0 px-1 text-[11px] text-tg-hint">Показаны последние 50 · найдено: {data.players_list.length}</p>
         {data.players_list.length === 0 ? <div className="card text-center text-[13px] text-tg-hint">Игроки не найдены</div> : <div className="flex flex-col gap-2">{data.players_list.map(player => <PlayerRow key={player.tg_id} player={player} selected={player.tg_id === selectedId} asOf={data.generated_at} onSelect={() => setSelectedId(player.tg_id === selectedId ? null : player.tg_id)} />)}</div>}
       </>}
+
+      {data && tab === 'achievements' && <AchievementCreator data={data} onChanged={() => void load()} />}
 
       {selectedPlayer && createPortal(
         <div

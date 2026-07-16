@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { ACHIEVEMENT_TGS, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
+import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
 import { profileFrameClass } from '@/data/profileFrames';
 import { TgsPlayer } from '@/components/TgsPlayer';
 
@@ -24,6 +24,7 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
     ? profileEmoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
   const achievementTgs = achievementId ? ACHIEVEMENT_TGS[achievementId] : null;
+  const achievementImage = achievementId ? customAchievementImage(achievementId) : null;
   const toneClass = `profile-badge-${tone}`;
 
   const badge = (
@@ -36,7 +37,9 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
       } as CSSProperties}
       aria-hidden="true"
     >
-      {achievementTgs ? (
+      {achievementImage ? (
+        <img src={achievementImage} alt="" className="h-full w-full object-contain p-1" />
+      ) : achievementTgs ? (
         <TgsPlayer src={achievementTgs} loop />
       ) : (
         <span className="profile-badge-glyph">{profileEmoji || '🐾'}</span>

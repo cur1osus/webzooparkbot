@@ -32,12 +32,14 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     SmallInteger,
     String,
     Text,
     TypeDecorator,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from api.app.zoopark.catalog import (
@@ -163,6 +165,39 @@ class PlayerCosmetic(Base):
     )
     cosmetic_id: Mapped[str] = mapped_column(String(16), primary_key=True)
     purchased_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
+AchievementImage = MEDIUMBLOB().with_variant(LargeBinary, "sqlite")
+
+
+class CustomAchievement(Base):
+    """An owner-created medal with an image and an explicit audience."""
+
+    __tablename__ = "custom_achievements"
+    __table_args__ = (
+        CheckConstraint(_one_of("audience", ("all", "selected")), name="ck_custom_achievements_audience"),
+        MYSQL,
+    )
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    title: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(String(180), nullable=False)
+    audience: Mapped[str] = mapped_column(String(16), nullable=False)
+    image_data: Mapped[bytes] = mapped_column(AchievementImage, nullable=False)
+    image_mime: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
+class CustomAchievementRecipient(Base):
+    __tablename__ = "custom_achievement_recipients"
+    __table_args__ = (Index("ix_custom_achievement_recipients_player", "player_id"), MYSQL)
+
+    achievement_id: Mapped[str] = mapped_column(
+        String(48), ForeignKey("custom_achievements.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("players.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 # ─── Seasons ──────────────────────────────────────────────────────────────────
