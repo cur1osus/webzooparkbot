@@ -532,6 +532,10 @@ class Item(Base):
     __table_args__ = (
         CheckConstraint(_one_of("rarity", ITEM_RARITIES), name="ck_items_rarity"),
         CheckConstraint(_one_of("origin", ITEM_ORIGINS), name="ck_items_origin"),
+        CheckConstraint(
+            "create_currency IS NULL OR create_currency IN ('usd', 'paw')",
+            name="ck_items_create_currency",
+        ),
         CheckConstraint("level >= 0", name="ck_items_level"),
         Index("ix_items_player_active", "player_id", "is_active"),
         MYSQL,
@@ -549,6 +553,11 @@ class Item(Base):
     origin: Mapped[str] = mapped_column(
         String(16), nullable=False, default="forge", server_default="forge"
     )
+    # Which currency actually paid to forge this item: 'usd', 'paw', or NULL for an item nobody
+    # bought (an expedition drop, a merge result). Resale refunds 40% of the *create* price in
+    # this same currency — so a PawCoin-forged item can never be resold for dollars it never
+    # cost. Without it a 350🐾 craft resold for a flat $32k, laundering Stars into game dollars.
+    create_currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
     level: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     emoji: Mapped[str] = mapped_column(String(16), nullable=False)

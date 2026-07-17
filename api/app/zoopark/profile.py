@@ -32,7 +32,8 @@ from api.app.zoopark.catalog import (
     FORGE_CREATE_COUNTER_EPOCH,
     PropertyKind,
     forge_create_cost_usd,
-    item_sell_price_usd,
+    item_sell_refund_paw,
+    item_sell_refund_usd,
 )
 from api.app.zoopark.income import (
     alive_animals,
@@ -100,7 +101,8 @@ def item_payload(item: Item) -> dict:
         "level": item.level,
         "is_active": bool(item.is_active),
         "origin": item.origin,
-        "sell_price_usd": item_sell_price_usd(item.rarity, item.level, item.origin),  # type: ignore[arg-type]
+        "sell_price_usd": item_sell_refund_usd(item.level, item.origin, item.create_currency),  # type: ignore[arg-type]
+        "sell_price_paw": item_sell_refund_paw(item.origin, item.create_currency),  # type: ignore[arg-type]
         "properties": _property_payload(item),
     }
 

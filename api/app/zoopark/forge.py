@@ -48,7 +48,8 @@ from api.app.zoopark.catalog import (
     ItemRarity,
     expedition_item_rarity_weights,
     PropertyKind,
-    item_sell_price_usd,
+    item_sell_refund_paw,
+    item_sell_refund_usd,
 )
 from api.app.zoopark.income import sync_player_income
 from api.app.zoopark.profile import get_player, item_payload, list_item_sets, list_items
@@ -110,11 +111,12 @@ def _add_item(
     rarity: ItemRarity,
     properties: list[tuple[PropertyKind, int, int | None]],
     origin: ItemOrigin = "forge",
+    create_currency: str | None = None,
 ) -> Item:
     name, emoji = _item_name(rarity)
     item = Item(
         player_id=player_id, rarity=rarity, level=0, name=name, emoji=emoji,
-        is_active=False, origin=origin,
+        is_active=False, origin=origin, create_currency=create_currency,
     )
     session.add(item)
     session.flush()
@@ -170,7 +172,8 @@ def forge_create(tg_id: int, body: ForgeCreateBody) -> dict:
             ledger.spend(session, player, "usd", usd_cost, "forge_create")
             cost = {"cost_paw": None, "cost_usd": usd_cost}
 
-        item = _add_item(session, player.id, rarity, properties)
+        # Remember which currency paid, so resale refunds in it and cannot arbitrage 🐾 into $.
+        item = _add_item(session, player.id, rarity, properties, create_currency=body.currency)
         payload = item_payload(item)
         result = {
             "ok": True,
@@ -326,12 +329,24 @@ def forge_sell(tg_id: int, body: ForgeItemIdBody) -> dict:
         if not item:
             raise HTTPException(404, "Предмет не найден")
 
-        earned = item_sell_price_usd(item.rarity, item.level, item.origin)  # type: ignore[arg-type]
+        # Refund in the currency the item was forged with: dollars for a dollar-forged item,
+        # PawCoins for a PawCoin-forged one. Upgrade levels always refund in dollars.
+        earned_usd = item_sell_refund_usd(item.level, item.origin, item.create_currency)  # type: ignore[arg-type]
+        earned_paw = item_sell_refund_paw(item.origin, item.create_currency)  # type: ignore[arg-type]
         session.delete(item)
         session.flush()
-        ledger.grant(session, player, "usd", earned, "forge_sell")
+        if earned_usd:
+            ledger.grant(session, player, "usd", earned_usd, "forge_sell")
+        if earned_paw:
+            ledger.grant(session, player, "paw", earned_paw, "forge_sell")
         sync_player_income(session, player)
-        result = {"ok": True, "earned_usd": earned, "new_usd": ledger.balance(player, "usd")}
+        result = {
+            "ok": True,
+            "earned_usd": earned_usd,
+            "earned_paw": earned_paw,
+            "new_usd": ledger.balance(player, "usd"),
+            "new_paw_coins": ledger.balance(player, "paw"),
+        }
         session.commit()
         return result
 

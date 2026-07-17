@@ -38,14 +38,17 @@ from api.app.zoopark.catalog import (
     expedition_rarity_weights,
     expedition_wild_power_range,
     FORGE_CREATE_BASE_USD,
+    FORGE_CREATE_PAW,
     FORGE_MAX_ITEM_LEVEL,
     FORGE_MERGE_COST_USD,
+    FORGE_SELL_REFUND_RATE,
     FORGE_UPGRADE_BASE_USD,
     ITEM_RARITIES,
     MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME,
     PACK_REWARD_RANGES,
     PACK_TIER_ORDER,
-    item_sell_price_usd,
+    item_sell_refund_paw,
+    item_sell_refund_usd,
     lifetime_income_rub,
     merchant_price_rub,
     pack_price_usd_for_tier,
@@ -181,24 +184,35 @@ class TestForgeCannotPrintMoney:
     def test_creating_then_selling_loses_money(self):
         """C-3 of the old audit: forging cost $1 while selling paid a flat $80,000."""
         expected = sum(
-            weight * item_sell_price_usd(rarity, 0)
-            for rarity, weight in zip(ITEM_RARITIES[:4], ITEM_RARITY_DROP_WEIGHTS, strict=True)
+            weight * item_sell_refund_usd(0)
+            for _rarity, weight in zip(ITEM_RARITIES[:4], ITEM_RARITY_DROP_WEIGHTS, strict=True)
         )
         assert FORGE_CREATE_BASE_USD > expected
 
     def test_selling_never_returns_the_forge_cost(self):
-        for rarity in ITEM_RARITIES:
-            assert item_sell_price_usd(rarity, 0) < FORGE_CREATE_BASE_USD
+        assert item_sell_refund_usd(0) < FORGE_CREATE_BASE_USD
 
     def test_upgrading_then_selling_loses_money(self):
         for level in range(12):
-            gain = item_sell_price_usd("legendary", level + 1) - item_sell_price_usd("legendary", level)
+            gain = item_sell_refund_usd(level + 1) - item_sell_refund_usd(level)
             assert gain < FORGE_UPGRADE_BASE_USD * (level + 1)
 
     def test_merging_costs_more_than_the_result_sells_for(self):
         # Merge is a flat fee; it must stay above the resale of even a max-level item, so a
         # merge-then-sell can never turn a profit.
-        assert item_sell_price_usd("legendary", FORGE_MAX_ITEM_LEVEL) < FORGE_MERGE_COST_USD
+        assert item_sell_refund_usd(FORGE_MAX_ITEM_LEVEL) < FORGE_MERGE_COST_USD
+
+    def test_a_pawcoin_forged_item_refunds_pawcoins_not_dollars(self):
+        """The season-3 exploit: a flat 350🐾 craft resold for a flat $32 000, laundering a
+        few Telegram Stars into an order of magnitude of game dollars. A PawCoin-forged item
+        must refund PawCoins — 40% of its create price — and *no* dollars for its creation."""
+        assert item_sell_refund_usd(0, "forge", "paw") == 0
+        assert item_sell_refund_paw("forge", "paw") == round(FORGE_CREATE_PAW * FORGE_SELL_REFUND_RATE)
+        # And the refund is a strict loss, like every other forge path: pay 350🐾, get 140🐾.
+        assert item_sell_refund_paw("forge", "paw") < FORGE_CREATE_PAW
+        # A dollar-forged item is untouched: dollars in, dollars (a partial refund) out.
+        assert item_sell_refund_paw("forge", "usd") == 0
+        assert item_sell_refund_usd(0, "forge", "usd") == round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE)
 
 
 class TestSoloGameKeepsAHouseEdge:
@@ -313,22 +327,22 @@ class TestFoundItemsAreNotACurrencyFaucet:
     farming the most lucrative action in the game by an order of magnitude."""
 
     def test_a_found_item_refunds_nothing_it_did_not_cost(self):
-        for rarity in ITEM_RARITIES:
-            assert item_sell_price_usd(rarity, 0, "expedition") == 0
-            assert item_sell_price_usd(rarity, 0, "forge") > 0
+        assert item_sell_refund_usd(0, "expedition") == 0
+        assert item_sell_refund_usd(0, "forge") > 0
 
     def test_a_found_item_still_refunds_the_upgrades_bought_for_it(self):
         """Upgrade levels *are* paid for in dollars, so they are a real refund."""
-        bare = item_sell_price_usd("epic", 0, "expedition")
-        upgraded = item_sell_price_usd("epic", 3, "expedition")
+        bare = item_sell_refund_usd(0, "expedition")
+        upgraded = item_sell_refund_usd(3, "expedition")
         assert upgraded > bare
         # And never more than was sunk in: upgrading to level 3 costs far more than it returns.
         spent = sum(FORGE_UPGRADE_BASE_USD * (level + 1) for level in range(3))
         assert upgraded < spent
 
     def test_forge_resale_is_unchanged_for_bought_items(self):
-        assert item_sell_price_usd("common", 0) == item_sell_price_usd("common", 0, "forge")
-        assert item_sell_price_usd("common", 0, "forge") == round(FORGE_CREATE_BASE_USD * 0.4)
+        # A pre-fix / merge-result forge item (NULL create_currency) still refunds dollars.
+        assert item_sell_refund_usd(0) == item_sell_refund_usd(0, "forge")
+        assert item_sell_refund_usd(0, "forge") == round(FORGE_CREATE_BASE_USD * 0.4)
 
     def test_a_found_item_cannot_be_laundered_into_a_sellable_one(self, db, player, grant):
         """Merging a found item must not hand back a forged one. It loses money today only

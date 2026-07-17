@@ -94,7 +94,7 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
       const r = await apiForgeSell(pendingItem.id);
       setPendingItem(null);
       onRefresh();
-      showToast(`Продано за $${fmt(r.earned_usd)}`);
+      showToast(r.earned_paw > 0 ? `Продано за 🐾 ${fmt(r.earned_paw)}` : `Продано за $${fmt(r.earned_usd)}`);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Ошибка', false);
     } finally {
@@ -255,7 +255,9 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
                 className="flex-1 py-[11px] rounded-[10px] border-none font-bold text-[14px] disabled:opacity-50 cursor-pointer"
                 style={{ background: 'rgba(var(--c-red-rgb),0.15)', color: 'var(--c-red)' }}
               >
-                Продать ${fmt(pendingItem.sell_price_usd)}
+                {pendingItem.sell_price_paw > 0
+                  ? `Продать 🐾 ${fmt(pendingItem.sell_price_paw)}`
+                  : `Продать $${fmt(pendingItem.sell_price_usd)}`}
               </button>
               <button
                 onClick={handlePendingKeep}

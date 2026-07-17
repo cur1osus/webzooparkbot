@@ -28,5 +28,7 @@ export interface ForgeMergeResponse {
 export interface ForgeSellResponse {
   ok: boolean;
   earned_usd: number;
+  earned_paw: number;
   new_usd: number;
+  new_paw_coins: number;
 }

@@ -795,7 +795,7 @@ def expedition_loot(wild_power: int, minutes: int, grade: ExpeditionGradeDef) ->
 #
 # The drop is per capture, so a lost raid yields nothing, and the odds climb with depth. A
 # dropped item is `ItemOrigin` "expedition" and so cannot be sold for the create price it
-# never cost (see `item_sell_price_usd`) — it is a power reward, not a currency faucet, and
+# never cost (see `item_sell_refund_usd`) — it is a power reward, not a currency faucet, and
 # the forge keeps its job as the dollar sink.
 EXPEDITION_ITEM_DROP_CHANCE_BY_DEPTH: dict[int, float] = {
     1: 0.02, 2: 0.05, 3: 0.09, 4: 0.14, 5: 0.20,
@@ -938,10 +938,30 @@ FORGE_SELL_REFUND_RATE = 0.4
 FORGE_SELL_PER_LEVEL_USD = int(FORGE_UPGRADE_BASE_USD * FORGE_SELL_REFUND_RATE)
 
 
-def item_sell_price_usd(rarity: ItemRarity, level: int, origin: ItemOrigin = "forge") -> int:
-    del rarity  # resale is rarity-independent — see note above
-    base = round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE) if origin == "forge" else 0
+def item_sell_refund_usd(
+    level: int, origin: ItemOrigin = "forge", create_currency: str | None = None
+) -> int:
+    """Dollars refunded on resale: 40% of the forge base price *only if the item was forged for
+    dollars*, plus the dollars sunk into its upgrade levels (levels are always bought in USD).
+
+    A PawCoin-forged item (`create_currency == "paw"`) refunds no dollars for its creation — it
+    refunds PawCoins instead, see `item_sell_refund_paw`. That asymmetry is the whole fix: a
+    350🐾 craft used to resell for a flat $32 000, turning the forge into a Stars→dollars
+    laundromat (350🐾 ≈ a few Stars bought $32k of in-game income). Resale is rarity-independent.
+
+    A NULL `create_currency` on a `forge` item is a pre-fix or merge-result item and still
+    refunds dollars, exactly as it did before this column existed."""
+    forged_for_usd = origin == "forge" and create_currency != "paw"
+    base = round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE) if forged_for_usd else 0
     return base + max(0, level) * FORGE_SELL_PER_LEVEL_USD
+
+
+def item_sell_refund_paw(origin: ItemOrigin = "forge", create_currency: str | None = None) -> int:
+    """PawCoins refunded on resale: 40% of the PawCoin create price, and only for an item that
+    was actually forged for PawCoins. Zero for everything else."""
+    if origin == "forge" and create_currency == "paw":
+        return round(FORGE_CREATE_PAW * FORGE_SELL_REFUND_RATE)
+    return 0
 
 
 # ─── Item properties ──────────────────────────────────────────────────────────

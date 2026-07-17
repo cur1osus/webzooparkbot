@@ -354,16 +354,21 @@ export function ItemDetailPage({ item, onActivate, onSell, onBack }: {
             {item.is_active ? 'Деактивировать' : 'Активировать'}
           </button>
           {/* A found item refunds no create price, so its sell price is 0 at level 0.
-              Offering "Продать $0" would read as a bug rather than as the rule it is. */}
+              Offering "Продать $0" would read as a bug rather than as the rule it is.
+              A PawCoin-forged item refunds PawCoins instead of dollars. */}
           <button
             onClick={onSell}
-            disabled={item.sell_price_usd <= 0}
+            disabled={item.sell_price_usd <= 0 && item.sell_price_paw <= 0}
             className="flex-1 py-3 rounded-[10px] border-none font-bold text-sm disabled:cursor-not-allowed"
-            style={item.sell_price_usd > 0
+            style={item.sell_price_usd > 0 || item.sell_price_paw > 0
               ? { background: 'rgba(var(--c-orange-rgb),0.15)', color: 'var(--c-orange)' }
               : { background: 'var(--surface-subtle)', color: 'var(--tg-theme-hint-color)' }}
           >
-            {item.sell_price_usd > 0 ? `Продать $${fmt(item.sell_price_usd)}` : 'Найден — не продаётся'}
+            {item.sell_price_paw > 0
+              ? `Продать 🐾 ${fmt(item.sell_price_paw)}`
+              : item.sell_price_usd > 0
+                ? `Продать $${fmt(item.sell_price_usd)}`
+                : 'Найден — не продаётся'}
           </button>
         </div>
       </div>
