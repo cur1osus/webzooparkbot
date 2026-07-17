@@ -65,6 +65,7 @@ Reason = Literal[
     "admin_grant",
     "locality_reset_refund",
     "expedition_loot",
+    "season_reset",
 ]
 
 
