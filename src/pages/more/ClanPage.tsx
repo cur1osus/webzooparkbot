@@ -48,7 +48,12 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
     staleTime: 30_000,
   });
 
-  const { data: membersData, isLoading: membersLoading, error: membersError } = useQuery({
+  const {
+    data: membersData,
+    isLoading: membersLoading,
+    error: membersError,
+    refetch: refetchMembers,
+  } = useQuery({
     queryKey: ['clan-members'],
     queryFn: apiGetClanMembers,
     staleTime: 30_000,
@@ -154,8 +159,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       const res = await apiDecideClanJoinRequest(requestId, decision);
       setSuccessMsg(res.message);
       onRefresh();
-      void refetchDetails();
-      void refetch();
+      await Promise.all([refetchDetails(), refetchMembers(), refetch()]);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Не удалось обработать заявку');
     } finally {
@@ -171,7 +175,7 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       const res = await apiRemoveClanMember(targetTgId);
       setSuccessMsg(res.message);
       onRefresh();
-      void refetch();
+      await Promise.all([refetchMembers(), refetch()]);
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Не удалось удалить участника');
     } finally {
