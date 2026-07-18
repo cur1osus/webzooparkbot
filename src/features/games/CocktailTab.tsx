@@ -48,7 +48,7 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
   if (winnerNickname) {
     return (
       <section
-        className="min-h-[calc(100dvh-var(--app-bottom-offset))] flex flex-col items-center justify-center px-6 py-10 text-center"
+        className="min-h-[calc(100dvh-var(--app-bottom-offset))] flex flex-col items-center justify-start px-6 pt-4 pb-10 text-center"
         style={{ background: 'radial-gradient(circle at 50% 34%, rgba(var(--c-gold-rgb),0.18), transparent 58%)' }}
         aria-live="polite"
       >

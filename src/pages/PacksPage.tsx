@@ -60,6 +60,27 @@ const TIERS: Record<TierKey, {
 const TIER_ORDER: TierKey[] = ['rare', 'epic', 'legendary', 'mythic'];
 const BATCH_SIZES = [1, 5, 10, 50, 100] as const;
 const RARITY_RANK: Record<Animal['species_rarity'], number> = { rare: 0, epic: 1, legendary: 2, mythic: 3 };
+const PACK_SKIP_INTRO_STORAGE_KEY = 'zoopark_pack_skip_intro_v1';
+
+function packSkipIntroStorageKey(playerId: number): string {
+  return `${PACK_SKIP_INTRO_STORAGE_KEY}:${playerId}`;
+}
+
+function readPackSkipIntro(playerId: number): boolean {
+  try {
+    return window.localStorage.getItem(packSkipIntroStorageKey(playerId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writePackSkipIntro(playerId: number, value: boolean): void {
+  try {
+    window.localStorage.setItem(packSkipIntroStorageKey(playerId), value ? '1' : '0');
+  } catch {
+    // Storage can be unavailable in a restricted Telegram/browser context.
+  }
+}
 
 // ─── Pack art (levitating still) ──────────────────────────────────────────────
 
@@ -252,10 +273,11 @@ function CurrencyRevealCard({ kind, amount }: { kind: 'rub' | 'usd'; amount: num
 type ModalOpenState = 'idle' | 'opening';
 type RevealItem = { kind: 'animal'; animal: Animal } | { kind: 'rub' | 'usd'; amount: number };
 
-function PackModal({ tierKey, isGift, batchPrices, onClose, onSuccess }: {
+function PackModal({ tierKey, isGift, batchPrices, playerId, onClose, onSuccess }: {
   tierKey: TierKey;
   isGift: boolean;
   batchPrices?: Record<string, number>;
+  playerId: number;
   onClose: () => void;
   onSuccess: (res: PackOpenResult) => void;
 }) {
@@ -264,7 +286,7 @@ function PackModal({ tierKey, isGift, batchPrices, onClose, onSuccess }: {
   const [items, setItems] = useState<RevealItem[]>([]);
   const [step, setStep] = useState(0);
   const [quantity, setQuantity] = useState<(typeof BATCH_SIZES)[number]>(1);
-  const [skipIntro, setSkipIntro] = useState(false);
+  const [skipIntro, setSkipIntro] = useState(() => readPackSkipIntro(playerId));
   const [totals, setTotals] = useState<{ rub: number; usd: number } | null>(null);
   const [apiDone, setApiDone] = useState(false);
   const [animDone, setAnimDone] = useState(false);
@@ -272,6 +294,11 @@ function PackModal({ tierKey, isGift, batchPrices, onClose, onSuccess }: {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const tier = TIERS[revealedTier ?? tierKey];
+
+  const updateSkipIntro = (value: boolean) => {
+    setSkipIntro(value);
+    writePackSkipIntro(playerId, value);
+  };
 
   useEffect(() => {
     if (openState !== 'opening') return;
@@ -399,7 +426,7 @@ function PackModal({ tierKey, isGift, batchPrices, onClose, onSuccess }: {
                     <button
                       key={size}
                       type="button"
-                      onClick={() => { setQuantity(size); if (size > 1) setSkipIntro(true); }}
+                      onClick={() => { setQuantity(size); if (size > 1) updateSkipIntro(true); }}
                       className="min-h-[40px] rounded-xl border-none text-[12px] font-black"
                       style={{ background: quantity === size ? `${tier.color}2d` : 'rgba(255,255,255,0.07)', color: quantity === size ? tier.color : 'rgba(255,255,255,0.72)', border: `1px solid ${quantity === size ? tier.color : 'rgba(255,255,255,0.08)'}` }}
                     >
@@ -408,7 +435,7 @@ function PackModal({ tierKey, isGift, batchPrices, onClose, onSuccess }: {
                   ))}
                 </div>
                 <label className="mt-2 flex items-center justify-center gap-2 text-[11px] font-bold" style={{ color: 'rgba(255,255,255,0.72)' }}>
-                  <input type="checkbox" checked={skipIntro} onChange={event => setSkipIntro(event.target.checked)} />
+                  <input type="checkbox" checked={skipIntro} onChange={event => updateSkipIntro(event.target.checked)} />
                   Пропустить заставку
                 </label>
               </div>
@@ -612,6 +639,7 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
           tierKey={modal === 'gift' ? 'rare' : modal}
           isGift={modal === 'gift'}
           batchPrices={modal === 'gift' ? undefined : byTier(modal).batch_prices}
+          playerId={gs.tg_id}
           onClose={() => setModal(null)}
           onSuccess={handleSuccess}
         />
