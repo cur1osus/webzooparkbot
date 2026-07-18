@@ -4,7 +4,7 @@ export type GeneTier = 'low' | 'medium' | 'high';
 export type Habitat = 'desert' | 'mountains' | 'forest' | 'fields' | 'antarctica';
 export type SpeciesRarity = 'rare' | 'epic' | 'mythic' | 'legendary';
 export type PackTier = 'rare' | 'epic' | 'legendary' | 'mythic';
-export type AnimalOrigin = 'pack' | 'merchant' | 'breeding' | 'expedition';
+export type AnimalOrigin = 'pack' | 'merchant' | 'breeding' | 'expedition' | 'daily_bonus';
 
 export interface AnimalIncomeFactor {
   key: string;

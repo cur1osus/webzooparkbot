@@ -21,6 +21,7 @@ const ORIGIN_META: Record<Animal['origin'], { emoji: string; label: string }> = 
   merchant: { emoji: '🛒', label: 'От торговца' },
   breeding: { emoji: '🧬', label: 'Рождён в неволе' },
   expedition: { emoji: '🧭', label: 'Из экспедиции' },
+  daily_bonus: { emoji: '🎁', label: 'Ежедневный бонус' },
 };
 
 // Survival drives both income and lifespan, so its card is ordered first and its

@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from api.app.db.connection import get_session
-from api.app.db.models import DailyBonus, Item, ItemProperty, Locality, Player, utcnow
+from api.app.db.models import Animal, DailyBonus, Item, ItemProperty, Locality, Player, utcnow
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import economy, forge, games, ledger
 from api.app.zoopark.catalog import (
@@ -177,6 +177,9 @@ class TestDailyBonusRewards:
             session.commit()
 
         assert claim_bonus(7007)["reward_name"] == "Кролик"
+        with get_session() as session:
+            bonus_animal = session.query(Animal).join(Player).filter(Player.telegram_id == 7007).one()
+            assert bonus_animal.origin == "daily_bonus"
         assert claim_bonus(8008)["reward_code"] == reward_habitat
 
 
