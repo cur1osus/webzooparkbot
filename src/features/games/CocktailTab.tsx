@@ -42,6 +42,44 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
 
   const gameFinished = attemptsLeft <= 0 || Boolean(result?.won);
 
+  // Once somebody has solved the shared recipe, the round is over for everyone.
+  // Keep the result as a dedicated page-sized state so there is no tempting,
+  // misleading guess board left underneath it.
+  if (winnerNickname) {
+    return (
+      <section
+        className="min-h-[calc(100dvh-var(--app-bottom-offset))] flex flex-col items-center justify-center px-6 py-10 text-center"
+        style={{ background: 'radial-gradient(circle at 50% 34%, rgba(var(--c-gold-rgb),0.18), transparent 58%)' }}
+        aria-live="polite"
+      >
+        <div
+          className="w-full max-w-[390px] rounded-[28px] px-6 py-8"
+          style={{
+            background: 'linear-gradient(145deg, rgba(var(--c-gold-rgb),0.18), var(--card-bg))',
+            border: '1px solid rgba(var(--c-gold-rgb),0.48)',
+            boxShadow: '0 18px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)',
+          }}
+        >
+          <div className="text-[72px] leading-none" aria-hidden>{result?.won ? '🏆' : '🥤'}</div>
+          <p className="m-0 mt-5 text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: 'var(--c-gold)' }}>
+            Коктейль дня завершён
+          </p>
+          <h2 className="m-0 mt-2 text-[30px] leading-tight font-black">
+            {result?.won ? 'Ты первый!' : 'Рецепт уже разгадан'}
+          </h2>
+          <p className="m-0 mt-3 text-[14px] leading-relaxed text-tg-hint">
+            {result?.won
+              ? `Ты угадал рецепт и получил ${result.message.match(/\d+/)?.[0] ?? 150} 🐾.`
+              : `${winnerNickname} первым угадал рецепт и забрал награду.`}
+          </p>
+          <div className="mt-6 rounded-2xl px-4 py-3 text-[12px] font-bold" style={{ background: 'rgba(var(--c-gold-rgb),0.10)', color: 'var(--c-gold)' }}>
+            Возвращайся завтра за новым рецептом.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   const addFruit = (fruit: string) => {
     if (gameFinished || guessing) return;
     setSlots(s => {

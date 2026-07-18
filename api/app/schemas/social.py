@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -9,6 +11,15 @@ class ClanCreateBody(BaseModel):
 
 class ClanRequestBody(BaseModel):
     clan_id: int = Field(gt=0)
+
+
+class ClanJoinDecisionBody(BaseModel):
+    request_id: int = Field(gt=0)
+    decision: Literal["accept", "reject"]
+
+
+class ClanMemberActionBody(BaseModel):
+    target_tg_id: int = Field(gt=0)
 
 
 class ClanSpecializationBody(BaseModel):

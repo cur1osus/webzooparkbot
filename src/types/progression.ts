@@ -58,6 +58,8 @@ export interface PackTierInfo {
   /** Unlocked tiers can be bought (and reopened freely); locked ones need the tier below. */
   unlocked: boolean;
   reward_range: PackRewardRange;
+  /** Total price for one request containing the supported batch sizes. */
+  batch_prices: Record<string, number>;
 }
 
 export interface PackInfo {
@@ -84,6 +86,7 @@ export interface PackOpenResult {
   tier: PackTier;
   is_gift: boolean;
   price_paid: number;
+  pack_count: number;
   new_rub: number;
   new_usd: number;
   gift_available: boolean;

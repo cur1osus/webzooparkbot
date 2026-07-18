@@ -61,6 +61,7 @@ export interface ClanOut {
   owner_nickname: string;
   specialization: string | null;
   specialization_name: string | null;
+  join_request_status?: 'pending' | 'accepted' | 'rejected' | null;
 }
 
 export interface ClanListResponse {
@@ -96,6 +97,14 @@ export interface ClanDetailsResponse {
   requirements: ClanRequirement[];
   can_upgrade: boolean;
   specializations: Record<string, { name: string; description: string }>;
+  join_requests: ClanJoinRequest[];
+}
+
+export interface ClanJoinRequest {
+  id: number;
+  player_tg_id: number;
+  player_nickname: string;
+  created_at: string;
 }
 
 export interface ReferralResponse {

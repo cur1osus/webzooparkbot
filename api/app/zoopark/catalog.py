@@ -453,6 +453,16 @@ PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = 0.005
 # entry price of every tier without touching the merchant (which keys off the fraction above).
 PACK_BASE_PRICE_MULTIPLIER = 5
 
+# Profile controls are intentionally small and explicit. Keeping these values on the
+# server prevents a client from changing a nickname for free or selecting an unknown skin.
+PROFILE_NICKNAME_CHANGE_COST_PAW = 50
+GAME_THEMES = {
+    "dusk": {"label": "Сумерки", "description": "Тёплый графит и латунный свет."},
+    "meadow": {"label": "Луг", "description": "Фисташковая зелень и дневное небо."},
+    "ocean": {"label": "Лагуна", "description": "Глубокая вода и холодный циан."},
+    "sunset": {"label": "Закат", "description": "Терракота, янтарь и вечерний коралл."},
+}
+
 
 def expected_pack_lifetime_income_rub() -> int:
     per_minute = BASE_INCOME_RUB_PER_MIN * expected_gene_income_mult()

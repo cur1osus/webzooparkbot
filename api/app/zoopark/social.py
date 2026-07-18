@@ -19,6 +19,7 @@ from api.app.db.connection import get_session
 from api.app.db.models import (
     Animal,
     Clan,
+    ClanJoinRequest,
     ClanMember,
     Item,
     Locality,
@@ -29,6 +30,8 @@ from api.app.db.models import (
 )
 from api.app.schemas.social import (
     ClanCreateBody,
+    ClanJoinDecisionBody,
+    ClanMemberActionBody,
     ClanRequestBody,
     ClanSpecializationBody,
     TransferCreateBody,
@@ -204,7 +207,14 @@ def _member_counts(session: Session) -> dict[int, int]:
     return {clan_id: int(count) for clan_id, count in rows}
 
 
-def _clan_entry(clan: Clan, count: int, owner_nickname: str) -> dict:
+def _clan_entry(
+    clan: Clan,
+    count: int,
+    owner_nickname: str,
+    *,
+    join_request_status: str | None = None,
+    include_invite: bool = False,
+) -> dict:
     specialization = CLAN_SPECIALIZATIONS.get(clan.specialization or "")
     return {
         "id": clan.id,
@@ -214,6 +224,8 @@ def _clan_entry(clan: Clan, count: int, owner_nickname: str) -> dict:
         "owner_nickname": owner_nickname,
         "specialization": clan.specialization,
         "specialization_name": specialization["name"] if specialization else None,
+        "join_request_status": join_request_status,
+        "invite_code": clan.invite_code if include_invite else None,
     }
 
 
@@ -243,16 +255,31 @@ def clan_list(tg_id: int) -> dict:
                 select(Player).where(Player.id.in_([clan.owner_id for clan in clans] or [0]))
             ).all()
         }
+        request_statuses = {
+            request.clan_id: request.status
+            for request in session.scalars(
+                select(ClanJoinRequest).where(ClanJoinRequest.player_id == me.id) if me else select(ClanJoinRequest).where(False)
+            ).all()
+        }
 
         payload = []
         my_clan = None
         for clan in clans:
-            entry = {
-                **_clan_entry(clan, counts.get(clan.id, 0), owners.get(clan.owner_id, "—")),
-            }
+            entry = _clan_entry(
+                clan,
+                counts.get(clan.id, 0),
+                owners.get(clan.owner_id, "—"),
+                join_request_status=request_statuses.get(clan.id),
+            )
             payload.append(entry)
             if my_membership and my_membership.clan_id == clan.id:
-                my_clan = entry
+                my_clan = _clan_entry(
+                    clan,
+                    counts.get(clan.id, 0),
+                    owners.get(clan.owner_id, "—"),
+                    join_request_status=None,
+                    include_invite=True,
+                )
 
         return {
             "clans": payload,
@@ -284,6 +311,20 @@ def clan_details(tg_id: int) -> dict:
             "next_level": clan.level + 1 if clan.level < 3 else None,
             "requirements": requirements,
             "can_upgrade": all(item["met"] for item in requirements),
+            "invite_code": clan.invite_code,
+            "join_requests": [
+                {
+                    "id": request.id,
+                    "player_tg_id": request.player.telegram_id,
+                    "player_nickname": request.player.nickname,
+                    "created_at": request.created_at.isoformat(),
+                }
+                for request in session.scalars(
+                    select(ClanJoinRequest)
+                    .where(ClanJoinRequest.clan_id == clan.id, ClanJoinRequest.status == "pending")
+                    .order_by(ClanJoinRequest.created_at.asc(), ClanJoinRequest.id.asc())
+                ).all()
+            ] if membership.role == "owner" else [],
         }
 
 
@@ -301,7 +342,7 @@ def clan_create(tg_id: int, body: ClanCreateBody) -> dict:
 
         ledger.spend(session, player, "usd", CLAN_CREATE_COST_USD, "clan_create")
 
-        clan = Clan(name=name, owner_id=player.id)
+        clan = Clan(name=name, invite_code=secrets.token_urlsafe(12), owner_id=player.id)
         session.add(clan)
         try:
             session.flush()
@@ -330,15 +371,104 @@ def clan_join(tg_id: int, body: ClanRequestBody) -> dict:
         if members >= CLAN_MAX_MEMBERS:
             raise HTTPException(400, f"В клане уже {CLAN_MAX_MEMBERS} участников")
 
-        session.add(ClanMember(clan_id=clan.id, player_id=player.id, role="member"))
+        request = session.scalars(
+            select(ClanJoinRequest)
+            .where(ClanJoinRequest.clan_id == clan.id, ClanJoinRequest.player_id == player.id)
+            .with_for_update()
+        ).first()
+        if request and request.status == "pending":
+            return {
+                "ok": True,
+                "status": "pending",
+                "message": "Заявка уже отправлена. Глава клана рассмотрит её и примет или отклонит.",
+            }
+        if request:
+            request.status = "pending"
+            request.created_at = utcnow()
+            request.decided_at = None
+        else:
+            request = ClanJoinRequest(clan_id=clan.id, player_id=player.id, status="pending")
+            session.add(request)
         try:
             session.flush()
         except IntegrityError as exc:
             raise HTTPException(400, "Ты уже в клане") from exc
 
-        result = {"ok": True, "message": f"Вступил в клан «{clan.name}»"}
+        result = {
+            "ok": True,
+            "status": "pending",
+            "message": "Заявка отправлена. Глава клана рассмотрит её и примет или отклонит.",
+        }
         session.commit()
         return result
+
+
+def clan_decide_join_request(tg_id: int, body: ClanJoinDecisionBody) -> dict:
+    with get_session() as session:
+        owner = get_player(session, tg_id, for_update=True)
+        if not owner:
+            raise HTTPException(404, "Нет игрока")
+        clan, _ = _clan_owner(session, owner)
+        request = session.get(ClanJoinRequest, body.request_id, with_for_update=True)
+        if request is None or request.clan_id != clan.id:
+            raise HTTPException(404, "Заявка не найдена")
+        if request.status != "pending":
+            raise HTTPException(400, "Эта заявка уже рассмотрена")
+
+        request.decided_at = utcnow()
+        if body.decision == "reject":
+            request.status = "rejected"
+            session.commit()
+            return {"ok": True, "decision": "reject", "message": f"Заявка игрока {request.player.nickname} отклонена"}
+
+        target = session.get(Player, request.player_id, with_for_update=True)
+        if target is None:
+            request.status = "rejected"
+            session.commit()
+            raise HTTPException(404, "Игрок не найден")
+        if _my_membership(session, target.id):
+            request.status = "rejected"
+            session.commit()
+            raise HTTPException(400, "Игрок уже состоит в клане")
+        members = session.scalar(select(func.count(ClanMember.player_id)).where(ClanMember.clan_id == clan.id)) or 0
+        if members >= CLAN_MAX_MEMBERS:
+            raise HTTPException(400, f"В клане уже {CLAN_MAX_MEMBERS} участников")
+
+        request.status = "accepted"
+        session.add(ClanMember(clan_id=clan.id, player_id=target.id, role="member"))
+        sync_player_income(session, target)
+        session.commit()
+        return {"ok": True, "decision": "accept", "message": f"{target.nickname} принят в клан"}
+
+
+def clan_remove_member(tg_id: int, body: ClanMemberActionBody) -> dict:
+    with get_session() as session:
+        owner = get_player(session, tg_id, for_update=True)
+        if not owner:
+            raise HTTPException(404, "Нет игрока")
+        clan, _ = _clan_owner(session, owner)
+        target = session.scalars(
+            select(Player).where(Player.telegram_id == body.target_tg_id).with_for_update()
+        ).first()
+        if not target:
+            raise HTTPException(404, "Участник не найден")
+        if target.id == owner.id:
+            raise HTTPException(400, "Владелец не может удалить себя")
+        membership = session.scalars(
+            select(ClanMember).where(
+                ClanMember.clan_id == clan.id,
+                ClanMember.player_id == target.id,
+            ).with_for_update()
+        ).first()
+        if membership is None:
+            raise HTTPException(404, "Игрок не состоит в этом клане")
+
+        session.delete(membership)
+        # A clan specialization affects income, so removing a member must invalidate the
+        # cached income immediately rather than waiting for their next request.
+        sync_player_income(session, target)
+        session.commit()
+        return {"ok": True, "target_tg_id": target.telegram_id, "message": f"{target.nickname} удалён из клана"}
 
 
 def clan_members(tg_id: int) -> dict:

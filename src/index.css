@@ -62,7 +62,7 @@
   --safe-bottom: calc(var(--tg-content-safe-area-inset-bottom, 0px) + var(--tg-safe-area-inset-bottom, 0px));
   --safe-left: calc(var(--tg-content-safe-area-inset-left, 0px) + var(--tg-safe-area-inset-left, 0px));
   --safe-right: calc(var(--tg-content-safe-area-inset-right, 0px) + var(--tg-safe-area-inset-right, 0px));
-  --app-tabbar-base-height: 68px;
+  --app-tabbar-base-height: 120px;
   --app-bottom-offset: calc(var(--app-tabbar-base-height) + var(--safe-bottom));
 
   /* Game accent palette — retuned to the dusk-lodge world, semantics preserved.
@@ -112,6 +112,82 @@
   /* Spring easing */
   --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   --spring-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Player themes are app-owned tokens rather than ad-hoc component overrides. The
+   default dusk palette remains the field-journal base; each alternate changes the
+   ground, surfaces and one accent family while preserving readable semantic colors. */
+.app-theme-meadow {
+  --color-tg-bg: var(--tg-theme-bg-color);
+  --color-tg-secondary: var(--tg-theme-secondary-bg-color);
+  --color-tg-text: var(--tg-theme-text-color);
+  --color-tg-hint: var(--tg-theme-hint-color);
+  --color-tg-button: var(--tg-theme-button-color);
+  --color-tg-link: var(--tg-theme-link-color);
+  --color-tg-destructive: var(--tg-theme-destructive-text-color);
+  --tg-theme-bg-color: #101812;
+  --tg-theme-secondary-bg-color: #18251a;
+  --tg-theme-text-color: #edf5eb;
+  --tg-theme-hint-color: #94aa92;
+  --tg-theme-button-color: #7fba62;
+  --tg-theme-button-text-color: #10200f;
+  --tg-theme-link-color: #a7d77d;
+  --tg-theme-bottom-bar-bg-color: #142016;
+  --c-gold: #b8d86c;
+  --c-gold-rgb: 184, 216, 108;
+  --c-purple: #c68bd1;
+  --c-purple-rgb: 198, 139, 209;
+}
+.app-theme-ocean {
+  --color-tg-bg: var(--tg-theme-bg-color);
+  --color-tg-secondary: var(--tg-theme-secondary-bg-color);
+  --color-tg-text: var(--tg-theme-text-color);
+  --color-tg-hint: var(--tg-theme-hint-color);
+  --color-tg-button: var(--tg-theme-button-color);
+  --color-tg-link: var(--tg-theme-link-color);
+  --color-tg-destructive: var(--tg-theme-destructive-text-color);
+  --tg-theme-bg-color: #0b151c;
+  --tg-theme-secondary-bg-color: #11232d;
+  --tg-theme-text-color: #e9f5f8;
+  --tg-theme-hint-color: #88a9b6;
+  --tg-theme-button-color: #4fc0cf;
+  --tg-theme-button-text-color: #07171d;
+  --tg-theme-link-color: #83deea;
+  --tg-theme-bottom-bar-bg-color: #0f2029;
+  --c-gold: #69d3df;
+  --c-gold-rgb: 105, 211, 223;
+  --c-blue: #65addb;
+  --c-blue-rgb: 101, 173, 219;
+}
+.app-theme-sunset {
+  --color-tg-bg: var(--tg-theme-bg-color);
+  --color-tg-secondary: var(--tg-theme-secondary-bg-color);
+  --color-tg-text: var(--tg-theme-text-color);
+  --color-tg-hint: var(--tg-theme-hint-color);
+  --color-tg-button: var(--tg-theme-button-color);
+  --color-tg-link: var(--tg-theme-link-color);
+  --color-tg-destructive: var(--tg-theme-destructive-text-color);
+  --tg-theme-bg-color: #1b1210;
+  --tg-theme-secondary-bg-color: #2b1b17;
+  --tg-theme-text-color: #fff0e7;
+  --tg-theme-hint-color: #b79a8d;
+  --tg-theme-button-color: #ee8f53;
+  --tg-theme-button-text-color: #2b1209;
+  --tg-theme-link-color: #ffbb6d;
+  --tg-theme-bottom-bar-bg-color: #241613;
+  --c-gold: #ffc263;
+  --c-gold-rgb: 255, 194, 99;
+  --c-orange: #f27d4a;
+  --c-orange-rgb: 242, 125, 74;
+}
+.app-theme-dusk {
+  --color-tg-bg: var(--tg-theme-bg-color);
+  --color-tg-secondary: var(--tg-theme-secondary-bg-color);
+  --color-tg-text: var(--tg-theme-text-color);
+  --color-tg-hint: var(--tg-theme-hint-color);
+  --color-tg-button: var(--tg-theme-button-color);
+  --color-tg-link: var(--tg-theme-link-color);
+  --color-tg-destructive: var(--tg-theme-destructive-text-color);
 }
 
 /* ─── Reset ─────────────────────────────────────────────────────────────────── */

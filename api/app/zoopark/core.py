@@ -24,16 +24,20 @@ from api.app.db.connection import get_session
 from api.app.db.models import Player, PlayerCosmetic, utcnow
 from api.app.schemas.core import (
     NicknameColorBody,
+    NicknameUpdateBody,
     ProfileAvatarBody,
     ProfileFrameBody,
     ProfileWallpaperBody,
     RegisterBody,
+    ThemeBody,
 )
 from api.app.zoopark import achievements as achievements_module
 from api.app.zoopark import ledger
 from api.app.zoopark import maintenance
 from api.app.zoopark.catalog import (
+    GAME_THEMES,
     NICKNAME_COLORS,
+    PROFILE_NICKNAME_CHANGE_COST_PAW,
     PROFILE_FRAMES,
     PROFILE_WALLPAPERS,
     REFERRAL_NEW_PLAYER_REWARD_USD,
@@ -160,6 +164,47 @@ def me(tg_id: int) -> dict:
         state = build_state(session, player)
         session.commit()
         return state
+
+
+def update_nickname(tg_id: int, body: NicknameUpdateBody) -> dict:
+    nickname = body.nickname.strip()
+    if not nickname:
+        raise HTTPException(400, "Никнейм не может быть пустым")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+        if nickname == player.nickname:
+            return {"ok": True, "nickname": player.nickname, "new_paw_coins": ledger.balance(player, "paw")}
+        if session.scalars(select(Player.id).where(Player.nickname == nickname)).first() is not None:
+            raise HTTPException(400, "Такой никнейм уже занят")
+
+        ledger.spend(session, player, "paw", PROFILE_NICKNAME_CHANGE_COST_PAW, "nickname_change")
+        player.nickname = nickname
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise HTTPException(400, "Такой никнейм уже занят") from exc
+        return {
+            "ok": True,
+            "nickname": player.nickname,
+            "new_paw_coins": ledger.balance(player, "paw"),
+        }
+
+
+def set_theme(tg_id: int, body: ThemeBody) -> dict:
+    if body.theme not in GAME_THEMES:
+        raise HTTPException(400, "Неизвестная тема оформления")
+
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+        player.theme = body.theme
+        session.commit()
+        return {"ok": True, "theme": player.theme}
 
 
 def set_nickname_color(tg_id: int, body: NicknameColorBody) -> dict:

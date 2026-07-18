@@ -21,7 +21,7 @@ def packs_info(tg_id: TelegramId):
 
 @router.post("/api/packs/open")
 def open_pack(tg_id: TelegramId, body: OpenPackBody = OpenPackBody()):
-    return progression_service.open_pack(tg_id, body.tier)
+    return progression_service.open_pack(tg_id, body.tier, body.quantity)
 
 
 @router.get("/api/localities")

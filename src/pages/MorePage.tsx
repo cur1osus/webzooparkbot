@@ -9,7 +9,7 @@ import { ClanPage } from './more/ClanPage';
 import { TopPage } from './more/TopPage';
 import { ReferralPage } from './more/ReferralPage';
 import { DonatePage } from './more/DonatePage';
-import { apiConfig, apiCreateTransfer, apiGetBonus, apiGetMyTransfers } from '@/api';
+import { apiConfig, apiCreateTransfer, apiGetMyTransfers } from '@/api';
 import { fmt, formatDateShort } from '@/utils/format';
 import { copyTmaText, inTma } from '@/lib/tma';
 import { setHashPath } from '@/lib/hashRoute';
@@ -17,10 +17,11 @@ import { DEVELOPER_TG_ID } from '@/lib/access';
 import { PageHeader } from '@/components/PageHeader';
 import { AdminPage } from '@/pages/AdminPage';
 import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
+import { ProfileSettingsPage } from '@/pages/ProfileSettingsPage';
 
 type Section =
   | 'bank' | 'bonus' | 'merchant' | 'clan' | 'top'
-  | 'referral' | 'donate' | 'giveaway' | 'wiki' | 'admin' | null;
+  | 'referral' | 'donate' | 'giveaway' | 'wiki' | 'admin' | 'profile' | null;
 
 type SectionId = Exclude<Section, null>;
 
@@ -28,17 +29,13 @@ const MENU_GROUPS = [
   {
     label: 'Экономика',
     items: [
-      { id: 'bank',     emoji: '🏦',  title: 'Банк',               desc: 'Обмен рублей и долларов' },
-      { id: 'bonus',    emoji: '🎁',  title: 'Ежедневный бонус',   desc: 'Рубли, доллары, лапки' },
-      { id: 'merchant', emoji: '🧙',  title: 'Случайный торговец', desc: 'Животные со скидкой' },
       { id: 'giveaway', emoji: '💸',  title: 'Раздача денег',      desc: 'Создай ссылку и раздели' },
     ],
   },
   {
     label: 'Сообщество',
     items: [
-      { id: 'clan',     emoji: '🏰',  title: 'Клан',               desc: 'Создай клан или вступи в чужой' },
-      { id: 'top',      emoji: '📊',  title: 'Таблица лидеров',    desc: 'Топ-20 по доходу' },
+      { id: 'clan',     emoji: '🏰',  title: 'Клан',               desc: 'Создай клан или подай заявку' },
       { id: 'referral', emoji: '🤝',  title: 'Рефералы',           desc: 'Приглашай и зарабатывай' },
     ],
   },
@@ -85,11 +82,13 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
 export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [section, setSection] = useState<Section>(() => {
     const parts = window.location.hash.replace(/^#/, '').split('/').filter(Boolean);
-    return parts[0] === 'more' && parts[1] === 'clan' ? 'clan' : null;
+    if (parts[0] !== 'more') return null;
+    if (parts[1] === 'clan') return 'clan';
+    if (parts[1] === 'profile') return 'profile';
+    return null;
   });
   // Whether today's bonus is still unclaimed is server state, not something the game
   // state carries around: `gs.bonus` was a column that stopped being the source of truth.
-  const { data: bonusOffer = null } = useQuery({ queryKey: ['bonus'], queryFn: apiGetBonus });
   const { data: config } = useQuery({
     queryKey: ['config'],
     queryFn: apiConfig,
@@ -124,6 +123,12 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   if (section === 'clan') return (
     <MoreSectionLayer title="🏰 Клан" onBack={back}>
       <ClanPage gs={gs} onRefresh={onRefresh} />
+    </MoreSectionLayer>
+  );
+
+  if (section === 'profile') return (
+    <MoreSectionLayer title="⚙️ Профиль" onBack={back}>
+      <ProfileSettingsPage gs={gs} onRefresh={onRefresh} />
     </MoreSectionLayer>
   );
 
@@ -182,9 +187,6 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="m-0 text-[15px] font-semibold">{item.title}</p>
-                    {item.id === 'bonus' && bonusOffer && !bonusOffer.claimed && (
-                      <span className="text-[10px] font-bold bg-[var(--c-green)] text-[var(--tg-theme-button-text-color)] px-[6px] py-[2px] rounded-full">Доступен</span>
-                    )}
                     {item.id === 'clan' && gs.clan && (
                       <span className="text-[10px] font-bold bg-[rgba(var(--c-purple-rgb),0.2)] text-[var(--c-purple)] px-[6px] py-[2px] rounded-full">«{gs.clan.name}»</span>
                     )}

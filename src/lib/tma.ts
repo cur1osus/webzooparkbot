@@ -83,17 +83,30 @@ function mountThemeParams(): void {
   themeParams.mount();
 }
 
+const APP_THEME_HEADER_COLORS: Record<'dusk' | 'meadow' | 'ocean' | 'sunset', string> = {
+  dusk: '#141414',
+  meadow: '#101812',
+  ocean: '#0b151c',
+  sunset: '#1b1210',
+};
+
+/** Keep Telegram's native header aligned with the app-owned theme. */
+export function setAppThemeChrome(theme: keyof typeof APP_THEME_HEADER_COLORS): void {
+  try {
+    if (miniApp.setHeaderColor.isAvailable()) miniApp.setHeaderColor(APP_THEME_HEADER_COLORS[theme]);
+  } catch {
+    // Native chrome is optional and must never block the game.
+  }
+}
+
 async function initializeTma(): Promise<void> {
   try {
     init();
     mountThemeParams();
     miniApp.mount();
-    miniApp.bindCssVars();
-    // Match the native Telegram header to our dusk ground so there is no seam at
-    // the top edge. Progressive enhancement — never block init.
-    try {
-      if (miniApp.setHeaderColor.isAvailable()) miniApp.setHeaderColor('#14140e');
-    } catch { /* ignore — cosmetic only */ }
+    // Telegram theme colors deliberately are not bound to CSS. The game owns its
+    // palette, so a white Telegram theme cannot wash out the in-game surfaces.
+    setAppThemeChrome('dusk');
     sdkInitialized = true;
 
     if (readyRequested) {

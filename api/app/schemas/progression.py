@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -24,6 +26,9 @@ class BreedBody(BaseModel):
 class OpenPackBody(BaseModel):
     # None opens the free daily gift; a tier name buys that (unlocked) tier.
     tier: str | None = None
+    # Batch opening is still one user action, but each pack is charged and audited
+    # independently so the season price ladder remains exact.
+    quantity: Literal[1, 5, 10, 50, 100] = 1
 
 
 class BuyLocalityBody(BaseModel):

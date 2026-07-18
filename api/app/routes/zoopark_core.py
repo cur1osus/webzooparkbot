@@ -5,9 +5,11 @@ from fastapi import APIRouter, Response
 from api.app.routes._auth import TelegramId
 from api.app.schemas.core import (
     NicknameColorBody,
+    NicknameUpdateBody,
     ProfileAvatarBody,
     ProfileFrameBody,
     ProfileWallpaperBody,
+    ThemeBody,
     RegisterBody,
 )
 from api.app.zoopark import core as core_service
@@ -46,6 +48,16 @@ def maintenance_status(tg_id: TelegramId):
 @router.post("/api/profile/nickname-color")
 def set_nickname_color(body: NicknameColorBody, tg_id: TelegramId):
     return core_service.set_nickname_color(tg_id, body)
+
+
+@router.post("/api/profile/nickname")
+def update_nickname(body: NicknameUpdateBody, tg_id: TelegramId):
+    return core_service.update_nickname(tg_id, body)
+
+
+@router.post("/api/profile/theme")
+def set_theme(body: ThemeBody, tg_id: TelegramId):
+    return core_service.set_theme(tg_id, body)
 
 
 @router.post("/api/profile/avatar")

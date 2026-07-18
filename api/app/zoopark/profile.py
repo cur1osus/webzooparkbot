@@ -299,6 +299,7 @@ def build_state(session: Session, player: Player) -> dict:
         "profile_frames": profile_frames_payload(session, player.id),
         "profile_wallpaper": player.profile_wallpaper,
         "profile_wallpapers": profile_wallpapers_payload(session, player.id),
+        "theme": player.theme,
         "registered_at": _iso(player.registered_at),
         "profile_emoji": player.profile_emoji,
         "rub": player.balance_rub,

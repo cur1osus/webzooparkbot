@@ -265,6 +265,13 @@ def packs_info(tg_id: int) -> dict:
             {
                 "tier": tier,
                 "price": pack_price_usd_for_tier(tier, pack_discount, paid_pack_count),
+                "batch_prices": {
+                    str(quantity): sum(
+                        pack_price_usd_for_tier(tier, pack_discount, paid_pack_count + offset)
+                        for offset in range(quantity)
+                    )
+                    for quantity in (1, 5, 10, 50, 100)
+                },
                 "unlocked": tier_unlocked(tier, paid_tiers),
                 "reward_range": pack_reward_range(tier),
             }
@@ -277,10 +284,15 @@ def packs_info(tg_id: int) -> dict:
         }
 
 
-def open_pack(tg_id: int, tier: str | None = None) -> dict:
+def open_pack(tg_id: int, tier: str | None = None, quantity: int = 1) -> dict:
     """Open a pack. `tier=None` opens the free daily gift (random tier, once a day); a tier
-    name buys that tier — allowed only if it is unlocked, and repeatable with a 5% daily
-    price increase after every paid opening."""
+    name buys that tier — allowed only if it is unlocked. Paid packs may be opened in a
+    batch; every pack still gets its own price step, opening audit row and rewards."""
+    if quantity not in (1, 5, 10, 50, 100):
+        raise HTTPException(400, "Можно открыть 1, 5, 10, 50 или 100 паков")
+    if tier is None and quantity != 1:
+        raise HTTPException(400, "Ежедневный подарок открывается только по одному")
+    is_gift = tier is None
     with get_session() as session:
         # The row lock serialises opening so the daily-gift / unlock checks can't race.
         player = get_player(session, tg_id, for_update=True)
@@ -291,68 +303,75 @@ def open_pack(tg_id: int, tier: str | None = None) -> dict:
 
         openings = _openings_today(session, player.id, season.id)
         bonuses = bonuses_module.load(session, player.id)
-        if tier is None:
+        if is_gift:
             # The free daily gift: one per day, random tier weighted toward rare.
             if _gift_claimed_today(openings):
                 raise HTTPException(400, "Ежедневный подарок уже получен сегодня")
             tier = roll_daily_gift_tier()
-            price = 0
         else:
             if tier not in PACK_TIER_ORDER:
                 raise HTTPException(400, "Неизвестный тир пака")
             if not tier_unlocked(tier, _paid_tiers_today(openings)):
                 raise HTTPException(400, "Этот тир ещё не открыт — сначала открой предыдущий")
-            price = pack_price_usd_for_tier(
-                tier,
-                bonuses.pack_discount_multiplier(),
-                _paid_pack_count(session, player.id, season.id),
-            )
         tier = cast(PackTier, tier)
         rewards = pack_reward_range(tier)
 
-        if price > 0:
-            ledger.spend(session, player, "usd", price, "pack_open")
+        purchase_count = _paid_pack_count(session, player.id, season.id)
+        prices = [
+            0 if is_gift else pack_price_usd_for_tier(tier, bonuses.pack_discount_multiplier(), purchase_count + offset)
+            for offset in range(quantity)
+        ]
+        total_price = sum(prices)
+        if total_price > 0:
+            ledger.spend(session, player, "usd", total_price, "pack_open_batch")
 
-        # Genes always roll 40/40/20 and habitats stay uniform. Higher pack tiers add
-        # reward quantity, while each animal keeps the same independent genetics roll.
-        animals = [
-            create_animal(
-                session,
+        # One request can contain a large bundle, but each pack remains independently
+        # auditable and keeps its own price step and reward reference.
+        animals: list[Animal] = []
+        rub_reward = 0
+        usd_reward = 0
+        for price in prices:
+            pack_animals = [
+                create_animal(
+                    session,
+                    player_id=player.id,
+                    season_id=season.id,
+                    origin="pack",
+                    genes=roll_genes(),
+                    habitat=roll_habitat(),
+                )
+                for _ in range(random.randint(*rewards["animals"]))
+            ]
+            animals.extend(pack_animals)
+            opening = PackOpening(
                 player_id=player.id,
                 season_id=season.id,
-                origin="pack",
-                genes=roll_genes(),
-                habitat=roll_habitat(),
+                animal_id=pack_animals[0].id,
+                tier=tier,
+                # Packs are now paid in dollars; this write-only audit column keeps its legacy
+                # name but records the dollar price paid.
+                price_paid_usd=price,
             )
-            for _ in range(random.randint(*rewards["animals"]))
-        ]
-        opening = PackOpening(
-            player_id=player.id,
-            season_id=season.id,
-            animal_id=animals[0].id,
-            tier=tier,
-            # Packs are now paid in dollars; this write-only audit column keeps its legacy
-            # name but records the dollar price paid.
-            price_paid_usd=price,
-        )
-        session.add(opening)
-        session.flush()
-        rub_reward = random.randint(*rewards["rub"])
-        usd_reward = random.randint(*rewards["usd"])
-        ledger.grant(session, player, "rub", rub_reward, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
-        ledger.grant(session, player, "usd", usd_reward, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
+            session.add(opening)
+            session.flush()
+            pack_rub = random.randint(*rewards["rub"])
+            pack_usd = random.randint(*rewards["usd"])
+            rub_reward += pack_rub
+            usd_reward += pack_usd
+            ledger.grant(session, player, "rub", pack_rub, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
+            ledger.grant(session, player, "usd", pack_usd, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
 
         sync_player_income(session, player, bonuses)
         animal_payloads = [animal_payload(animal, None, bonuses) for animal in animals]
         # Recompute today's state so the client can refresh unlocks/gift without a round trip.
         openings_after = _openings_today(session, player.id, season.id)
         paid_after = _paid_tiers_today(openings_after)
-        was_gift = price == 0
         result = {
             "ok": True,
             "tier": tier,
-            "is_gift": was_gift,
-            "price_paid": price,
+            "is_gift": is_gift,
+            "pack_count": quantity,
+            "price_paid": total_price,
             "new_rub": ledger.balance(player, "rub"),
             "new_usd": ledger.balance(player, "usd"),
             "gift_available": not _gift_claimed_today(openings_after),

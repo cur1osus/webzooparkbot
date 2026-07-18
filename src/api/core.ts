@@ -10,6 +10,16 @@ export const apiMe = () => req<GameState>('/me');
 export const apiMaintenanceStatus = () => req<MaintenancePollStatus>('/maintenance');
 export const apiRegister = (nickname: string, ref_code?: string) =>
   req<RegisterResponse>('/register', { method: 'POST', body: JSON.stringify({ nickname, ref_code }) });
+export const apiUpdateNickname = (nickname: string) =>
+  req<{ ok: true; nickname: string; new_paw_coins: number }>('/profile/nickname', {
+    method: 'POST',
+    body: JSON.stringify({ nickname }),
+  });
+export const apiSetTheme = (theme: string) =>
+  req<{ ok: true; theme: string }>('/profile/theme', {
+    method: 'POST',
+    body: JSON.stringify({ theme }),
+  });
 export const apiConfig = () => req<AppConfig>('/config');
 export const apiSetNicknameColor = (color: string) =>
   req<{ ok: true; nickname_color: string }>('/profile/nickname-color', {

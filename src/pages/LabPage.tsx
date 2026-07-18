@@ -203,7 +203,17 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PickerSort>('new');
-  const available = useMemo(() => animals.filter(a => a.can_breed && a.id !== exclude), [animals, exclude]);
+  const available = useMemo(() => {
+    const breedable = animals.filter(a => a.can_breed && a.id !== exclude);
+    // The first slot should never offer a dead end: if the player has no other
+    // ready animal of that species, choosing it can only lead to an error later.
+    if (!mateSpeciesCode) {
+      return breedable.filter(animal => breedable.some(
+        partner => partner.id !== animal.id && partner.species_code === animal.species_code,
+      ));
+    }
+    return breedable.filter(animal => animal.species_code === mateSpeciesCode);
+  }, [animals, exclude, mateSpeciesCode]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     const matches = available.filter(a => !needle || `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle));
@@ -270,8 +280,8 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
 
         {available.length === 0 ? (
           <p className="text-center py-6 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            Нет доступных животных<br />
-            <span className="text-[11px]">Все уже скрещивались сегодня</span>
+              Нет животных с доступным партнёром<br />
+              <span className="text-[11px]">Нужны два животных одного вида, готовых к скрещиванию сегодня</span>
           </p>
         ) : filtered.length === 0 ? (
           <p className="text-center py-6 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>

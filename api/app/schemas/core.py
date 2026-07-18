@@ -8,6 +8,10 @@ class RegisterBody(BaseModel):
     ref_code: str | None = None
 
 
+class NicknameUpdateBody(BaseModel):
+    nickname: str = Field(min_length=1, max_length=32)
+
+
 class NicknameColorBody(BaseModel):
     color: str = Field(min_length=1, max_length=16)
 
@@ -22,3 +26,7 @@ class ProfileFrameBody(BaseModel):
 
 class ProfileWallpaperBody(BaseModel):
     wallpaper: str = Field(min_length=1, max_length=24)
+
+
+class ThemeBody(BaseModel):
+    theme: str = Field(min_length=1, max_length=16)

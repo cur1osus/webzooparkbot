@@ -209,7 +209,18 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
               <Nickname as="p" name={gs.nickname} color={gs.nickname_color} className="m-0 text-[16px] font-extrabold leading-tight truncate" />
             </div>
           </div>
-          <OnlinePlayersIndicator data={onlinePresence} placement="inline" />
+          <div className="flex items-center gap-2 shrink-0">
+            <OnlinePlayersIndicator data={onlinePresence} placement="inline" />
+            <button
+              type="button"
+              onClick={() => setHashPath('/more/profile')}
+              aria-label="Открыть настройки профиля"
+              className="grid min-h-[44px] min-w-[44px] place-items-center rounded-xl border-none text-[18px] transition-transform active:scale-95"
+              style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-hint-color)', border: '1px solid var(--surface-overlay-border)' }}
+            >
+              ⚙️
+            </button>
+          </div>
         </div>
       </div>
 

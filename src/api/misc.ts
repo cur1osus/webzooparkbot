@@ -32,8 +32,8 @@ export const apiGetAnimals = () => req<{ animals: Animal[] }>('/animals');
 
 export const apiGetPacksInfo = () => req<PackInfo>('/packs/info');
 /** `tier` omitted opens the free daily gift; a tier name buys that (unlocked) tier. */
-export const apiOpenPack = (tier?: string) =>
-  req<PackOpenResult>('/packs/open', { method: 'POST', body: JSON.stringify({ tier: tier ?? null }) });
+export const apiOpenPack = (tier?: string, quantity = 1) =>
+  req<PackOpenResult>('/packs/open', { method: 'POST', body: JSON.stringify({ tier: tier ?? null, quantity }) });
 
 export const apiGetLocalities = () => req<LocalitiesInfo>('/localities');
 export const apiBuyLocality = (habitat: string) =>

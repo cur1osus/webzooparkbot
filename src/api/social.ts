@@ -21,7 +21,17 @@ export const apiCreateClan = (name: string) =>
     body: JSON.stringify({ name }),
   });
 export const apiJoinClan = (clan_id: number) =>
-  req<{ ok: boolean; message: string }>('/clans/join', { method: 'POST', body: JSON.stringify({ clan_id }) });
+  req<{ ok: boolean; status: 'pending'; message: string }>('/clans/join', { method: 'POST', body: JSON.stringify({ clan_id }) });
+export const apiDecideClanJoinRequest = (request_id: number, decision: 'accept' | 'reject') =>
+  req<{ ok: boolean; decision: 'accept' | 'reject'; message: string }>('/clans/join-requests/decision', {
+    method: 'POST',
+    body: JSON.stringify({ request_id, decision }),
+  });
+export const apiRemoveClanMember = (target_tg_id: number) =>
+  req<{ ok: boolean; target_tg_id: number; message: string }>('/clans/members/remove', {
+    method: 'POST',
+    body: JSON.stringify({ target_tg_id }),
+  });
 export const apiLeaveClan = () => req<{ ok: boolean; message: string }>('/clans/leave', { method: 'POST' });
 export const apiGetClanMembers = () => req<ClanMembersResponse>('/clans/members');
 export const apiGetClanDetails = () => req<ClanDetailsResponse>('/clans/details');

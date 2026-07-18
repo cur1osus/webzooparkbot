@@ -1,17 +1,22 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useZooStore } from '@/store';
 import { TabBar } from '@/components/TabBar';
 import { PageSkeleton, Skeleton } from '@/components/Skeleton';
 import { ApiError, apiClaimTransfer, apiMaintenanceStatus, setDevUserId } from '@/api';
 import { useLiveGameState } from '@/hooks/useLiveGameState';
 import { useHashTab } from '@/lib/hashRoute';
-import { inTma, hapticImpact, readyTma } from '@/lib/tma';
+import { inTma, hapticImpact, readyTma, setAppThemeChrome } from '@/lib/tma';
 import { getTelegramStartParam } from '@/lib/tmaEnv';
 import { fmt, formatCountdown } from '@/utils/format';
 import { ComingSoonScreen } from '@/pages/ComingSoonScreen';
 import { DevBar } from '@/components/DevBar';
 import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { RegisterScreen } from '@/pages/RegisterScreen';
+import { BankPage } from '@/pages/BankPage';
+import { BonusPage } from '@/pages/more/BonusPage';
+import { MerchantPage } from '@/pages/more/MerchantPage';
+import { TopPage } from '@/pages/more/TopPage';
+import { PageHeader } from '@/components/PageHeader';
 import type { MaintenancePollStatus } from '@/types';
 
 const HIDDEN_RELOAD_MS = 30_000;
@@ -77,6 +82,15 @@ function PageFallback() {
   );
 }
 
+function QuickPage({ emoji, title, children }: { emoji: string; title: string; children: ReactNode }) {
+  return (
+    <div className="page-content-safe">
+      <PageHeader emoji={emoji} title={title} accent="var(--c-gold-rgb)" />
+      {children}
+    </div>
+  );
+}
+
 function MaintenanceScreen({ message, endsAt, onRefresh }: { message: string; endsAt: string | null; onRefresh: () => void }) {
   const [now, setNow] = useState(() => Date.now());
   const refreshedRef = useRef(false);
@@ -132,6 +146,7 @@ export default function App() {
   });
   const hiddenAtRef = useRef<number | null>(null);
   const showDevBar = import.meta.env.DEV || !inTma;
+  const appTheme = displayState?.theme ?? 'dusk';
 
   const reloadFromServer = useCallback(() => {
     void loadFromServer();
@@ -139,6 +154,14 @@ export default function App() {
 
   // Initial load
   useEffect(() => { void loadFromServer(); }, [loadFromServer]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const themeClasses = ['app-theme-dusk', 'app-theme-meadow', 'app-theme-ocean', 'app-theme-sunset'];
+    root.classList.remove(...themeClasses);
+    root.classList.add(`app-theme-${appTheme}`);
+    setAppThemeChrome(appTheme);
+  }, [appTheme]);
 
   useEffect(() => {
     if (inviteGameId) setTab('games');
@@ -287,7 +310,7 @@ export default function App() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-full bg-tg-bg overflow-hidden">
+    <div className={`h-full bg-tg-bg overflow-hidden app-theme-${appTheme}`}>
       {showDevBar && <DevBar onLogin={handleLogin} />}
 
       {/* Loading */}
@@ -392,6 +415,10 @@ export default function App() {
               {tab === 'more' && (
                 <MorePage gs={displayState} onRefresh={reloadFromServer} />
               )}
+              {tab === 'bank' && <QuickPage emoji="🏦" title="Банк"><BankPage gs={displayState} onRefresh={reloadFromServer} /></QuickPage>}
+              {tab === 'bonus' && <QuickPage emoji="🎁" title="Ежедневный бонус"><BonusPage onClaim={reloadFromServer} /></QuickPage>}
+              {tab === 'merchant' && <QuickPage emoji="🧙" title="Случайный торговец"><MerchantPage gs={displayState} onBuy={reloadFromServer} /></QuickPage>}
+              {tab === 'top' && <QuickPage emoji="📊" title="Таблица лидеров"><TopPage /></QuickPage>}
             </Suspense>
           </div>
 

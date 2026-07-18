@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ClanDetailsResponse, ClanListResponse, ClanMember, ClanOut, GameState } from '@/types';
-import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan, apiGetClanMembers, apiGetClanDetails, apiUpgradeClan, apiChooseClanSpecialization } from '@/api';
+import { apiGetClanList, apiCreateClan, apiJoinClan, apiLeaveClan, apiGetClanMembers, apiGetClanDetails, apiUpgradeClan, apiChooseClanSpecialization, apiRemoveClanMember, apiDecideClanJoinRequest } from '@/api';
 import { fmt } from '@/utils/format';
 
 const CLAN_NAME_MIN_LENGTH = 1;
@@ -39,6 +39,8 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [choosingSpec, setChoosingSpec] = useState(false);
+  const [removingTgId, setRemovingTgId] = useState<number | null>(null);
+  const [decidingRequestId, setDecidingRequestId] = useState<number | null>(null);
 
   const { data, error, isLoading, refetch } = useQuery<ClanListResponse>({
     queryKey: ['clans'],
@@ -133,7 +135,6 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       const res = await apiJoinClan(clanId);
       if (res.ok) {
         setSuccessMsg(res.message);
-        onRefresh();
         void refetch();
       } else {
         setErrorMsg(res.message ?? 'Ошибка');
@@ -142,6 +143,39 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
       setErrorMsg((e as Error).message ?? 'Ошибка');
     } finally {
       setJoiningClanId(null);
+    }
+  };
+
+  const handleDecision = async (requestId: number, decision: 'accept' | 'reject') => {
+    if (decidingRequestId !== null) return;
+    setDecidingRequestId(requestId);
+    clearMsgs();
+    try {
+      const res = await apiDecideClanJoinRequest(requestId, decision);
+      setSuccessMsg(res.message);
+      onRefresh();
+      void refetchDetails();
+      void refetch();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Не удалось обработать заявку');
+    } finally {
+      setDecidingRequestId(null);
+    }
+  };
+
+  const handleRemove = async (targetTgId: number) => {
+    if (removingTgId !== null) return;
+    setRemovingTgId(targetTgId);
+    clearMsgs();
+    try {
+      const res = await apiRemoveClanMember(targetTgId);
+      setSuccessMsg(res.message);
+      onRefresh();
+      void refetch();
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Не удалось удалить участника');
+    } finally {
+      setRemovingTgId(null);
     }
   };
 
@@ -407,6 +441,37 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           {/* ── Tab: Members ── */}
           {tab === 'members' && (
             <div className="px-[14px] flex flex-col gap-2 page-enter">
+              {isOwner && detailsData?.join_requests.length ? (
+                <div className="card border border-[rgba(var(--c-blue-rgb),0.3)]" style={{ background: 'linear-gradient(145deg, rgba(var(--c-blue-rgb),0.1), var(--card-bg))' }}>
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="m-0 font-extrabold">Заявки на вступление</p>
+                      <p className="m-0 mt-1 text-[12px] text-tg-hint">Реши, кого принять в команду.</p>
+                    </div>
+                    <span className="rounded-full px-2 py-1 text-[11px] font-black" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>{detailsData.join_requests.length}</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {detailsData.join_requests.map(request => (
+                      <div key={request.id} className="rounded-xl px-3 py-3" style={{ background: 'var(--surface-subtle)', border: '1px solid var(--surface-overlay-border)' }}>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="m-0 font-extrabold truncate">{request.player_nickname}</p>
+                            <p className="m-0 mt-1 text-[11px] text-tg-hint">Заявка отправлена</p>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <button type="button" onClick={() => void handleDecision(request.id, 'reject')} disabled={decidingRequestId !== null} className="min-h-[40px] rounded-xl border-none px-3 text-[11px] font-extrabold disabled:opacity-50" style={{ background: 'rgba(var(--c-red-rgb),0.14)', color: 'var(--c-red-soft)' }}>
+                              Отклонить
+                            </button>
+                            <button type="button" onClick={() => void handleDecision(request.id, 'accept')} disabled={decidingRequestId !== null} className="min-h-[40px] rounded-xl border-none px-3 text-[11px] font-extrabold disabled:opacity-50" style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}>
+                              Принять
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {membersLoading && (
                 <div className="card flex items-center gap-3">
                   <div className="spinner shrink-0" />
@@ -449,6 +514,17 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
                     >
                       {member.role === 'owner' ? 'Владелец' : 'Участник'}
                     </span>
+                    {isOwner && member.role !== 'owner' && (
+                      <button
+                        type="button"
+                        onClick={() => void handleRemove(member.tg_id)}
+                        disabled={removingTgId !== null}
+                        className="min-h-[38px] rounded-xl border-none px-2 text-[11px] font-extrabold disabled:opacity-50"
+                        style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red-soft)' }}
+                      >
+                        {removingTgId === member.tg_id ? '...' : 'Убрать'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -549,38 +625,40 @@ export function ClanPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
           {openClans.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="m-0 text-[11px] font-bold text-tg-hint tracking-[0.6px] uppercase">Открытые кланы</p>
+                <p className="m-0 text-[11px] font-bold text-tg-hint tracking-[0.6px] uppercase">Кланы в каталоге</p>
                 <span className="text-[11px] text-tg-hint">{openClans.length}</span>
               </div>
               <div className="flex flex-col gap-2 stagger-children">
-                {openClans.map((clan: ClanOut) => {
-                  const isJoining = joiningClanId === clan.id;
-                  return (
-                    <div key={clan.id} className="card card-pressable">
-                      <div className="flex gap-3 items-start">
-                        <div className="w-11 h-11 rounded-[14px] grid place-items-center text-[22px] shrink-0" style={{ background: 'rgba(var(--c-purple-rgb),0.13)' }}>
-                          🏰
+                {openClans.map((clan: ClanOut) => (
+                  <div key={clan.id} className="card">
+                    <div className="flex gap-3 items-start">
+                      <div className="w-11 h-11 rounded-[14px] grid place-items-center text-[22px] shrink-0" style={{ background: 'rgba(var(--c-purple-rgb),0.13)' }}>🏰</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="m-0 font-extrabold truncate">«{clan.name}»</p>
+                          <span className="shrink-0 text-[10px] font-bold px-[6px] py-[2px] rounded-full bg-[rgba(var(--c-gold-rgb),0.13)] text-[var(--c-gold)]">Ур. {clan.level}</span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <p className="m-0 font-extrabold truncate">«{clan.name}»</p>
-                            <span className="shrink-0 text-[10px] font-bold px-[6px] py-[2px] rounded-full bg-[rgba(var(--c-gold-rgb),0.13)] text-[var(--c-gold)]">Ур. {clan.level}</span>
-                          </div>
-                          <p className="mt-[3px] mb-0 text-xs text-tg-hint truncate">
-                            👑 {clan.owner_nickname} · {formatMembers(clan.member_count)}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => void handleJoin(clan.id)}
-                          disabled={joiningClanId !== null}
-                          className="px-3 py-[8px] rounded-xl border-none cursor-pointer bg-[rgba(var(--c-blue-rgb),0.16)] text-[var(--c-blue)] font-extrabold text-[13px] shrink-0 disabled:opacity-60"
-                        >
-                          {isJoining ? '...' : 'Вступить'}
-                        </button>
+                        <p className="mt-[3px] mb-0 text-xs text-tg-hint truncate">👑 {clan.owner_nickname} · {formatMembers(clan.member_count)}</p>
+                      </div>
+                      <div className="shrink-0 flex flex-col items-end gap-1">
+                        {clan.join_request_status === 'pending' ? (
+                          <span className="text-[11px] font-extrabold text-[var(--c-blue)]">Заявка отправлена</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleJoin(clan.id)}
+                            disabled={joiningClanId !== null}
+                            className="min-h-[40px] rounded-xl border-none px-3 text-[12px] font-extrabold disabled:opacity-50"
+                            style={{ background: 'var(--c-blue)', color: 'var(--tg-theme-button-text-color)' }}
+                          >
+                            {joiningClanId === clan.id ? 'Отправляем…' : clan.join_request_status === 'rejected' ? 'Подать снова' : 'Вступить'}
+                          </button>
+                        )}
+                        {clan.join_request_status === 'rejected' && <span className="text-[10px] text-tg-hint">Заявка отклонена</span>}
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           )}

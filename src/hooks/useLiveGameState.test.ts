@@ -13,6 +13,7 @@ const baseState: GameState = {
   profile_frames: [{ id: 'none', price_paw: 0, animated: false, rarity: 'standard', owned: true }],
   profile_wallpaper: 'none',
   profile_wallpapers: [{ id: 'none', price_paw: 0, animated: false, rarity: 'standard', owned: true }],
+  theme: 'dusk',
   registered_at: '2026-01-01T00:00:00.000Z',
   profile_emoji: null,
   rub: 100,

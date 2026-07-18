@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { RootTab } from '@/components/TabBar';
 
-const ROOT_TABS: RootTab[] = ['zoo', 'shop', 'lab', 'games', 'more'];
+const ROOT_TABS: RootTab[] = ['zoo', 'shop', 'lab', 'games', 'more', 'bank', 'bonus', 'merchant', 'top'];
 
 function hashPath(): string {
   return window.location.hash.replace(/^#/, '') || '/zoo';

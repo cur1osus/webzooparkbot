@@ -86,6 +86,7 @@ export interface GameState {
   profile_frames: ProfileFrameOption[];
   profile_wallpaper: ProfileWallpaper;
   profile_wallpapers: ProfileWallpaperOption[];
+  theme: GameTheme;
   registered_at: string;
   profile_emoji: string | null;
 
@@ -149,6 +150,8 @@ export interface ProfileFrameOption {
 }
 
 export type ProfileWallpaper = 'none' | 'dusk' | 'sunrise' | 'meadow' | 'ocean' | 'bubbles' | 'grid' | 'paws' | 'stars';
+
+export type GameTheme = 'dusk' | 'meadow' | 'ocean' | 'sunset';
 
 export interface ProfileWallpaperOption {
   id: ProfileWallpaper;

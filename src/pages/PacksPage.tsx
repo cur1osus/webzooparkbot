@@ -58,6 +58,7 @@ const TIERS: Record<TierKey, {
 };
 
 const TIER_ORDER: TierKey[] = ['rare', 'epic', 'legendary', 'mythic'];
+const BATCH_SIZES = [1, 5, 10, 50, 100] as const;
 const RARITY_RANK: Record<Animal['species_rarity'], number> = { rare: 0, epic: 1, legendary: 2, mythic: 3 };
 
 // ─── Pack art (levitating still) ──────────────────────────────────────────────
@@ -251,9 +252,10 @@ function CurrencyRevealCard({ kind, amount }: { kind: 'rub' | 'usd'; amount: num
 type ModalOpenState = 'idle' | 'opening';
 type RevealItem = { kind: 'animal'; animal: Animal } | { kind: 'rub' | 'usd'; amount: number };
 
-function PackModal({ tierKey, isGift, onClose, onSuccess }: {
+function PackModal({ tierKey, isGift, batchPrices, onClose, onSuccess }: {
   tierKey: TierKey;
   isGift: boolean;
+  batchPrices?: Record<string, number>;
   onClose: () => void;
   onSuccess: (res: PackOpenResult) => void;
 }) {
@@ -261,6 +263,8 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
   const [revealedTier, setRevealedTier] = useState<TierKey | null>(null);
   const [items, setItems] = useState<RevealItem[]>([]);
   const [step, setStep] = useState(0);
+  const [quantity, setQuantity] = useState<(typeof BATCH_SIZES)[number]>(1);
+  const [skipIntro, setSkipIntro] = useState(false);
   const [totals, setTotals] = useState<{ rub: number; usd: number } | null>(null);
   const [apiDone, setApiDone] = useState(false);
   const [animDone, setAnimDone] = useState(false);
@@ -297,7 +301,8 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
     setAnimDone(false);
     setError(null);
     try {
-      const res = await apiOpenPack(isGift ? undefined : tierKey);
+      const selectedQuantity = isGift ? 1 : quantity;
+      const res = await apiOpenPack(isGift ? undefined : tierKey, selectedQuantity);
       setRevealedTier(res.tier);
       // Reveal order builds suspense: currencies first, then animals rarest-last.
       const animals = [...res.animals].sort((a, b) => RARITY_RANK[a.species_rarity] - RARITY_RANK[b.species_rarity]);
@@ -307,8 +312,11 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
       animals.forEach(animal => list.push({ kind: 'animal', animal }));
       setItems(list);
       setTotals(res.rewards);
-      setStep(0);
+      // Batch requests go straight to the compact ledger summary. A single pack
+      // retains the tactile reveal unless the keeper explicitly skips it.
+      setStep(selectedQuantity > 1 ? list.length : 0);
       setApiDone(true);
+      if (selectedQuantity > 1 || skipIntro) setAnimDone(true);
       onSuccess(res);
     } catch (e) {
       setError((e as Error).message);
@@ -365,19 +373,48 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
 
       {/* ── IDLE: full-screen pack, tap to open ── */}
       {openState === 'idle' && (
-        <button
-          onClick={handleOpen}
-          className="relative z-10 flex-1 border-none bg-transparent p-0"
-          aria-label={`Открыть ${tier.name.toLowerCase()} пак`}
-        >
-          <div className="absolute inset-0"><PackArt tier={tier} big /></div>
-          <span
-            className="absolute bottom-[16%] left-1/2 -translate-x-1/2 rounded-full px-6 py-3 text-[14px] font-black tracking-wide"
-            style={{ background: `${tier.color}22`, color: '#fff', border: `1.5px solid ${tier.color}`, boxShadow: `0 0 24px ${tier.color}66`, animation: 'glow-pulse 1.6s ease-in-out infinite' }}
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <button
+            onClick={handleOpen}
+            className="relative min-h-0 flex-1 border-none bg-transparent p-0"
+            aria-label={`Открыть ${tier.name.toLowerCase()} пак`}
           >
-            ТАПНИ, ЧТОБЫ ОТКРЫТЬ
-          </span>
-        </button>
+            <div className="absolute inset-0"><PackArt tier={tier} big /></div>
+            <span
+              className="absolute bottom-[12%] left-1/2 -translate-x-1/2 rounded-full px-6 py-3 text-[14px] font-black tracking-wide whitespace-nowrap"
+              style={{ background: `${tier.color}22`, color: '#fff', border: `1.5px solid ${tier.color}`, boxShadow: `0 0 24px ${tier.color}66`, animation: 'glow-pulse 1.6s ease-in-out infinite' }}
+            >
+              {isGift ? 'ТАПНИ, ЧТОБЫ ОТКРЫТЬ' : `ОТКРЫТЬ · $${fmt(batchPrices?.[String(quantity)] ?? 0)}`}
+            </span>
+          </button>
+          {!isGift && (
+            <div className="shrink-0 px-5 pb-4" style={{ paddingBottom: 'calc(var(--safe-bottom) + 16px)' }}>
+              <div className="rounded-2xl px-3 py-3" style={{ background: 'rgba(7,9,17,0.52)', border: '1px solid rgba(255,255,255,0.12)' }}>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.12em]" style={{ color: 'var(--tg-theme-hint-color)' }}>Сколько открыть</p>
+                  <span className="text-[12px] font-black" style={{ color: tier.color }}>${fmt(batchPrices?.[String(quantity)] ?? 0)}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-5 gap-1">
+                  {BATCH_SIZES.map(size => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => { setQuantity(size); if (size > 1) setSkipIntro(true); }}
+                      className="min-h-[40px] rounded-xl border-none text-[12px] font-black"
+                      style={{ background: quantity === size ? `${tier.color}2d` : 'rgba(255,255,255,0.07)', color: quantity === size ? tier.color : 'rgba(255,255,255,0.72)', border: `1px solid ${quantity === size ? tier.color : 'rgba(255,255,255,0.08)'}` }}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-2 flex items-center justify-center gap-2 text-[11px] font-bold" style={{ color: 'rgba(255,255,255,0.72)' }}>
+                  <input type="checkbox" checked={skipIntro} onChange={event => setSkipIntro(event.target.checked)} />
+                  Пропустить заставку
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── OPENING: unwrap video ── */}
@@ -414,7 +451,7 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
             <div className="mx-auto flex min-h-0 w-full max-w-[420px] flex-1 flex-col pt-2" style={{ animation: 'scale-in 0.35s var(--spring-bounce) both' }}>
               <div className="text-center">
                 <p className="m-0 text-[12px] font-black uppercase tracking-[0.2em]" style={{ color: tier.color }}>
-                  {revealedTier ? `${TIERS[revealedTier].name} — ` : ''}открыто
+                  {revealedTier ? `${TIERS[revealedTier].name} — ` : ''}{quantity > 1 ? `${quantity} паков открыто` : 'открыто'}
                 </p>
                 <h2 className="m-0 mt-1 text-[26px] font-black">Твои награды</h2>
               </div>
@@ -432,8 +469,19 @@ function PackModal({ tierKey, isGift, onClose, onSuccess }: {
                 <p className="m-0 mb-2 text-left text-[12px] font-extrabold" style={{ color: 'var(--tg-theme-hint-color)' }}>
                   ЖИВОТНЫЕ · {items.filter(i => i.kind === 'animal').length} шт.
                 </p>
+                {quantity > 1 && (
+                  <div className="mb-3 grid grid-cols-2 gap-2">
+                    {(['rare', 'epic', 'legendary', 'mythic'] as const).map(rarity => {
+                      const count = items.filter(i => i.kind === 'animal' && i.animal.species_rarity === rarity).length;
+                      return <div key={rarity} className="rounded-xl px-3 py-2" style={{ background: `${SPECIES_RARITY_META[rarity].color}14`, border: `1px solid ${SPECIES_RARITY_META[rarity].color}38` }}>
+                        <span className="block text-[10px] font-bold" style={{ color: SPECIES_RARITY_META[rarity].color }}>{SPECIES_RARITY_META[rarity].label}</span>
+                        <strong className="block mt-1 text-[18px]">{count}</strong>
+                      </div>;
+                    })}
+                  </div>
+                )}
                 <div className="grid grid-cols-4 gap-2">
-                  {items.filter(i => i.kind === 'animal').map((it, i) => {
+                  {items.filter(i => i.kind === 'animal').slice(0, quantity > 1 ? 24 : undefined).map((it, i) => {
                     const a = (it as { animal: Animal }).animal;
                     const rc = SPECIES_RARITY_META[a.species_rarity].color;
                     return (
@@ -563,6 +611,7 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
         <PackModal
           tierKey={modal === 'gift' ? 'rare' : modal}
           isGift={modal === 'gift'}
+          batchPrices={modal === 'gift' ? undefined : byTier(modal).batch_prices}
           onClose={() => setModal(null)}
           onSuccess={handleSuccess}
         />

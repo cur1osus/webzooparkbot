@@ -126,6 +126,7 @@ class Player(Base):
     nickname_color: Mapped[str] = mapped_column(String(16), nullable=False, default="ivory")
     profile_frame: Mapped[str] = mapped_column(String(24), nullable=False, default="none")
     profile_wallpaper: Mapped[str] = mapped_column(String(24), nullable=False, default="none")
+    theme: Mapped[str] = mapped_column(String(16), nullable=False, default="dusk", server_default="dusk")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
 
     registered_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
@@ -641,6 +642,7 @@ class Clan(Base):
 
     id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
+    invite_code: Mapped[str] = mapped_column(String(24), nullable=False, unique=True)
     owner_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("players.id", ondelete="CASCADE", name="fk_clans_owner_id"), nullable=False
     )
@@ -670,6 +672,28 @@ class ClanMember(Base):
     joined_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
     clan: Mapped[Clan] = relationship("Clan", back_populates="members")
+    player: Mapped[Player] = relationship("Player")
+
+
+class ClanJoinRequest(Base):
+    """A player's request to join a clan, reviewed by that clan's owner."""
+
+    __tablename__ = "clan_join_requests"
+    __table_args__ = (
+        UniqueConstraint("clan_id", "player_id", name="uq_clan_join_requests_pair"),
+        CheckConstraint(_one_of("status", ("pending", "accepted", "rejected")), name="ck_clan_join_requests_status"),
+        Index("ix_clan_join_requests_clan_status", "clan_id", "status"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    clan_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("clans.id", ondelete="CASCADE"), nullable=False)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    decided_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    clan: Mapped[Clan] = relationship("Clan")
     player: Mapped[Player] = relationship("Player")
 
 
