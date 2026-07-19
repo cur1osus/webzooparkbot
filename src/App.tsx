@@ -15,6 +15,7 @@ import { RegisterScreen } from '@/pages/RegisterScreen';
 import { BankPage } from '@/pages/BankPage';
 import { BonusPage } from '@/pages/more/BonusPage';
 import { MerchantPage } from '@/pages/more/MerchantPage';
+import { CalculatorPage } from '@/pages/more/CalculatorPage';
 import { TopPage } from '@/pages/more/TopPage';
 import { PageHeader } from '@/components/PageHeader';
 import type { MaintenancePollStatus } from '@/types';
@@ -417,6 +418,7 @@ export default function App() {
               )}
               {tab === 'bank' && <QuickPage emoji="🏦" title="Банк"><BankPage gs={displayState} onRefresh={reloadFromServer} /></QuickPage>}
               {tab === 'bonus' && <QuickPage emoji="🎁" title="Ежедневный бонус"><BonusPage onClaim={reloadFromServer} /></QuickPage>}
+              {tab === 'calc' && <QuickPage emoji="🧮" title="Калькулятор дохода"><CalculatorPage gs={displayState} /></QuickPage>}
               {tab === 'merchant' && <QuickPage emoji="🧙" title="Случайный торговец"><MerchantPage gs={displayState} onBuy={reloadFromServer} /></QuickPage>}
               {tab === 'top' && <QuickPage emoji="📊" title="Таблица лидеров"><TopPage /></QuickPage>}
             </Suspense>

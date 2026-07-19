@@ -4,6 +4,7 @@ import { fmt } from '@/utils/format';
 import type { GameState } from '@/types';
 import { apiGetBank, apiExchange } from '@/api';
 import { useZooStore } from '@/store';
+import { bankFeeUsd } from '@/lib/bankMath';
 
 /**
  * The bank buys dollars with rubles and never sells them back. Waiting for a cheap minute
@@ -76,12 +77,7 @@ export function BankPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   const discounted = bankInfo != null && rate < baseRate;
   const minExchange = bankInfo?.min_exchange_rub ?? 0;
 
-  // Mirrors `_bank_fee` on the server: a percentage of the dollars bought, at least one
-  // once more than one is bought.
-  const feeFor = (grossUsd: number) => {
-    if (grossUsd <= 1) return 0;
-    return Math.max(Math.floor((grossUsd * feePercent) / 100), 1);
-  };
+  const feeFor = (grossUsd: number) => bankFeeUsd(grossUsd, feePercent);
 
   const parsed = parseInt(amount, 10);
   const grossUsd = rate && parsed > 0 ? Math.floor(parsed / rate) : null;

@@ -1,4 +1,4 @@
-export type RootTab = 'zoo' | 'shop' | 'lab' | 'games' | 'more' | 'bank' | 'bonus' | 'merchant' | 'top';
+export type RootTab = 'zoo' | 'shop' | 'lab' | 'games' | 'more' | 'bank' | 'bonus' | 'calc' | 'merchant' | 'top';
 
 const PRIMARY_TABS: { id: RootTab; emoji: string; label: string }[] = [
   { id: 'zoo',   emoji: '🏡', label: 'Зоопарк'     },
@@ -11,6 +11,7 @@ const PRIMARY_TABS: { id: RootTab; emoji: string; label: string }[] = [
 const QUICK_TABS: { id: RootTab; emoji: string; label: string }[] = [
   { id: 'bank', emoji: '🏦', label: 'Банк' },
   { id: 'bonus', emoji: '🎁', label: 'Бонус' },
+  { id: 'calc', emoji: '🧮', label: 'Калькулятор' },
   { id: 'merchant', emoji: '🧙', label: 'Торговец' },
   { id: 'top', emoji: '📊', label: 'Топ' },
 ];
