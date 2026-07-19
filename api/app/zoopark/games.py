@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from random import SystemRandom
 
 from fastapi import HTTPException
@@ -43,9 +43,11 @@ from api.app.zoopark.catalog import (
 )
 from api.app.zoopark.income import sync_player_income
 from api.app.zoopark.profile import get_player
+from api.app.zoopark.time import moscow_period_day, next_moscow_reset
 
 logger = logging.getLogger(__name__)
 random = SystemRandom()
+COCKTAIL_RESET_HOUR = 10
 
 
 def _validate_stake(value: int) -> int:
@@ -554,9 +556,12 @@ def refund_star_payment(charge_id: str) -> bool:
 # ─── Cocktail ─────────────────────────────────────────────────────────────────
 
 
-def _next_utc_midnight(now: datetime) -> datetime:
-    start = now.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    return start + timedelta(days=1)
+def _cocktail_period(now: datetime) -> tuple[date, datetime]:
+    """Return the cocktail period key and its next reset at 10:00 Moscow time."""
+    return (
+        moscow_period_day(now, COCKTAIL_RESET_HOUR),
+        next_moscow_reset(now, COCKTAIL_RESET_HOUR),
+    )
 
 
 def _cocktail_history(round_: CocktailRound) -> list[dict]:
@@ -568,7 +573,7 @@ def _cocktail_history(round_: CocktailRound) -> list[dict]:
 
 
 def _get_cocktail_day(session: Session, now: datetime) -> CocktailDay:
-    day = now.astimezone(timezone.utc).date()
+    day, _ = _cocktail_period(now)
     daily = session.scalars(
         select(CocktailDay).where(CocktailDay.day == day).with_for_update()
     ).first()
@@ -605,9 +610,8 @@ def cocktail_state(tg_id: int) -> dict:
             raise HTTPException(404, "Нет игрока")
 
         now = utcnow()
-        day = session.scalars(
-            select(CocktailDay).where(CocktailDay.day == now.astimezone(timezone.utc).date())
-        ).first()
+        day, _ = _cocktail_period(now)
+        day = session.scalars(select(CocktailDay).where(CocktailDay.day == day)).first()
         round_ = session.get(CocktailRound, player.id)
         current_round = round_ if round_ is not None and round_.expires_at > now else None
         history = _cocktail_history(current_round) if current_round else []
@@ -641,16 +645,16 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
         daily = _get_cocktail_day(session, now)
         round_ = session.get(CocktailRound, player.id, with_for_update=True)
 
-        # The round resets at the next UTC midnight, not 24 hours after it started: a
+        # The round resets at the next 10:00 Moscow time, not 24 hours after it started: a
         # player who solved it a minute in should not wait 23 hours and 59 minutes.
         if round_ is None or round_.expires_at <= now or round_.secret != daily.secret:
-            secret = json.loads(daily.secret)
+            _, next_reset = _cocktail_period(now)
             if round_ is None:
                 round_ = CocktailRound(
                     player_id=player.id,
                     secret=daily.secret,
                     history="[]",
-                    expires_at=_next_utc_midnight(now),
+                    expires_at=next_reset,
                 )
                 session.add(round_)
             else:
@@ -659,7 +663,7 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
                 round_.history = "[]"
                 round_.solved_at = None
                 round_.started_at = now
-                round_.expires_at = _next_utc_midnight(now)
+                round_.expires_at = next_reset
             session.flush()
 
         if round_.solved_at is not None:

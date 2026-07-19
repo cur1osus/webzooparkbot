@@ -149,6 +149,9 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
           <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Угадай секретный рецепт из 4 фруктов — получи <span style={{ color: 'var(--c-gold)', fontWeight: 700 }}>150 🐾</span>
           </p>
+          <p className="m-0 mt-2 text-[12px] font-semibold" style={{ color: 'var(--c-teal)' }}>
+            Новый коктейль каждый день в 10:00 по Москве
+          </p>
         </div>
       </div>
 

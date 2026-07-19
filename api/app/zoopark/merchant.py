@@ -8,7 +8,6 @@ rabbit cost 1 100 ₽ and a narwhal 268 000 000 000 ₽ for animals whose income
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import cast
 
 from fastapi import HTTPException
@@ -23,7 +22,6 @@ from api.app.zoopark import ledger
 from api.app.zoopark.bonuses import Bonuses
 from api.app.zoopark.catalog import (
     MERCHANT_DISCOUNTS,
-    MERCHANT_REFRESH_HOURS,
     MERCHANT_SLOTS,
     SPECIES_BY_ID,
     GeneTier,
@@ -34,6 +32,7 @@ from api.app.zoopark.income import sync_player_income
 from api.app.zoopark.profile import animal_payload, get_player
 from api.app.zoopark.progression import create_animal, random, roll_genes, roll_habitat, roll_species_id
 from api.app.zoopark.season import ensure_player_season
+from api.app.zoopark.time import moscow_period_start, next_moscow_reset
 
 
 def offer_price_rub(offer: MerchantOffer, bonuses: Bonuses) -> int:
@@ -81,6 +80,7 @@ def ensure_offers(session: Session, player_id: int, season_id: int) -> list[Merc
     with six offers, because the second insert into a taken slot loses.
     """
     now = utcnow()
+    period_start = moscow_period_start(now, 7)
     existing = list(
         session.scalars(
             select(MerchantOffer)
@@ -89,7 +89,7 @@ def ensure_offers(session: Session, player_id: int, season_id: int) -> list[Merc
         ).all()
     )
     by_slot = {offer.slot: offer for offer in existing}
-    expires_at = now + timedelta(hours=MERCHANT_REFRESH_HOURS)
+    expires_at = next_moscow_reset(now, 7)
 
     for slot in range(1, MERCHANT_SLOTS + 1):
         offer = by_slot.get(slot)
@@ -99,7 +99,7 @@ def ensure_offers(session: Session, player_id: int, season_id: int) -> list[Merc
                     session.add(_fresh_offer(player_id, season_id, slot, expires_at))
             except IntegrityError:
                 pass
-        elif offer.expires_at <= now:
+        elif offer.expires_at <= now or offer.created_at < period_start:
             genes = roll_genes()
             offer.species_id = roll_species_id()
             offer.habitat = roll_habitat()

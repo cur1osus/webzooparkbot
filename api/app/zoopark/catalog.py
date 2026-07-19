@@ -840,7 +840,6 @@ def expedition_item_rarity_weights(depth: int) -> tuple[float, float, float, flo
 # payback window for the player.
 
 MERCHANT_SLOTS = 3
-MERCHANT_REFRESH_HOURS = 24
 MERCHANT_DISCOUNTS = (5, 10, 15, 20, 25, 30)
 # Twice the pack's 0.5% fraction: the merchant shows the genes, the pack does not.
 MERCHANT_PRICE_AS_FRACTION_OF_LIFETIME_INCOME = PACK_PRICE_AS_FRACTION_OF_LIFETIME_INCOME * 2

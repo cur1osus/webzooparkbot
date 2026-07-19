@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from api.app.db.models import Animal, DailyBonus, Expedition, NotificationOutbox, Player, utcnow
 from api.app.zoopark.daily_bonus import roll_daily_bonus_offer
+from api.app.zoopark.time import moscow_period_day
 
 KIND_EXPEDITION_FINISHED = "expedition_finished"
 KIND_ANIMAL_DEATH = "animal_death"
@@ -99,7 +100,7 @@ def enqueue_daily_bonus_ready(session: Session, player: Player, bonus_date: date
 
 def enqueue_unclaimed_daily_bonuses(session: Session, *, limit: int = 500) -> int:
     """Materialise today's offers and create one event for every unclaimed offer."""
-    today = utcnow().date()
+    today = moscow_period_day(utcnow(), 7)
     players = session.scalars(select(Player).where(Player.status == "active").limit(limit)).all()
     existing_ids = set(
         session.scalars(select(DailyBonus.player_id).where(DailyBonus.bonus_date == today)).all()

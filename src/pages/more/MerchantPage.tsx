@@ -68,7 +68,13 @@ export function MerchantPage({ gs, onBuy }: { gs: GameState; onBuy: () => void }
         <>
           <div className="merchant-refresh-bar">
             <span>🕰 Следующая ротация</span>
-            <strong>{new Date(data.refreshes_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}</strong>
+            <strong>{new Date(data.refreshes_at).toLocaleString('ru-RU', {
+              day: 'numeric',
+              month: 'long',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'Europe/Moscow',
+            })} по Москве</strong>
           </div>
 
           {data.animals.map((offer: MerchantOffer) => {

@@ -751,7 +751,7 @@ class SoloStats(Base):
 
 class CocktailRound(Base):
     """`expires_at` is stored rather than derived from `started_at + 24h`: solving the
-    puzzle should reset the round at the next UTC midnight, not 24 hours after it began."""
+    puzzle should reset the round at the next 10:00 Moscow time, not 24 hours after it began."""
 
     __tablename__ = "cocktail_rounds"
     __table_args__ = (MYSQL,)
@@ -779,7 +779,7 @@ class CocktailDay(Base):
 
 
 class DailyBonus(Base):
-    """One offer per player per UTC day. `rerolls_used` is what the `bonus_rerolls` item
+    """One offer per player per Moscow day starting at 07:00. `rerolls_used` is what the `bonus_rerolls` item
     property spends; the offer is generated server-side so a reroll cannot be replayed."""
 
     __tablename__ = "daily_bonuses"

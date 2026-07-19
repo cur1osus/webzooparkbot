@@ -1,7 +1,7 @@
 """Multiplayer lobby, timer, prize-pool and cocktail rules."""
 
 import json
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from api.app.db.connection import get_session
 from api.app.db.models import CocktailDay, Player, utcnow
@@ -85,6 +85,18 @@ def test_solo_stake_is_calculated_from_locked_balance_percentage(db):
     with get_session() as session:
         balance = session.query(Player).filter_by(telegram_id=1001).one().balance_rub
         assert balance == 1000 + result["rub_delta"]
+
+
+def test_cocktail_resets_at_10_moscow():
+    before_reset = datetime(2026, 7, 20, 6, 59, tzinfo=timezone.utc)
+    period_day, next_reset = games._cocktail_period(before_reset)
+    assert period_day == date(2026, 7, 19)
+    assert next_reset == datetime(2026, 7, 20, 7, tzinfo=timezone.utc)
+
+    at_reset = datetime(2026, 7, 20, 7, tzinfo=timezone.utc)
+    period_day, next_reset = games._cocktail_period(at_reset)
+    assert period_day == date(2026, 7, 20)
+    assert next_reset == datetime(2026, 7, 21, 7, tzinfo=timezone.utc)
 
 
 def test_cocktail_history_persists_and_reward_goes_to_first_winner(db):

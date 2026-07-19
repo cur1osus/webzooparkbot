@@ -23,6 +23,7 @@ from api.app.zoopark.income import alive_clause, cure_cost_usd, sync_player_inco
 from api.app.zoopark.profile import get_player
 from api.app.zoopark.progression import create_animal, roll_genes, roll_habitat
 from api.app.zoopark.season import ensure_player_season
+from api.app.zoopark.time import moscow_period_day
 
 _CURRENCY_FIELD: dict[Currency, str] = {"rub": "new_rub", "usd": "new_usd", "paw": "new_paw_coins"}
 _HABITAT_REWARD_META = {
@@ -35,7 +36,7 @@ _HABITAT_REWARD_META = {
 
 
 def _today_offer(session: Session, player: Player) -> DailyBonus:
-    today = utcnow().date()
+    today = moscow_period_day(utcnow(), 7)
     offer = session.scalars(
         select(DailyBonus)
         .where(DailyBonus.player_id == player.id, DailyBonus.bonus_date == today)

@@ -61,7 +61,7 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
       <div className="bonus-ticket">
         <div className="bonus-ticket-mark">🎁</div>
         <div className="min-w-0">
-          <p className="bonus-kicker">Ежедневный ритуал · UTC</p>
+          <p className="bonus-kicker">Ежедневный ритуал · каждый день в 07:00 по Москве</p>
           <p className="m-0 mt-1 text-[22px] leading-none font-black">Подарок ждёт</p>
           <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">
             Один бонус после полуночи. Забери его до следующего обновления.
