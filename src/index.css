@@ -1341,8 +1341,11 @@ button:disabled {
 .bonus-schedule { display: grid; flex-shrink: 0; justify-items: end; padding: 8px 10px; border: 1px solid rgba(var(--c-cyan-rgb), 0.24); border-radius: 13px; background: rgba(var(--c-cyan-rgb), 0.07); text-align: right; }
 .bonus-schedule strong { color: var(--c-cyan); font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1; }
 .bonus-schedule span { margin-top: 3px; color: var(--tg-theme-hint-color); font-size: 9px; font-weight: 800; }
-.bonus-offer-status-row { display: flex; justify-content: flex-end; min-height: 26px; }
+.bonus-offer-status-row { display: flex; justify-content: center; min-height: 26px; }
 .bonus-offer-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 8px;
   border: 1px solid rgba(var(--c-green-rgb), 0.28);
   border-radius: 999px;
@@ -1350,6 +1353,7 @@ button:disabled {
   color: var(--c-green);
   font-size: 10px;
   font-weight: 900;
+  text-align: center;
 }
 
 .bonus-offer-status-sealed {
