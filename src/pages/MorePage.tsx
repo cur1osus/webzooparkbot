@@ -133,7 +133,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   );
 
   if (section === 'top') return (
-    <MoreSectionLayer title="Таблица лидеров" onBack={back}>
+    <MoreSectionLayer title="Топ зоопарков" onBack={back}>
       <TopPage />
     </MoreSectionLayer>
   );

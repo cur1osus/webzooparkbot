@@ -172,11 +172,7 @@ function IncomeGapChart({ entries, onSelect }: { entries: TopEntry[]; onSelect: 
   return (
     <section className="top-gap-chart">
       <div className="top-section-heading">
-        <div>
-          <p className="top-eyebrow m-0">РАЗРЫВ ПО ДОХОДУ</p>
-          <h2 className="m-0 mt-1 text-[18px] font-black tracking-[-0.03em]">Кто насколько близко</h2>
-        </div>
-        <span className="top-section-note">за минуту</span>
+        <h2 className="m-0 text-[18px] font-black tracking-[-0.03em]">Разрыв с лидером</h2>
       </div>
       <div className="top-gap-list">
         {chartEntries.map(entry => {
@@ -251,11 +247,8 @@ function PlayerRow({ entry, onSelect }: { entry: TopEntry; onSelect: (entry: Top
   );
 }
 
-function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
+function LeaderboardHero({ leader, onSelect }: {
   leader: TopEntry;
-  myRank: number | null;
-  myEntry: TopEntry | undefined;
-  shownCount: number;
   onSelect: (entry: TopEntry) => void;
 }) {
   return (
@@ -263,16 +256,6 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
       <div className="top-hero-orbit top-hero-orbit-one" />
       <div className="top-hero-orbit top-hero-orbit-two" />
       <div className="relative z-[1]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="top-eyebrow">ЛИГА СМОТРИТЕЛЕЙ</p>
-            <h1 className="m-0 mt-1 text-[23px] leading-[1.05] font-black tracking-[-0.04em]">Топ зоопарков</h1>
-            <p className="m-0 mt-2 text-[12px] leading-snug text-tg-hint max-w-[210px]">
-              Место определяется доходом зоопарка за минуту.
-            </p>
-          </div>
-        </div>
-
         <button type="button" className="top-hero-leader" onClick={() => onSelect(leader)} aria-label={`Открыть профиль ${leader.nickname}`}>
           <WallpaperLayer wallpaper={leader.profile_wallpaper} className="profile-wallpaper--hero" />
           <ProfileBadge profileEmoji={leader.profile_emoji} fallbackTgId={leader.tg_id} size={52} tone="gold" frame={leader.profile_frame} />
@@ -281,25 +264,12 @@ function LeaderboardHero({ leader, myRank, myEntry, shownCount, onSelect }: {
             <PlayerName entry={leader} size="large" />
           </div>
           <div className="text-right shrink-0">
-            <p className="top-label m-0">доход</p>
-            <p className="m-0 mt-1 text-[15px] font-black tabular-nums" style={{ color: 'var(--c-green)' }}>
+            <p className="m-0 text-[15px] font-black tabular-nums" style={{ color: 'var(--c-green)' }}>
               +{fmt(leader.income_rub_per_min)} ₽<span className="text-[10px] font-bold text-tg-hint">/мин</span>
             </p>
           </div>
         </button>
 
-        <div className="top-hero-stats">
-          <div>
-            <span className="top-label">участников</span>
-            <strong>{shownCount}</strong>
-            <small>показано в рейтинге</small>
-          </div>
-          <div>
-            <span className="top-label">твоя позиция</span>
-            <strong>{myRank ? `#${myRank}` : '—'}</strong>
-            <small>{myEntry ? 'ты в топ-20' : 'развивай зоопарк'}</small>
-          </div>
-        </div>
       </div>
     </section>
   );
@@ -351,9 +321,6 @@ export function TopPage() {
       {leader && data && (
         <LeaderboardHero
           leader={leader}
-          myRank={data.my_rank}
-          myEntry={myEntry}
-          shownCount={entries.length}
           onSelect={openProfile}
         />
       )}
@@ -363,11 +330,7 @@ export function TopPage() {
       {podium.length > 0 && (
         <section>
           <div className="top-section-heading">
-            <div>
-              <p className="top-eyebrow m-0">ПЕРВЫЕ МЕСТА</p>
-              <h2 className="m-0 mt-1 text-[18px] font-black tracking-[-0.03em]">Пьедестал сезона</h2>
-            </div>
-            <span className="top-section-note">доход / мин</span>
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.03em]">Топ-3</h2>
           </div>
           <div className={`top-podium top-podium-count-${podium.length}`}>
             {podium.map(entry => <PodiumCard key={entry.tg_id} entry={entry} onSelect={openProfile} />)}
@@ -389,10 +352,7 @@ export function TopPage() {
       {rest.length > 0 && (
         <section className="top-rest-section">
           <div className="top-section-heading">
-            <div>
-              <p className="top-eyebrow m-0">ОСТАЛЬНЫЕ УЧАСТНИКИ</p>
-              <h2 className="m-0 mt-1 text-[18px] font-black tracking-[-0.03em]">{restTitle}</h2>
-            </div>
+            <h2 className="m-0 text-[18px] font-black tracking-[-0.03em]">{restTitle}</h2>
           </div>
           <div className="top-player-list">
             {rest.map(entry => <PlayerRow key={entry.tg_id} entry={entry} onSelect={openProfile} />)}
