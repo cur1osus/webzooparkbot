@@ -93,11 +93,6 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
           className="bonus-offer-card"
           style={{ borderColor: giftRevealed ? `color-mix(in srgb, ${meta.color} 38%, transparent)` : 'rgba(var(--c-gold-rgb),0.38)' }}
         >
-          <div className="bonus-offer-status-row">
-            <span className={`bonus-offer-status${!giftRevealed || openingGift ? ' bonus-offer-status-sealed' : ''}`}>
-              {offer.claimed ? 'Получено' : openingGift ? 'Открываем' : giftRevealed ? 'Готово' : 'Запечатано'}
-            </span>
-          </div>
           <div className={`bonus-gift-stage${giftRevealed ? ' is-revealed' : ''}${openingGift ? ' is-opening' : ''}`}>
             <div className="bonus-gift-halo" aria-hidden />
             <img className="bonus-gift-art" src={GIFT_ART} alt="" />
