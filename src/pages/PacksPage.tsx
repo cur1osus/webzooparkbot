@@ -5,6 +5,7 @@ import type { Animal, GameState, GeneTier, PackInfo, PackOpenResult } from '@/ty
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
 import { SPECIES_RARITY_META, GENE_META, HABITAT_INFO, geneLabel, lifeLeft, type GeneKey } from '@/data/packs';
 import { AnimalArt } from '@/components/AnimalArt';
+import { RARITY_RANK } from '@/lib/animalQuality';
 
 // ─── Pack tiers ───────────────────────────────────────────────────────────────
 
@@ -59,7 +60,6 @@ const TIERS: Record<TierKey, {
 
 const TIER_ORDER: TierKey[] = ['rare', 'epic', 'legendary', 'mythic'];
 const BATCH_SIZES = [1, 5, 10, 50, 100] as const;
-const RARITY_RANK: Record<Animal['species_rarity'], number> = { rare: 0, epic: 1, legendary: 2, mythic: 3 };
 const PACK_SKIP_INTRO_STORAGE_KEY = 'zoopark_pack_skip_intro_v1';
 
 function packSkipIntroStorageKey(playerId: number): string {

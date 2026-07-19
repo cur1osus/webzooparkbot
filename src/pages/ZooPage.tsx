@@ -22,6 +22,7 @@ import { wallpaperClass } from '@/data/profileWallpapers';
 import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { getDefaultProfileAnimal, type ProfileAnimal } from '@/data/profileAnimals';
 import { SPECIES_RARITY_META } from '@/data/packs';
+import { compareByQuality } from '@/lib/animalQuality';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -58,18 +59,14 @@ const ZOO_TABS: { id: ZooTab; emoji: string; label: string; badge?: (gs: GameSta
   { id: 'medals',   emoji: '🏅', label: 'Медали' },
 ];
 
-type AnimalSort = 'new' | 'income' | 'life' | 'rarity';
+type AnimalSort = 'new' | 'income' | 'life' | 'quality';
 
 const ANIMAL_SORTS: { id: AnimalSort; label: string }[] = [
-  { id: 'new',    label: 'Новые' },
-  { id: 'income', label: 'Доход' },
-  { id: 'life',   label: 'Скоро умрут' },
-  { id: 'rarity', label: 'Редкость' },
+  { id: 'new',     label: 'Новые' },
+  { id: 'income',  label: 'Доход' },
+  { id: 'life',    label: 'Скоро умрут' },
+  { id: 'quality', label: 'Качество' },
 ];
-
-const RARITY_RANK: Record<Animal['species_rarity'], number> = {
-  rare: 0, epic: 1, legendary: 2, mythic: 3,
-};
 
 // Each mode returns a fully-ordered comparator; ties fall back to income so the list never
 // reshuffles arbitrarily between renders.
@@ -81,8 +78,9 @@ function compareAnimals(mode: AnimalSort): (a: Animal, b: Animal) => number {
     case 'life':
       // Soonest death first — the animals that need attention.
       return (a, b) => new Date(a.dies_at).getTime() - new Date(b.dies_at).getTime() || byIncome(a, b);
-    case 'rarity':
-      return (a, b) => RARITY_RANK[b.species_rarity] - RARITY_RANK[a.species_rarity] || byIncome(a, b);
+    case 'quality':
+      // Самые редкие с лучшими генами сверху, обычные со слабыми — внизу.
+      return compareByQuality;
     case 'new':
     default:
       // Most recently acquired first — freshly bought animals surface at the top.

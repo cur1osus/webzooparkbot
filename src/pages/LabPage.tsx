@@ -6,6 +6,7 @@ import type { Animal, BreedResult, GameState, GeneTier, InheritedGene } from '@/
 import { apiBreed, apiGetAnimals } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
+import { compareByQuality } from '@/lib/animalQuality';
 
 const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
 // Mirrors BREED_COST_INCOME_HOURS: a breeding attempt costs this many hours of the two
@@ -15,16 +16,13 @@ function breedCostRub(a: Animal, b: Animal): number {
   return Math.round(BREED_COST_INCOME_HOURS * 60 * (a.base_income + b.base_income));
 }
 const BREED_TIER_INDEX: Record<GeneTier, number> = { low: 0, medium: 1, high: 2 };
-type PickerSort = 'new' | 'income' | 'rarity' | 'reproduction';
+type PickerSort = 'new' | 'income' | 'quality' | 'reproduction';
 const PICKER_SORTS: Array<{ id: PickerSort; label: string }> = [
   { id: 'new',           label: 'Новые' },
   { id: 'income',       label: 'Доход' },
-  { id: 'rarity',       label: 'Редкость' },
+  { id: 'quality',      label: 'Качество' },
   { id: 'reproduction', label: 'Размножение' },
 ];
-const RARITY_RANK: Record<Animal['species_rarity'], number> = {
-  rare: 0, epic: 1, legendary: 2, mythic: 3,
-};
 
 function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
   if (!a || !b) return null;
@@ -225,7 +223,8 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
         if (compatibleOrder !== 0) return compatibleOrder;
       }
       if (sort === 'income') return b.income - a.income;
-      if (sort === 'rarity') return RARITY_RANK[b.species_rarity] - RARITY_RANK[a.species_rarity] || b.income - a.income;
+      // Самые редкие с лучшими генами сверху, обычные со слабыми — внизу.
+      if (sort === 'quality') return compareByQuality(a, b);
       if (sort === 'reproduction') return BREED_TIER_INDEX[b.reproduction] - BREED_TIER_INDEX[a.reproduction] || b.income - a.income;
       return new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || b.income - a.income;
     });
