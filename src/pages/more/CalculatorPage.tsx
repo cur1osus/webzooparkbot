@@ -5,7 +5,7 @@ import { fmt } from '@/utils/format';
 import { SPECIES_RARITY_META } from '@/data/packs';
 import { AnimalArt } from '@/components/AnimalArt';
 import { apiGetBank } from '@/api';
-import { rublesToUsd, usdToRubles } from '@/lib/bankMath';
+import { applyBankDiscount, bankDiscountPercent, rublesToUsd, usdToRubles } from '@/lib/bankMath';
 import { accumulate, biggestUpcomingLosses, buildForecast, timeToTarget } from '@/lib/incomeForecast';
 
 type RateMode = 'current' | 'best' | 'average';
@@ -62,16 +62,29 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
 
   // Курс скачет между 60 и 130 ₽, поэтому «сколько это в долларах» зависит от того, в
   // какую минуту менять. Лучший и средний считаем по той же истории, что рисует банк.
-  const rates = useMemo(() => {
+  //
+  // История — это опубликованные курсы, без предметов `discount_bank`, тогда как
+  // `rate_rub_per_usd` уже со скидкой. Сравнивать их напрямую нельзя, поэтому к истории
+  // применяется та же скидка и та же формула, что на сервере (`effective_rate`).
+  const { rates, discountPercent } = useMemo(() => {
     const current = bank?.rate_rub_per_usd ?? 0;
+    const published = bank?.base_rate_rub_per_usd ?? 0;
+    const percent = bankDiscountPercent(current, published);
+    const discounted = (rate: number) => applyBankDiscount(rate, percent);
+
     const history = bank?.history ?? [];
-    if (history.length === 0) return { current, best: current, average: current };
-    const values = history.map(p => p.rate);
+    if (history.length === 0) {
+      return { rates: { current, best: current, average: current }, discountPercent: percent };
+    }
+    const values = history.map(p => discounted(p.rate));
     return {
-      current,
-      // Дешевле рубль за доллар — выгоднее покупка, поэтому лучший курс это минимум.
-      best: Math.min(...values),
-      average: Math.round(values.reduce((acc, r) => acc + r, 0) / values.length),
+      rates: {
+        current,
+        // Дешевле рубль за доллар — выгоднее покупка, поэтому лучший курс это минимум.
+        best: Math.min(...values),
+        average: Math.round(values.reduce((acc, r) => acc + r, 0) / values.length),
+      },
+      discountPercent: percent,
     };
   }, [bank]);
 
@@ -163,6 +176,7 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
         {rate > 0 && (
           <p className="m-0 mt-1 text-[10.5px] text-tg-hint leading-[1.4]">
             Доллары посчитаны с комиссией банка {feePercent}%. Лучший и средний — по недавней истории курса.
+            {discountPercent > 0 && ` Твоя скидка на курс ${discountPercent}% уже учтена.`}
           </p>
         )}
       </div>
