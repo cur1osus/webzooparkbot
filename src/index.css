@@ -1440,11 +1440,12 @@ button:disabled {
 .bonus-open-button:disabled { cursor: default; opacity: 0.68; }
 .bonus-reveal-content { animation: bonus-reward-reveal 0.42s ease-out both; }
 .bonus-reveal-content .bonus-offer-reward {
-  flex-direction: column;
+  flex-direction: row;
+  justify-content: center;
   align-items: center;
   gap: 10px;
   margin-top: 8px;
-  text-align: center;
+  text-align: left;
 }
 
 .bonus-offer-reward {
@@ -1470,16 +1471,16 @@ button:disabled {
 .bonus-offer-reward div span { margin-top: 5px; color: var(--tg-theme-hint-color); font-size: 12px; font-weight: 700; }
 
 .bonus-reveal-content .bonus-offer-icon {
-  width: 74px;
-  height: 74px;
-  border-radius: 22px;
-  font-size: 40px;
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  font-size: 36px;
   box-shadow: 0 10px 26px color-mix(in srgb, currentColor 16%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .bonus-reveal-content .bonus-reward-copy {
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
 }
 
 .bonus-reveal-content .bonus-reward-copy strong {
