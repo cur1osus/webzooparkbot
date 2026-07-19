@@ -76,9 +76,10 @@ const ANIMAL_GENE_ORDER = [
 ] as const;
 
 const GENE_TIER_COLORS: Record<GeneTier, string> = {
-  low: 'var(--c-red)',
-  medium: 'var(--c-gold)',
-  high: 'var(--c-green)',
+  // Keep the gene legend stable across player themes: ocean's gold accent is blue.
+  low: '#d92323',
+  medium: '#ffd21c',
+  high: '#55c936',
 };
 
 // Each mode returns a fully-ordered comparator; ties fall back to income so the list never
