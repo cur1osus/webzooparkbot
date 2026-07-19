@@ -1,0 +1,30 @@
+# AI rivals. Deliberately a separate unit from webzooparkbot-api rather than a thread
+# inside it: it can be restarted, tailed and stopped without touching the game, a planning
+# call blocks for 10-30 seconds against a reasoning model, and a wedged rival must not be
+# able to take the API down with it.
+#
+# Install once (deploy.sh only restarts it afterwards):
+#   scp deploy/webzooparkbot-bots.service root@HOST:/etc/systemd/system/
+#   ssh root@HOST 'systemctl daemon-reload && systemctl enable --now webzooparkbot-bots'
+#
+# Turning the rivals off does not need this unit: set bot_profiles.enabled = 0.
+
+[Unit]
+Description=ZooPark AI rivals
+After=network.target mysql.service webzooparkbot-api.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=zoopark
+Group=zoopark
+WorkingDirectory=/opt/webzooparkbot
+ExecStart=/opt/webzooparkbot/start-bots.sh
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

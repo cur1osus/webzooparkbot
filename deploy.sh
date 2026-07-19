@@ -24,6 +24,9 @@ API_DIR="${API_DIR:-${APP_DIR}/api}"
 APP_USER="${APP_USER:-zoopark}"
 ENV_FILE="${ENV_FILE:-/etc/webzooparkbot.env}"
 SERVICE="${SERVICE:-webzooparkbot-api}"
+# The AI rivals run as their own unit. Restarted after the API so a failing rival never
+# blocks the game from coming back up; skipped without complaint if it isn't installed yet.
+BOTS_SERVICE="${BOTS_SERVICE:-webzooparkbot-bots}"
 API_UPSTREAM="${API_UPSTREAM:-127.0.0.1:8900}"
 DOMAIN="${DOMAIN:-REDACTED-DOMAIN}"
 PUBLIC_URL="https://${DOMAIN}"
@@ -53,7 +56,7 @@ if [ "$DO_FRONTEND" -eq 1 ]; then
 fi
 
 if [ "$DO_BACKEND" -eq 1 ]; then
-  echo "[backend 1/4] Upload API to ${API_DIR}"
+  echo "[backend 1/5] Upload API to ${API_DIR}"
   # --exclude also protects these paths from --delete, so the server-side virtualenv and
   # byte-cache survive. Files land owned by the pushing uid; chown restores the app user.
   ssh "$REMOTE" "mkdir -p '${API_DIR}'"
@@ -62,7 +65,7 @@ if [ "$DO_BACKEND" -eq 1 ]; then
     ./api/ "${REMOTE}:${API_DIR}/"
   ssh "$REMOTE" "chown -R ${APP_USER}:${APP_USER} '${API_DIR}'"
 
-  echo "[backend 2/4] Install deps, back up DB, run migrations"
+  echo "[backend 2/5] Install deps, back up DB, run migrations"
   remote_bash "$API_DIR" "$APP_USER" "$ENV_FILE" "$APP_DIR" << 'ENDSSH'
 set -euo pipefail
 API_DIR="$1"; APP_USER="$2"; ENV_FILE="$3"; APP_DIR="$4"
@@ -127,7 +130,7 @@ print(f"[migration] Current revision: {', '.join(sorted(current))}")
 PY
 ENDSSH
 
-  echo "[backend 3/4] Verify import + restart service"
+  echo "[backend 3/5] Verify import + restart service"
   remote_bash "$API_DIR" "$APP_USER" "$ENV_FILE" "$APP_DIR" "$SERVICE" "$API_UPSTREAM" << 'ENDSSH'
 set -euo pipefail
 API_DIR="$1"; APP_USER="$2"; ENV_FILE="$3"; APP_DIR="$4"; SERVICE="$5"; API_UPSTREAM="$6"
@@ -162,7 +165,48 @@ journalctl -u "$SERVICE" -n 80 --no-pager || true
 exit 1
 ENDSSH
 
-  echo "[backend 4/4] Register Telegram webhook"
+  echo "[backend 4/5] Restart AI rivals"
+  remote_bash "$ENV_FILE" "$BOTS_SERVICE" << 'ENDSSH'
+set -euo pipefail
+ENV_FILE="$1"; BOTS_SERVICE="$2"
+
+if ! systemctl list-unit-files "${BOTS_SERVICE}.service" --no-legend | grep -q .; then
+    echo "[bots] ${BOTS_SERVICE} is not installed — skipping."
+    echo "[bots] To install: copy deploy/webzooparkbot-bots.service and deploy/start-bots.sh,"
+    echo "[bots] then: systemctl daemon-reload && systemctl enable --now ${BOTS_SERVICE}"
+    exit 0
+fi
+
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+
+# Not fatal: without a key the rivals fall back to in-character default plans and keep
+# playing. Worth saying out loud, because the symptom (bots that never change strategy)
+# otherwise looks like a bug in the planner rather than a missing secret.
+if [ -z "${ROUTERAI_API_KEY:-}" ]; then
+    echo "[bots] WARNING: ROUTERAI_API_KEY is not set in ${ENV_FILE}."
+    echo "[bots] The rivals will run on fallback plans and never replan."
+fi
+
+systemctl restart "$BOTS_SERVICE"
+for _ in $(seq 1 15); do
+    state="$(systemctl is-active "$BOTS_SERVICE" || true)"
+    [ "$state" = "active" ] && exit 0
+    if [ "$state" = "failed" ]; then
+        systemctl status "$BOTS_SERVICE" --no-pager -l || true
+        journalctl -u "$BOTS_SERVICE" -n 40 --no-pager || true
+        exit 1
+    fi
+    sleep 1
+done
+echo "[bots] ${BOTS_SERVICE} did not become active in time"
+journalctl -u "$BOTS_SERVICE" -n 40 --no-pager || true
+exit 1
+ENDSSH
+
+  echo "[backend 5/5] Register Telegram webhook"
   remote_bash "$ENV_FILE" "${PUBLIC_URL}/api/telegram/webhook" << 'ENDSSH'
 set -euo pipefail
 ENV_FILE="$1"; WEBHOOK_URL="$2"

@@ -46,6 +46,12 @@ CORS_ORIGINS = _env_origins("CORS_ORIGINS", "http://localhost:5173" if not IS_PR
 # Shared secret Telegram echoes back in X-Telegram-Bot-Api-Secret-Token on every webhook call.
 TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
 
+# AI rivals. Read by the bot runner only; the API process never calls the model, so a
+# missing key degrades the rivals to their fallback plans and leaves the game untouched.
+ROUTERAI_API_KEY = os.getenv("ROUTERAI_API_KEY", "")
+ROUTERAI_BASE_URL = os.getenv("ROUTERAI_BASE_URL", "https://routerai.ru/api/v1")
+BOT_PLANNER_MODEL = os.getenv("BOT_PLANNER_MODEL", "deepseek/deepseek-v4-flash")
+
 # `BANK_RATE_SECRET` is gone. It existed because the rate was `HMAC(secret, minute)` —
 # a pure function of the clock, which any client could precompute without it. The rate is
 # now a random walk stored in `bank_rates`, and state needs no secret to be unpredictable.

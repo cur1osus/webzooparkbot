@@ -114,6 +114,7 @@ class Player(Base):
         CheckConstraint("genetics_level BETWEEN 0 AND 5", name="ck_players_genetics_level"),
         CheckConstraint("expedition_level BETWEEN 0 AND 5", name="ck_players_expedition_level"),
         Index("ix_players_income", "income_rub_per_min"),
+        Index("ix_players_is_bot", "is_bot"),
         MYSQL,
     )
 
@@ -128,6 +129,12 @@ class Player(Base):
     profile_wallpaper: Mapped[str] = mapped_column(String(24), nullable=False, default="none")
     theme: Mapped[str] = mapped_column(String(16), nullable=False, default="dusk", server_default="dusk")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    # An AI rival is an ordinary player row, so it plays through the same service layer and
+    # the same ledger as a human — there is no second code path that could drift from the
+    # rules. The flag exists only for the places that must treat it differently: the tick
+    # loop finds its bots by it, and clan levelling refuses to count it (see `social`).
+    # Its `telegram_id` is negative; real Telegram ids never are, so the two cannot collide.
+    is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     registered_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
     last_seen_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
@@ -948,4 +955,92 @@ class BankRate(Base):
     # advance the rate produce one row, not two.
     period: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     rate_rub_per_usd: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
+# ─── AI rivals ────────────────────────────────────────────────────────────────
+
+
+class BotProfile(Base):
+    """Everything about a bot that is not already a `Player`: who it is and when it acts.
+
+    Personality lives here as configuration rather than in code, so a rival can be retuned
+    (or switched off with `enabled`) by touching a row — no deploy. `biography` is the bot's
+    own compacted memory: the planner writes its conclusions back into it, and that is what
+    makes a rival that had a bad week behave like it remembers.
+    """
+
+    __tablename__ = "bot_profiles"
+    __table_args__ = (
+        CheckConstraint("turn_every_minutes > 0", name="ck_bot_profiles_turn_every"),
+        CheckConstraint("wake_hour_utc BETWEEN 0 AND 23", name="ck_bot_profiles_wake_hour"),
+        CheckConstraint("sleep_hour_utc BETWEEN 0 AND 23", name="ck_bot_profiles_sleep_hour"),
+        MYSQL,
+    )
+
+    player_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("players.id", ondelete="CASCADE"), primary_key=True
+    )
+    character: Mapped[str] = mapped_column(String(32), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+
+    # One turn is one agent loop, and that is the only thing that costs money — the tools
+    # the model reaches for are local calls. So this interval is the cost dial.
+    turn_every_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60, server_default="60")
+    # A rival that plays around the clock out-grows every human by arithmetic alone, and a
+    # leaderboard nobody can reach is worse than an empty one. The waking window is the
+    # balance lever: it costs the bot hours, not a handicap that would show up as cheating.
+    wake_hour_utc: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=6, server_default="6")
+    sleep_hour_utc: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=22, server_default="22")
+
+    # What the bot remembers lives in its own JSON notebook, written by the model through
+    # the `remember` tool — not here. This column stays only as a place for an operator note.
+    biography: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    next_turn_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    # Claimed the same way the notification outbox claims a row, so a second runner (a
+    # stray manual `--once`, an overlapping tick) cannot make the same bot spend twice.
+    locked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+    player: Mapped[Player] = relationship("Player")
+
+
+class BotPlan(Base):
+    """One turn: every tool the model called, with its arguments and what came back.
+
+    Deliberately raw, and deliberately including failures. There is no separate record of
+    "what it intended" versus "what it did", because in this design there is no gap — the
+    model calls a tool and the tool either works or returns a refusal, and both land here.
+
+    A rival that keeps trying to breed with no pair, or to buy what it cannot afford, shows
+    up as a run of `ok: false` entries. That is the first thing worth reading when one
+    starts behaving oddly, and it is the reason refusals are stored rather than dropped.
+    """
+
+    __tablename__ = "bot_plans"
+    __table_args__ = (Index("ix_bot_plans_player_created", "player_id", "created_at"), MYSQL)
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False
+    )
+    character: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    # Round trips to the model. A turn's cost is this number — not the tool count, since the
+    # tools are local calls and the model routinely batches ten of them into one round.
+    rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tool_calls: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Why the turn ended: on its own via end_turn, or against a budget. Turns that all end
+    # on the limit mean the budget is too tight for what the rival is trying to do.
+    stopped_because: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cached_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reasoning_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Micro-roubles: RouterAI prices in roubles per token and a turn costs a few tens of
+    # kopecks, so an integer currency keeps it exact.
+    cost_micro_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
