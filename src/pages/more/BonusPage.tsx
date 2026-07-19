@@ -124,7 +124,7 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
                   <strong style={{ color: meta.color }}>
                     {offerIsObject ? offer.reward_emoji : `+${fmt(offer.amount)}`}
                   </strong>
-                  <span>{offerIsObject ? offer.reward_name : meta.name}</span>
+                  {offerIsObject && <span>{offer.reward_name}</span>}
                 </div>
               </div>
 
