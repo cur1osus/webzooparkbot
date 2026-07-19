@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fmt } from '@/utils/format';
 import type { BonusCurrency } from '@/types';
 import { apiClaimBonus, apiGetBonus, apiRerollBonus } from '@/api';
@@ -13,8 +13,10 @@ const CURRENCY: Record<BonusCurrency, { icon: string; name: string; color: strin
   locality: { icon: '🗺️', name: 'Местность', color: 'var(--c-teal)' },
 };
 
+const GIFT_ART = '/rewards/daily-gift-chest.png';
+
 /**
- * The offer is generated and stored server-side, once per UTC day. A reroll replaces it
+ * The offer is generated and stored server-side, once per Moscow day starting at 07:00. A reroll replaces it
  * and spends one of the rerolls the player's `bonus_rerolls` items grant — so neither the
  * offer nor the number of rerolls can be forged from here.
  */
@@ -24,8 +26,22 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<string | null>(null);
   const [burst, setBurst] = useState<Reward | null>(null);
+  const [giftRevealed, setGiftRevealed] = useState(false);
+  const [openingGift, setOpeningGift] = useState(false);
 
   const { data: offer = null, isLoading } = useQuery({ queryKey: ['bonus'], queryFn: apiGetBonus });
+
+  useEffect(() => {
+    setGiftRevealed(Boolean(offer?.claimed));
+    setOpeningGift(false);
+  }, [offer]);
+
+  const revealGift = () => {
+    if (!offer || offer.claimed || giftRevealed || openingGift) return;
+    setGiftRevealed(true);
+    setOpeningGift(true);
+    window.setTimeout(() => setOpeningGift(false), 720);
+  };
 
   const run = async (action: 'reroll' | 'claim') => {
     setBusy(true);
@@ -34,7 +50,10 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
       if (action === 'reroll') {
         const next = await apiRerollBonus();
         queryClient.setQueryData(['bonus'], next);
+        setGiftRevealed(false);
+        setOpeningGift(false);
       } else {
+        setGiftRevealed(true);
         const res = await apiClaimBonus();
         const meta = CURRENCY[res.currency];
         const rewardIcon = res.reward_emoji ?? meta.icon;
@@ -64,7 +83,7 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
           <p className="bonus-kicker">Ежедневный ритуал · каждый день в 07:00 по Москве</p>
           <p className="m-0 mt-1 text-[22px] leading-none font-black">Подарок ждёт</p>
           <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">
-            Один бонус после полуночи. Забери его до следующего обновления.
+            Один новый подарок каждый день. Открой его до следующего обновления.
           </p>
         </div>
       </div>
@@ -72,41 +91,72 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
       {offer && meta && (
-        <div className="bonus-offer-card" style={{ borderColor: `color-mix(in srgb, ${meta.color} 38%, transparent)` }}>
+        <div
+          className="bonus-offer-card"
+          style={{ borderColor: giftRevealed ? `color-mix(in srgb, ${meta.color} 38%, transparent)` : 'rgba(var(--c-gold-rgb),0.38)' }}
+        >
           <div className="flex items-center justify-between gap-2">
             <p className="bonus-offer-kicker">Твоя награда сегодня</p>
-            <span className="bonus-offer-status">{offer.claimed ? 'Получено' : 'Готово'}</span>
+            <span className={`bonus-offer-status${!giftRevealed || openingGift ? ' bonus-offer-status-sealed' : ''}`}>
+              {offer.claimed ? 'Получено' : openingGift ? 'Открываем' : giftRevealed ? 'Готово' : 'Запечатано'}
+            </span>
           </div>
-          <div className="bonus-offer-reward">
-            <span className="bonus-offer-icon" style={{ color: meta.color }}>{meta.icon}</span>
-            <div>
-              <strong style={{ color: meta.color }}>{offerIsObject ? offer.reward_emoji : fmt(offer.amount)}</strong>
-              <span>{offerIsObject ? offer.reward_name : meta.name}</span>
+          <div className={`bonus-gift-stage${giftRevealed ? ' is-revealed' : ''}${openingGift ? ' is-opening' : ''}`}>
+            <div className="bonus-gift-halo" aria-hidden />
+            <img className="bonus-gift-art" src={GIFT_ART} alt="" />
+            {!giftRevealed && <span className="bonus-gift-lock">✦ сюрприз внутри</span>}
+          </div>
+
+          {!giftRevealed || openingGift ? (
+            <div className="bonus-gift-locked-copy">
+              <p className="bonus-gift-title">Подарок запечатан</p>
+              <p>Открой сундук, чтобы узнать сегодняшнюю награду.</p>
+              <button onClick={revealGift} disabled={busy || openingGift} className="bonus-open-button" type="button">
+                {openingGift ? 'Открываем...' : 'Открыть подарок'}
+              </button>
+              {canReroll && (
+                <button onClick={() => void run('reroll')} disabled={busy} className="bonus-reroll-button" type="button">
+                  🎲 Перебросить · осталось {offer.rerolls_left}
+                </button>
+              )}
             </div>
-          </div>
-          <p className="m-0 mt-2 text-[12px] text-tg-hint">Забери сейчас или попробуй другой вариант.</p>
+          ) : (
+            <div className="bonus-reveal-content">
+              <div className="bonus-offer-reward">
+                <span className="bonus-offer-icon" style={{ color: meta.color }}>{meta.icon}</span>
+                <div>
+                  <strong style={{ color: meta.color }}>{offerIsObject ? offer.reward_emoji : fmt(offer.amount)}</strong>
+                  <span>{offerIsObject ? offer.reward_name : meta.name}</span>
+                </div>
+              </div>
+              <p className="m-0 mt-2 text-[12px] text-tg-hint">
+                {offer.claimed ? 'Этот подарок уже забран.' : 'Забери награду или попробуй другой вариант.'}
+              </p>
 
-          <button
-            onClick={() => void run('claim')}
-            disabled={!canClaim || busy}
-            className="bonus-claim-button"
-            style={{
-              background: canClaim ? meta.color : 'var(--surface-subtle)',
-              color: canClaim ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
-            }}
-          >
-            {busy ? 'Получаем...' : canClaim ? `Забрать ${meta.icon}` : '⏳ Уже получен сегодня'}
-          </button>
+              <button
+                onClick={() => void run('claim')}
+                disabled={!canClaim || busy}
+                className="bonus-claim-button"
+                style={{
+                  background: canClaim ? meta.color : 'var(--surface-subtle)',
+                  color: canClaim ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
+                }}
+              >
+                {busy ? 'Получаем...' : canClaim ? `Забрать ${meta.icon}` : '⏳ Уже получен сегодня'}
+              </button>
 
-          <button
-            onClick={() => void run('reroll')}
-            disabled={!canReroll || busy}
-            className="bonus-reroll-button"
-          >
-            {offer.rerolls_left > 0
-              ? `🎲 Перебросить · осталось ${offer.rerolls_left}`
-              : 'Перебросов нет — их дают предметы кузницы'}
-          </button>
+              <button
+                onClick={() => void run('reroll')}
+                disabled={!canReroll || busy}
+                className="bonus-reroll-button"
+                type="button"
+              >
+                {offer.rerolls_left > 0
+                  ? `🎲 Перебросить · осталось ${offer.rerolls_left}`
+                  : 'Перебросов нет — их дают предметы кузницы'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
