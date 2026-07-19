@@ -1439,7 +1439,13 @@ button:disabled {
 .bonus-open-button:hover:not(:disabled) { transform: translateY(-1px); }
 .bonus-open-button:disabled { cursor: default; opacity: 0.68; }
 .bonus-reveal-content { animation: bonus-reward-reveal 0.42s ease-out both; }
-.bonus-reveal-content .bonus-offer-reward { justify-content: center; text-align: left; }
+.bonus-reveal-content .bonus-offer-reward {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  text-align: center;
+}
 
 .bonus-offer-reward {
   display: flex;
@@ -1462,6 +1468,31 @@ button:disabled {
 .bonus-offer-reward div { display: flex; min-width: 0; flex-direction: column; }
 .bonus-offer-reward strong { font-size: 32px; font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; }
 .bonus-offer-reward div span { margin-top: 5px; color: var(--tg-theme-hint-color); font-size: 12px; font-weight: 700; }
+
+.bonus-reveal-content .bonus-offer-icon {
+  width: 74px;
+  height: 74px;
+  border-radius: 22px;
+  font-size: 40px;
+  box-shadow: 0 10px 26px color-mix(in srgb, currentColor 16%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.bonus-reveal-content .bonus-reward-copy {
+  align-items: center;
+  text-align: center;
+}
+
+.bonus-reveal-content .bonus-reward-copy strong {
+  font-size: 48px;
+  font-weight: 950;
+  letter-spacing: -0.05em;
+}
+
+.bonus-reveal-content .bonus-reward-copy span {
+  margin-top: 7px;
+  font-size: 14px;
+  font-weight: 800;
+}
 
 @keyframes bonus-gift-float {
   0%, 100% { transform: translateY(0) rotate(-1deg); }

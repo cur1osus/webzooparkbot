@@ -120,8 +120,10 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
             <div className="bonus-reveal-content">
               <div className="bonus-offer-reward">
                 <span className="bonus-offer-icon" style={{ color: meta.color }}>{meta.icon}</span>
-                <div>
-                  <strong style={{ color: meta.color }}>{offerIsObject ? offer.reward_emoji : fmt(offer.amount)}</strong>
+                <div className="bonus-reward-copy">
+                  <strong style={{ color: meta.color }}>
+                    {offerIsObject ? offer.reward_emoji : `+${fmt(offer.amount)}`}
+                  </strong>
                   <span>{offerIsObject ? offer.reward_name : meta.name}</span>
                 </div>
               </div>
