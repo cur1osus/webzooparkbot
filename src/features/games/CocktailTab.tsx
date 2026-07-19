@@ -73,7 +73,7 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
               : `${winnerNickname} первым угадал рецепт и забрал награду.`}
           </p>
           <div className="mt-6 rounded-2xl px-4 py-3 text-[12px] font-bold" style={{ background: 'rgba(var(--c-gold-rgb),0.10)', color: 'var(--c-gold)' }}>
-            Возвращайся завтра за новым рецептом.
+            Новый рецепт появится завтра в 10:00 по Москве.
           </div>
         </div>
       </section>
