@@ -60,6 +60,7 @@ Reason = Literal[
     "transfer_claim",
     "star_payment",
     "star_refund",
+    "social_subscription_reward",
     "cosmetic_purchase",
     "development_upgrade",
     "admin_grant",
@@ -90,11 +91,13 @@ def grant(
     *,
     ref_table: str | None = None,
     ref_id: int | None = None,
+    allow_negative: bool = False,
 ) -> int:
     """Move `delta` of `currency` on `player`'s balance and record it. Returns the new balance.
 
     The caller must already hold a row lock on `player` (`profile.get_player(..., for_update=True)`).
-    A negative `delta` that would overdraw raises `InsufficientFunds` and moves nothing.
+    A negative `delta` that would overdraw raises `InsufficientFunds` unless the caller
+    explicitly allows a subscription clawback to create a negative PawCoins balance.
     """
     if currency not in CURRENCIES:
         raise ValueError(f"unknown currency {currency!r}")
@@ -104,7 +107,9 @@ def grant(
         return current
 
     new_balance = current + delta
-    if new_balance < 0:
+    if new_balance < 0 and not (
+        allow_negative and currency == "paw" and reason == "social_subscription_reward"
+    ):
         raise InsufficientFunds(currency, -delta, current)
 
     setattr(player, _BALANCE_ATTR[currency], new_balance)

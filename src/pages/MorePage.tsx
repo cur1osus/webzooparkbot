@@ -42,7 +42,7 @@ const MENU_GROUPS = [
   {
     label: 'Прочее',
     items: [
-      { id: 'donate',   emoji: '⭐️', title: 'Донат',              desc: '1 ⭐️ = PawCoins' },
+      { id: 'donate',   emoji: '⭐️', title: 'Поддержка',           desc: 'Stars и PawCoins за подписку' },
       { id: 'wiki',     emoji: '📖',  title: 'База знаний',        desc: 'Механики и гайды' },
     ],
   },
@@ -145,8 +145,8 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
   );
 
   if (section === 'donate') return (
-    <MoreSectionLayer title="⭐️ Донат" onBack={back}>
-      <DonatePage gs={gs} />
+    <MoreSectionLayer title="⭐️ Поддержка" onBack={back}>
+      <DonatePage gs={gs} onRefresh={onRefresh} />
     </MoreSectionLayer>
   );
 

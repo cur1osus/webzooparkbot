@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import os
 
+from api.app.zoopark.catalog import SOCIAL_SUBSCRIPTION_REWARD_PAW
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return int(raw)
 
 
 def _env_allowed_ids(name: str, default: str) -> set[int] | None:
@@ -29,6 +38,15 @@ IS_PRODUCTION = APP_ENV == "production"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "ZooParkBot")
+
+# PawCoins reward for staying subscribed to the official ZooPark channel and chat. The
+# IDs are public Telegram chat IDs; keeping them configurable lets the campaign move later
+# without a code change while the defaults match the current production communities.
+SOCIAL_REWARD_AMOUNT = _env_int("SOCIAL_REWARD_AMOUNT", SOCIAL_SUBSCRIPTION_REWARD_PAW)
+SOCIAL_REWARD_CHANNEL_ID = _env_int("SOCIAL_REWARD_CHANNEL_ID", -1002099627259)
+SOCIAL_REWARD_CHANNEL_URL = os.getenv("SOCIAL_REWARD_CHANNEL_URL", "https://t.me/newsZooPark")
+SOCIAL_REWARD_CHAT_ID = _env_int("SOCIAL_REWARD_CHAT_ID", -1002073914350)
+SOCIAL_REWARD_CHAT_URL = os.getenv("SOCIAL_REWARD_CHAT_URL", "https://t.me/ZooPark_4at")
 
 # When true, the X-Dev-User-Id header may impersonate a player without a Telegram signature.
 DEV_AUTH = _env_flag("DEV_AUTH", default=False)
@@ -71,6 +89,9 @@ def validate_config() -> None:
 
     if INIT_DATA_MAX_AGE_SECONDS <= 0:
         problems.append("INIT_DATA_MAX_AGE_SECONDS must be positive")
+
+    if SOCIAL_REWARD_AMOUNT <= 0:
+        problems.append("SOCIAL_REWARD_AMOUNT must be positive")
 
     if problems:
         raise RuntimeError("Invalid configuration:\n  - " + "\n  - ".join(problems))

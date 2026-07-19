@@ -26,6 +26,7 @@ from api.app.routes.zoopark_merchant import router as merchant_router
 from api.app.routes.zoopark_progression import router as progression_router
 from api.app.routes.zoopark_social import router as social_router
 from api.app.routes.zoopark_status import router as status_router
+from api.app.routes.zoopark_subscriptions import router as subscriptions_router
 
 
 def _configure_common_middleware(app: FastAPI) -> None:
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
         merchant_router,
         forge_router,
         social_router,
+        subscriptions_router,
         games_router,
         progression_router,
         telegram_webhook_router,

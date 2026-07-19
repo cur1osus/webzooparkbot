@@ -21,6 +21,20 @@ export const apiSetTheme = (theme: string) =>
     body: JSON.stringify({ theme }),
   });
 export const apiConfig = () => req<AppConfig>('/config');
+export interface SocialRewardStatus {
+  enabled: boolean;
+  reward_amount: number;
+  paw_coins: number;
+  targets: Array<{
+    key: string;
+    title: string;
+    url: string;
+    reward: number;
+    joined: boolean;
+  }>;
+}
+export const apiSyncSocialRewards = () =>
+  req<SocialRewardStatus>('/social/subscriptions/sync', { method: 'POST' });
 export const apiSetNicknameColor = (color: string) =>
   req<{ ok: true; nickname_color: string }>('/profile/nickname-color', {
     method: 'POST',

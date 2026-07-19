@@ -226,7 +226,7 @@ import json, sys
 print(json.dumps({
     "url": sys.argv[1],
     "secret_token": sys.argv[2],
-    "allowed_updates": ["message", "pre_checkout_query"],
+    "allowed_updates": ["message", "pre_checkout_query", "chat_member"],
 }))' "$WEBHOOK_URL" "$TELEGRAM_WEBHOOK_SECRET")")"
 
 python3 - "$response" <<'PY'

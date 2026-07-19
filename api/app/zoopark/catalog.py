@@ -24,6 +24,7 @@ HABITATS: tuple[Habitat, ...] = ("desert", "mountains", "forest", "fields", "ant
 GENE_TIERS: tuple[GeneTier, ...] = ("low", "medium", "high")
 CURRENCIES: tuple[Currency, ...] = ("rub", "usd", "paw")
 RARITIES: tuple[Rarity, ...] = ("rare", "epic", "mythic", "legendary")
+SOCIAL_SUBSCRIPTION_REWARD_PAW = 50
 
 class NicknameColorDef(TypedDict):
     price_paw: int

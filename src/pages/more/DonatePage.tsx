@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { GameState } from '@/types';
-import { apiGetDonateInfo, apiCreateDonateInvoice } from '@/api';
+import { apiGetDonateInfo, apiCreateDonateInvoice, apiSyncSocialRewards } from '@/api';
 import { openTmaLink } from '@/lib/tma';
 
 const STAR_OPTIONS = [1, 5, 10, 25, 50, 100, 250, 500];
 
-export function DonatePage({ gs }: { gs: GameState }) {
+export function DonatePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
   const [stars, setStars] = useState<number | null>(null);
   const [buying, setBuying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +15,26 @@ export function DonatePage({ gs }: { gs: GameState }) {
     queryFn: apiGetDonateInfo,
     staleTime: 60_000,
   });
+  const {
+    data: socialRewards,
+    isLoading: socialRewardsLoading,
+    error: socialRewardsError,
+    refetch: refetchSocialRewards,
+  } = useQuery({
+    queryKey: ['social-rewards'],
+    queryFn: async () => {
+      const result = await apiSyncSocialRewards();
+      onRefresh();
+      return result;
+    },
+    staleTime: 30_000,
+    retry: false,
+  });
   const starsToPaw = donateInfo?.stars_to_paw ?? 10;
+  const socialTargets = socialRewards?.targets ?? [];
+  const socialTotal = socialTargets.reduce((sum, target) => sum + target.reward, 0);
+  const socialJoined = socialTargets.filter(target => target.joined).length;
+  const socialComplete = socialTargets.length > 0 && socialJoined === socialTargets.length;
 
   const handleDonate = async () => {
     if (!stars) return;
@@ -43,6 +62,49 @@ export function DonatePage({ gs }: { gs: GameState }) {
         </p>
         <p className="mt-2 mb-0 text-xs text-tg-hint">На балансе: {gs.paw_coins} 🐾</p>
       </div>
+
+      {socialRewards?.enabled !== false && (
+        <section className="social-reward-card">
+          <div className="social-reward-heading">
+            <span className="social-reward-mark" aria-hidden="true">📣</span>
+            <div className="min-w-0 flex-1">
+              <h2 className="m-0 text-[16px] font-black">Поддержка ZooPark</h2>
+              <p className="m-0 mt-1 text-[11px] text-tg-hint">Подпишись — получи PawCoins</p>
+            </div>
+            <strong className="social-reward-total">+{socialTotal || 100} 🐾</strong>
+          </div>
+
+          {socialRewardsLoading && <p className="m-0 mt-3 text-[12px] text-tg-hint">Проверяем подписки…</p>}
+          {socialRewardsError && (
+            <p className="m-0 mt-3 text-[12px] text-[var(--c-red-soft)]">Не удалось проверить подписки. Попробуй ещё раз.</p>
+          )}
+          {!socialRewardsLoading && !socialRewardsError && socialTargets.length > 0 && (
+            <div className="social-reward-list">
+              {socialTargets.map(target => (
+                <button
+                  key={target.key}
+                  type="button"
+                  className={`social-reward-row${target.joined ? ' is-joined' : ''}`}
+                  disabled={target.joined}
+                  onClick={() => openTmaLink(target.url)}
+                >
+                  <span className="social-reward-check" aria-hidden="true">{target.joined ? '✓' : '↗'}</span>
+                  <span className="social-reward-name">{target.title}</span>
+                  <span className="social-reward-amount">{target.joined ? 'Подписан' : `+${target.reward} 🐾`}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {!socialRewardsLoading && !socialRewardsError && (
+            <div className={`social-reward-footer${socialComplete ? ' is-complete' : ''}`}>
+              <span>{socialComplete ? 'Награда начислена' : `${socialJoined} из ${socialTargets.length} подписок`}</span>
+              <button type="button" onClick={() => void refetchSocialRewards()} className="social-reward-refresh">
+                Проверить
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="card">
         <p className="m-0 mb-[10px] font-bold">Выбери количество звёзд:</p>

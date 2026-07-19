@@ -22,6 +22,7 @@ from api.app.core.telegram import call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import TelegramUpdate
 from api.app.zoopark.games import credit_star_payment, refund_star_payment
+from api.app.zoopark.subscriptions import handle_membership_update, is_member_status, target_for_chat
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,17 @@ def _handle_refunded_payment(message: dict[str, Any]) -> None:
     refund_star_payment(charge_id)
 
 
+def _handle_chat_member(update: dict[str, Any]) -> None:
+    change = update.get("chat_member") or {}
+    chat = change.get("chat") or {}
+    user = (change.get("new_chat_member") or {}).get("user") or {}
+    chat_id = chat.get("id")
+    user_id = user.get("id")
+    if not isinstance(chat_id, int) or not isinstance(user_id, int) or target_for_chat(chat_id) is None:
+        return
+    handle_membership_update(chat_id, user_id, is_member_status(change.get("new_chat_member") or {}))
+
+
 @router.post("/api/telegram/webhook")
 def telegram_webhook(
     update: dict[str, Any] = Body(...),
@@ -114,6 +126,8 @@ def telegram_webhook(
 
     if isinstance(update.get("pre_checkout_query"), dict):
         _handle_pre_checkout(update["pre_checkout_query"])
+    elif isinstance(update.get("chat_member"), dict):
+        _handle_chat_member(update)
     elif isinstance(update.get("message"), dict):
         message = update["message"]
         if "successful_payment" in message:

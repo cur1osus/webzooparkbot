@@ -8,7 +8,8 @@ Conventions, applied without exception:
 * Every table has a surrogate `id`, except link tables, which use the natural composite.
 * A foreign key is `<entity>_id` and is declared as one, with an explicit ON DELETE.
 * Timestamps end in `_at`, are `UtcDateTime`, and are timezone-aware in Python.
-* Money is a non-negative `BigInteger`. Currency only moves through `ledger.grant()`.
+* Currency only moves through `ledger.grant()`. PawCoins may be negative when a player
+  leaves a reward community after spending the subscription reward.
 * Anything with a fixed set of values gets a CHECK constraint, so a typo in the domain
   layer fails at the database rather than sitting in a row forever.
 
@@ -109,7 +110,6 @@ class Player(Base):
         CheckConstraint(_one_of("status", ("active", "banned")), name="ck_players_status"),
         CheckConstraint("balance_rub >= 0", name="ck_players_balance_rub"),
         CheckConstraint("balance_usd >= 0", name="ck_players_balance_usd"),
-        CheckConstraint("balance_paw >= 0", name="ck_players_balance_paw"),
         CheckConstraint("vet_level BETWEEN 0 AND 5", name="ck_players_vet_level"),
         CheckConstraint("genetics_level BETWEEN 0 AND 5", name="ck_players_genetics_level"),
         CheckConstraint("expedition_level BETWEEN 0 AND 5", name="ck_players_expedition_level"),
@@ -864,6 +864,29 @@ class TelegramUpdate(Base):
     received_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
 
+class SocialMembership(Base):
+    """The last known membership state for one player in one reward community.
+
+    The row is also the idempotency key for PawCoin grants and clawbacks: a repeated
+    `chat_member` update or a page refresh cannot move the balance twice.
+    """
+
+    __tablename__ = "social_memberships"
+    __table_args__ = (
+        UniqueConstraint("player_id", "chat_id", name="uq_social_memberships_player_chat"),
+        Index("ix_social_memberships_chat_member", "chat_id", "is_member"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_key: Mapped[str] = mapped_column(String(16), nullable=False)
+    is_member: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    reward_amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
 class NotificationOutbox(Base):
     """Durable, at-least-once Telegram notification queue.
 
@@ -905,7 +928,6 @@ class LedgerEntry(Base):
     __table_args__ = (
         CheckConstraint(_one_of("currency", CURRENCIES), name="ck_ledger_currency"),
         CheckConstraint("delta <> 0", name="ck_ledger_delta"),
-        CheckConstraint("balance_after >= 0", name="ck_ledger_balance_after"),
         Index("ix_ledger_player_created", "player_id", "created_at"),
         Index("ix_ledger_reason_created", "reason", "created_at"),
         MYSQL,
