@@ -1965,6 +1965,17 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* Four quick-read gene markers on the compact animal cards. The larger size is
+   intentional: these are the card's visual shorthand, not a decorative badge. */
+.animal-gene-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: block;
+  flex: 0 0 14px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.18), 0 1px 3px rgba(0,0,0,0.24);
+}
+
 /* ─── Icon box (coloured background for icons) ──────────────────────────────── */
 .icon-box {
   width: 34px;

@@ -4,7 +4,7 @@ import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
 import { AnimalDetailCard } from '@/components/AnimalDetailCard';
 import { AnimalArt } from '@/components/AnimalArt';
-import type { Animal, GameState, MaintenancePollStatus } from '@/types';
+import type { Animal, GameState, GeneTier, MaintenancePollStatus } from '@/types';
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
@@ -67,6 +67,19 @@ const ANIMAL_SORTS: { id: AnimalSort; label: string }[] = [
   { id: 'life',    label: 'Скоро умрут' },
   { id: 'quality', label: 'Качество' },
 ];
+
+const ANIMAL_GENE_ORDER = [
+  { key: 'survival', label: 'Выживаемость' },
+  { key: 'appearance', label: 'Внешность' },
+  { key: 'size_trait', label: 'Размер' },
+  { key: 'reproduction', label: 'Размножение' },
+] as const;
+
+const GENE_TIER_COLORS: Record<GeneTier, string> = {
+  low: 'var(--c-red)',
+  medium: 'var(--c-gold)',
+  high: 'var(--c-green)',
+};
 
 // Each mode returns a fully-ordered comparator; ties fall back to income so the list never
 // reshuffles arbitrarily between renders.
@@ -413,11 +426,14 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                           <p className="m-0 text-[11px] text-tg-hint truncate">{a.species_name} · ₽{fmt(a.income)}/мин</p>
                         </div>
                       </div>
-                      {life && (
-                        <p className="m-0 mt-[6px] text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>
-                          ⏳ {life.label}
-                        </p>
-                      )}
+                      <div className="mt-[6px] flex min-w-0 items-center justify-between gap-2">
+                        {life ? (
+                          <p className="m-0 min-w-0 truncate text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>
+                            ⏳ {life.label}
+                          </p>
+                        ) : <span />}
+                        <GeneDots animal={a} />
+                      </div>
                     </button>
                   );
                 })}
@@ -476,6 +492,29 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
           }}
         />
       )}
+    </div>
+  );
+}
+
+function GeneDots({ animal }: { animal: Animal }) {
+  return (
+    <div
+      className="flex shrink-0 items-center gap-[4px]"
+      role="img"
+      aria-label={`Свойства: ${ANIMAL_GENE_ORDER.map(gene => `${gene.label} — ${animal[gene.key]}`).join(', ')}`}
+      title="Редкость свойств"
+    >
+      {ANIMAL_GENE_ORDER.map(gene => {
+        const tier = animal[gene.key];
+        return (
+          <span
+            key={gene.key}
+            className="animal-gene-dot"
+            style={{ backgroundColor: GENE_TIER_COLORS[tier] }}
+            aria-hidden="true"
+          />
+        );
+      })}
     </div>
   );
 }
