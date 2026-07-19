@@ -1401,7 +1401,7 @@ button:disabled {
 
 .bonus-pool-card { padding: 15px; }
 .bonus-pool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
-.bonus-pool-item { display: flex; min-width: 0; align-items: center; gap: 6px; padding: 9px 7px; border: 1px solid var(--surface-overlay-border); border-radius: 11px; background: var(--surface-subtle); }
+.bonus-pool-item { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 6px; padding: 9px 7px; border: 1px solid var(--surface-overlay-border); border-radius: 11px; background: var(--surface-subtle); text-align: center; }
 .bonus-pool-item > span:first-child { font-size: 19px; font-weight: 900; }
 .bonus-pool-item > span:last-child { overflow: hidden; color: var(--tg-theme-hint-color); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 
