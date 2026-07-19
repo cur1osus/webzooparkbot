@@ -24,7 +24,6 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [claimed, setClaimed] = useState<string | null>(null);
   const [burst, setBurst] = useState<Reward | null>(null);
   const [giftRevealed, setGiftRevealed] = useState(false);
   const [openingGift, setOpeningGift] = useState(false);
@@ -58,7 +57,6 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
         const meta = CURRENCY[res.currency];
         const rewardIcon = res.reward_emoji ?? meta.icon;
         const rewardLabel = res.reward_name ?? meta.name;
-        setClaimed(res.reward_name ? `Получено ${rewardIcon} ${rewardLabel}` : `Получено ${fmt(res.amount)} ${rewardIcon}`);
         setBurst({ glyph: rewardIcon, amount: res.amount, color: meta.color, label: rewardLabel });
         await queryClient.invalidateQueries({ queryKey: ['bonus'] });
         onClaim();
@@ -76,17 +74,17 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
   const canReroll = canClaim && offer.rerolls_left > 0;
 
   return (
-    <div className="p-[14px] flex flex-col gap-3">
-      <div className="bonus-ticket">
-        <div className="bonus-ticket-mark">🎁</div>
-        <div className="min-w-0">
-          <p className="bonus-kicker">Ежедневный ритуал · каждый день в 07:00 по Москве</p>
-          <p className="m-0 mt-1 text-[22px] leading-none font-black">Подарок ждёт</p>
-          <p className="m-0 mt-2 text-[12px] leading-[1.4] text-tg-hint">
-            Один новый подарок каждый день. Открой его до следующего обновления.
-          </p>
+    <div className="bonus-page p-[14px] flex flex-col gap-3">
+      <header className="bonus-page-intro" aria-labelledby="bonus-page-title">
+        <div>
+          <p className="bonus-kicker">Ежедневный бонус</p>
+          <h1 id="bonus-page-title" className="bonus-page-title">Сюрприз на сегодня</h1>
         </div>
-      </div>
+        <div className="bonus-schedule" aria-label="Обновление каждый день в 07:00 по Москве">
+          <strong>07:00</strong>
+          <span>по Москве</span>
+        </div>
+      </header>
 
       {isLoading && <p className="text-center text-tg-hint">Загрузка...</p>}
 
@@ -95,8 +93,7 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
           className="bonus-offer-card"
           style={{ borderColor: giftRevealed ? `color-mix(in srgb, ${meta.color} 38%, transparent)` : 'rgba(var(--c-gold-rgb),0.38)' }}
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="bonus-offer-kicker">Твоя награда сегодня</p>
+          <div className="bonus-offer-status-row">
             <span className={`bonus-offer-status${!giftRevealed || openingGift ? ' bonus-offer-status-sealed' : ''}`}>
               {offer.claimed ? 'Получено' : openingGift ? 'Открываем' : giftRevealed ? 'Готово' : 'Запечатано'}
             </span>
@@ -109,8 +106,7 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
 
           {!giftRevealed || openingGift ? (
             <div className="bonus-gift-locked-copy">
-              <p className="bonus-gift-title">Подарок запечатан</p>
-              <p>Открой сундук, чтобы узнать сегодняшнюю награду.</p>
+              <p className="bonus-gift-title">Открой сундук</p>
               <button onClick={revealGift} disabled={busy || openingGift} className="bonus-open-button" type="button">
                 {openingGift ? 'Открываем...' : 'Открыть подарок'}
               </button>
@@ -129,9 +125,6 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
                   <span>{offerIsObject ? offer.reward_name : meta.name}</span>
                 </div>
               </div>
-              <p className="m-0 mt-2 text-[12px] text-tg-hint">
-                {offer.claimed ? 'Этот подарок уже забран.' : 'Забери награду или попробуй другой вариант.'}
-              </p>
 
               <button
                 onClick={() => void run('claim')}
@@ -145,24 +138,13 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
                 {busy ? 'Получаем...' : canClaim ? `Забрать ${meta.icon}` : '⏳ Уже получен сегодня'}
               </button>
 
-              <button
-                onClick={() => void run('reroll')}
-                disabled={!canReroll || busy}
-                className="bonus-reroll-button"
-                type="button"
-              >
-                {offer.rerolls_left > 0
-                  ? `🎲 Перебросить · осталось ${offer.rerolls_left}`
-                  : 'Перебросов нет — их дают предметы кузницы'}
-              </button>
+              {canReroll && (
+                <button onClick={() => void run('reroll')} disabled={busy} className="bonus-reroll-button" type="button">
+                  🎲 Перебросить · осталось {offer.rerolls_left}
+                </button>
+              )}
             </div>
           )}
-        </div>
-      )}
-
-      {claimed && (
-        <div className="card bg-[rgba(var(--c-green-rgb),0.1)] border border-[rgba(var(--c-green-rgb),0.3)]">
-          <p className="m-0 font-bold text-[var(--c-green)]">🎉 {claimed}</p>
         </div>
       )}
 
@@ -173,18 +155,6 @@ export function BonusPage({ onClaim }: { onClaim: () => void }) {
       )}
 
       <RewardBurst reward={burst} onDone={() => setBurst(null)} />
-
-      <div className="card bonus-pool-card">
-        <p className="m-0 text-[11px] font-bold text-tg-hint tracking-[0.8px] uppercase">В пуле наград</p>
-        <div className="bonus-pool-grid">
-          {(Object.keys(CURRENCY) as BonusCurrency[]).map(key => (
-            <div key={key} className="bonus-pool-item">
-              <span style={{ color: CURRENCY[key].color }}>{CURRENCY[key].icon}</span>
-              <span>{CURRENCY[key].name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

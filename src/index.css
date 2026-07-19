@@ -1321,22 +1321,27 @@ button:disabled {
 }
 
 .bonus-offer-card {
-  padding: 17px;
+  padding: 12px;
   border: 1px solid;
-  border-radius: 18px;
-  background: linear-gradient(155deg, var(--card-bg), color-mix(in srgb, var(--card-bg) 78%, #000));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  border-radius: 24px;
+  background: linear-gradient(155deg, color-mix(in srgb, var(--card-bg) 92%, var(--c-gold)), color-mix(in srgb, var(--card-bg) 84%, #000));
+  box-shadow: 0 16px 34px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-.bonus-offer-kicker {
-  margin: 0;
-  color: var(--tg-theme-hint-color);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
+.bonus-page-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 3px 3px 2px;
 }
 
+.bonus-page-intro .bonus-kicker { color: var(--c-cyan); }
+.bonus-page-title { margin: 5px 0 0; color: var(--tg-theme-text-color); font-size: 25px; font-weight: 950; letter-spacing: -0.04em; line-height: 1; }
+.bonus-schedule { display: grid; flex-shrink: 0; justify-items: end; padding: 8px 10px; border: 1px solid rgba(var(--c-cyan-rgb), 0.24); border-radius: 13px; background: rgba(var(--c-cyan-rgb), 0.07); text-align: right; }
+.bonus-schedule strong { color: var(--c-cyan); font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1; }
+.bonus-schedule span { margin-top: 3px; color: var(--tg-theme-hint-color); font-size: 9px; font-weight: 800; }
+.bonus-offer-status-row { display: flex; justify-content: flex-end; min-height: 26px; }
 .bonus-offer-status {
   padding: 4px 8px;
   border: 1px solid rgba(var(--c-green-rgb), 0.28);
@@ -1356,7 +1361,7 @@ button:disabled {
 .bonus-gift-stage {
   position: relative;
   display: grid;
-  min-height: 198px;
+  min-height: 218px;
   place-items: center;
   margin: 8px -4px 0;
   overflow: hidden;
@@ -1413,10 +1418,8 @@ button:disabled {
 }
 
 .bonus-gift-locked-copy,
-.bonus-reveal-content { text-align: center; }
-.bonus-gift-locked-copy { padding: 4px 0 1px; }
-.bonus-gift-title { margin: 0; color: var(--tg-theme-text-color); font-size: 17px; font-weight: 900; }
-.bonus-gift-locked-copy > p:not(.bonus-gift-title) { margin: 6px 0 0; color: var(--tg-theme-hint-color); font-size: 12px; }
+.bonus-reveal-content { padding: 2px 4px 1px; text-align: center; }
+.bonus-gift-title { margin: 0; color: var(--tg-theme-text-color); font-size: 18px; font-weight: 900; }
 
 .bonus-open-button {
   width: 100%;
@@ -1512,12 +1515,6 @@ button:disabled {
 .bonus-reroll-button:hover:not(:disabled),
 .merchant-buy-button:hover:not(:disabled) { transform: translateY(-1px); }
 
-.bonus-pool-card { padding: 15px; }
-.bonus-pool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
-.bonus-pool-item { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 6px; padding: 9px 7px; border: 1px solid var(--surface-overlay-border); border-radius: 11px; background: var(--surface-subtle); text-align: center; }
-.bonus-pool-item > span:first-child { font-size: 19px; font-weight: 900; }
-.bonus-pool-item > span:last-child { overflow: hidden; color: var(--tg-theme-hint-color); font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
-
 .merchant-refresh-bar {
   display: flex;
   align-items: center;
@@ -1568,33 +1565,6 @@ button:disabled {
 
 /* Each More page gets its own visual material; these deliberately do not share the
    referral card's brass treatment. */
-.bonus-ticket {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 13px;
-  padding: 16px;
-  border: 1px solid rgba(var(--c-cyan-rgb), 0.3);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 0% 100%, rgba(var(--c-blue-rgb), 0.16), transparent 46%),
-    linear-gradient(135deg, rgba(var(--c-cyan-rgb), 0.1), rgba(var(--c-purple-rgb), 0.05) 62%, var(--card-bg));
-}
-
-.bonus-ticket-mark {
-  display: grid;
-  width: 54px;
-  height: 54px;
-  place-items: center;
-  border: 1px solid rgba(var(--c-cyan-rgb), 0.3);
-  border-radius: 17px;
-  background: rgba(var(--c-cyan-rgb), 0.12);
-  box-shadow: 0 0 20px rgba(var(--c-cyan-rgb), 0.12), inset 0 1px 0 rgba(255,255,255,0.1);
-  font-size: 30px;
-}
-
-.bonus-ticket .bonus-kicker { color: var(--c-cyan); }
-
 .merchant-stall {
   padding: 14px 15px 16px;
   border: 1px solid rgba(var(--c-purple-rgb), 0.32);
