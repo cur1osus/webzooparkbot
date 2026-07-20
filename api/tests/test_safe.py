@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from api.app.db.connection import get_session
-from api.app.db.models import LedgerEntry, Player, SafeAttempt, SafeRound
+from api.app.db.models import LedgerEntry, Player, SafeAttempt, SafeRound, TreasuryLedgerEntry
 from api.app.schemas.core import RegisterBody
 from api.app.schemas.games import SafeGuessBody
 from api.app.zoopark import ledger, safe
@@ -38,7 +38,7 @@ def _register(*telegram_ids: int) -> None:
 
 def _fill_treasury(amount: int) -> None:
     with get_session() as session:
-        ledger.credit_treasury(session, "usd", amount)
+        ledger.credit_treasury(session, "usd", amount, "bank_fee")
         session.commit()
 
 
@@ -314,6 +314,32 @@ def test_the_payout_reconciles_with_the_ledger(db, at):
         # 388 prize and the 389 that stays behind for the next round.
         assert player.balance_usd - before == 388
         assert ledger.treasury_balance(session, "usd") == 389
+
+
+def test_the_payout_is_journalled_against_the_round(db, at):
+    """Every dollar leaving the house leaves a row saying which round took it."""
+    _register(1001)
+    _fill_treasury(1000)
+    at(MIDWINDOW)
+    _force_secret("1234")
+    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+
+    at(CLOSED)
+    with get_session() as session:
+        result = safe.resolve_due_days(session, CLOSED)
+        session.commit()
+
+    with get_session() as session:
+        total, stored = ledger.reconcile_treasury(session, "usd")
+        assert total == stored == 500
+        payout = (
+            session.query(TreasuryLedgerEntry)
+            .filter_by(reason="safe_prize")
+            .order_by(TreasuryLedgerEntry.id.desc())
+            .first()
+        )
+        assert payout.delta == -500
+        assert (payout.ref_table, payout.ref_id) == ("safe_rounds", result["round_id"])
 
 
 def test_an_earlier_day_wins_before_a_later_one(db, at):

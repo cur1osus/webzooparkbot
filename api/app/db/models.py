@@ -1023,6 +1023,35 @@ class Treasury(Base):
     balance: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class TreasuryLedgerEntry(Base):
+    """Every movement of the house's money, for the same reason `ledger` exists for players.
+
+    A separate table rather than a nullable `player_id` on `ledger`: the player ledger is
+    guarded by `SUM(delta) == balance` per player, and rows belonging to nobody would have
+    to be excluded from it forever. Here the same invariant holds per currency.
+
+    This was missing while the treasury only ever grew and nothing read it. The safe moves
+    tens of thousands of dollars a week out of it, and an unexplained balance is not
+    something you can reconstruct after the fact.
+    """
+
+    __tablename__ = "treasury_ledger"
+    __table_args__ = (
+        CheckConstraint(_one_of("currency", CURRENCIES), name="ck_treasury_ledger_currency"),
+        Index("ix_treasury_ledger_currency_created", "currency", "created_at"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
+    delta: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    balance_after: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    ref_table: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ref_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
 class BankRate(Base):
     """The rub-per-usd rate, one row per minute, append-only.
 

@@ -326,7 +326,9 @@ def _pay_out(session: Session, round_: SafeRound, day: date, winner_ids: list[in
             continue
         # Debit first and credit exactly what came out: an exchange committing between the
         # read above and this line must not let the safe pay money the treasury lacks.
-        taken = ledger.debit_treasury(session, "usd", share)
+        taken = ledger.debit_treasury(
+            session, "usd", share, "safe_prize", ref_table="safe_rounds", ref_id=round_.id
+        )
         if taken <= 0:
             break
         ledger.grant(session, winner, "usd", taken, "safe_prize")

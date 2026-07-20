@@ -170,7 +170,7 @@ def exchange(tg_id: int, body: BankExchangeBody) -> dict:
 
         ledger.spend(session, player, "rub", spent_rub, "bank_buy_usd")
         ledger.grant(session, player, "usd", net_usd - referrer_usd, "bank_buy_usd")
-        ledger.credit_treasury(session, "usd", fee_usd)
+        ledger.credit_treasury(session, "usd", fee_usd, "bank_fee", ref_table="players", ref_id=player.id)
         if referrer is not None and referrer_usd > 0:
             ledger.grant(session, referrer, "usd", referrer_usd, "referral_exchange", ref_table="players", ref_id=player.id)
 

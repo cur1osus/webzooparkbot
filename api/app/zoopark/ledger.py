@@ -16,7 +16,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from api.app.db.models import LedgerEntry, Player, Treasury
+from api.app.db.models import LedgerEntry, Player, Treasury, TreasuryLedgerEntry
 from api.app.zoopark.catalog import CURRENCIES, Currency
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,36 @@ Reason = Literal[
     "expedition_loot",
     "season_reset",
 ]
+
+# The house's own reasons. Separate from `Reason`: nothing a player does appears here, and
+# nothing here touches a player balance.
+TreasuryReason = Literal[
+    "bank_fee",
+    "safe_prize",
+    "admin_adjust",
+    "opening_balance",
+]
+
+
+def _log_treasury(
+    session: Session,
+    currency: Currency,
+    delta: int,
+    balance_after: int,
+    reason: TreasuryReason,
+    ref_table: str | None,
+    ref_id: int | None,
+) -> None:
+    session.add(
+        TreasuryLedgerEntry(
+            currency=currency,
+            delta=delta,
+            balance_after=balance_after,
+            reason=reason,
+            ref_table=ref_table,
+            ref_id=ref_id,
+        )
+    )
 
 
 class InsufficientFunds(HTTPException):
@@ -143,7 +173,15 @@ def spend(
     return grant(session, player, currency, -amount, reason, ref_table=ref_table, ref_id=ref_id)
 
 
-def credit_treasury(session: Session, currency: Currency, amount: int) -> int:
+def credit_treasury(
+    session: Session,
+    currency: Currency,
+    amount: int,
+    reason: TreasuryReason,
+    *,
+    ref_table: str | None = None,
+    ref_id: int | None = None,
+) -> int:
     """The house's cut. Locked, because every bank exchange touches the same row."""
     if amount <= 0:
         return treasury_balance(session, currency)
@@ -155,15 +193,25 @@ def credit_treasury(session: Session, currency: Currency, amount: int) -> int:
         row = session.get(Treasury, currency, with_for_update=True)
         assert row is not None  # noqa: S101 — just inserted under the same transaction
     row.balance += amount
+    _log_treasury(session, currency, amount, int(row.balance), reason, ref_table, ref_id)
     return int(row.balance)
 
 
-def debit_treasury(session: Session, currency: Currency, amount: int) -> int:
+def debit_treasury(
+    session: Session,
+    currency: Currency,
+    amount: int,
+    reason: TreasuryReason,
+    *,
+    ref_table: str | None = None,
+    ref_id: int | None = None,
+) -> int:
     """Take money back out of the house — currently only the bank safe.
 
     Returns what was actually taken, which is capped at the balance: the caller decides a
     prize from a balance it read earlier, and an exchange committing in between must not
-    be able to drive the treasury negative.
+    be able to drive the treasury negative. The journal records what was taken, not what
+    was asked for, so it always reconciles with the row.
     """
     if amount <= 0:
         return 0
@@ -174,7 +222,21 @@ def debit_treasury(session: Session, currency: Currency, amount: int) -> int:
     if taken <= 0:
         return 0
     row.balance -= taken
+    _log_treasury(session, currency, -taken, int(row.balance), reason, ref_table, ref_id)
     return taken
+
+
+def reconcile_treasury(session: Session, currency: Currency) -> tuple[int, int]:
+    """`(journal total, stored balance)` — equal unless something moved the row directly."""
+    total = int(
+        session.scalar(
+            select(func.coalesce(func.sum(TreasuryLedgerEntry.delta), 0)).where(
+                TreasuryLedgerEntry.currency == currency
+            )
+        )
+        or 0
+    )
+    return total, treasury_balance(session, currency)
 
 
 def treasury_balance(session: Session, currency: Currency) -> int:

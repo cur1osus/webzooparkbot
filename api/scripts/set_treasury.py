@@ -40,9 +40,9 @@ def main() -> None:
             print("dry run, nothing written")
             return
         if delta > 0:
-            ledger.credit_treasury(session, args.currency, delta)
+            ledger.credit_treasury(session, args.currency, delta, "admin_adjust")
         elif delta < 0:
-            taken = ledger.debit_treasury(session, args.currency, -delta)
+            taken = ledger.debit_treasury(session, args.currency, -delta, "admin_adjust")
             if taken != -delta:
                 raise SystemExit(f"expected to take {-delta}, took {taken}; aborted without commit")
 

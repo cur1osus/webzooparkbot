@@ -12,6 +12,11 @@ These are not style preferences. Every one of them was a live exploit.
   `balance_usd` or `balance_paw`. `test_no_module_assigns_a_balance_directly` greps this
   package to keep it that way, and `test_ledger_reconciles_with_every_balance` asserts
   `SUM(delta) == balance` for each currency.
+- **The house has its own journal.** `credit_treasury`/`debit_treasury` are the only way
+  the `treasury` row moves, they take a `TreasuryReason`, and they write `treasury_ledger`.
+  `test_the_treasury_journal_reconciles_with_the_row` asserts `SUM(delta) == balance` there
+  too. Book what actually moved, not what was requested — `debit_treasury` caps at the
+  balance and journals the capped amount.
 - **Lock before you spend.** Anything that moves currency loads the player with
   `profile.get_player(session, tg_id, for_update=True)`, and locks every other row it
   mutates (duel, item, offer, transfer).
