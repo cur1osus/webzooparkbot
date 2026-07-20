@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from sqlalchemy import or_, select
 
-from api.app.core.telegram import call_bot_api
+from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import NotificationOutbox, Player, utcnow
 from api.app.zoopark.notifications import (
@@ -70,10 +70,12 @@ class NotificationWorker:
         stale_before = now - timedelta(minutes=5)
         with get_session() as session:
             rows = session.execute(
+                # Outer join: a broadcast row addresses a chat and has no player at all.
                 select(NotificationOutbox, Player.telegram_id)
-                .join(Player, Player.id == NotificationOutbox.player_id)
+                .outerjoin(Player, Player.id == NotificationOutbox.player_id)
                 .where(
                     NotificationOutbox.sent_at.is_(None),
+                    NotificationOutbox.failed_at.is_(None),
                     NotificationOutbox.available_at <= now,
                     or_(
                         NotificationOutbox.locked_at.is_(None),
@@ -82,13 +84,19 @@ class NotificationWorker:
                 )
                 .order_by(NotificationOutbox.id.asc())
                 .limit(limit)
-                .with_for_update(skip_locked=True)
+                .with_for_update(skip_locked=True, of=NotificationOutbox)
             ).all()
             claimed: list[tuple[int, int, str, int]] = []
             for outbox, telegram_id in rows:
+                recipient = telegram_id if outbox.player_id is not None else outbox.chat_id
+                if recipient is None:
+                    # A player row whose player vanished. Nothing to deliver to, ever.
+                    outbox.failed_at = now
+                    outbox.last_error = "нет адресата"
+                    continue
                 outbox.locked_at = now
                 outbox.attempts += 1
-                claimed.append((outbox.id, telegram_id, outbox.payload_json, outbox.attempts))
+                claimed.append((outbox.id, recipient, outbox.payload_json, outbox.attempts))
             session.commit()
 
         for outbox_id, telegram_id, payload_json, attempts in claimed:
@@ -120,11 +128,17 @@ class NotificationWorker:
 
     @staticmethod
     def _mark_failed(outbox_id: int, attempts: int, error: Exception) -> None:
+        permanent = isinstance(error, TelegramApiError) and error.permanent
         delay = min(3600, 5 * (2 ** min(max(attempts - 1, 0), 8)))
         with get_session() as session:
             row = session.get(NotificationOutbox, outbox_id, with_for_update=True)
             if row is not None and row.sent_at is None:
-                row.available_at = utcnow() + timedelta(seconds=delay)
+                if permanent:
+                    # The recipient is unreachable, not busy. Retrying this hourly forever
+                    # is what filled the queue with dead rows and the journal with noise.
+                    row.failed_at = utcnow()
+                else:
+                    row.available_at = utcnow() + timedelta(seconds=delay)
                 row.locked_at = None
                 row.last_error = str(error)[:512]
             session.commit()

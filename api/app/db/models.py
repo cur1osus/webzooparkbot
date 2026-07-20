@@ -942,18 +942,33 @@ class NotificationOutbox(Base):
     The game transaction inserts a row and the worker sends it later. `dedupe_key` is
     the business event id, so retries and repeated reads cannot enqueue the same event
     twice; a crash after Telegram accepted a message can still produce one duplicate.
+
+    A row addresses either one player or one group chat, never both: personal events go to
+    the player, while anything the whole game shares — the daily safe — is one message in
+    the community chat rather than the same text delivered N times.
+
+    `failed_at` is the terminal state. Without it a message to a player who never started
+    the bot sits unsent forever, retried every hour until the end of time.
     """
 
     __tablename__ = "notification_outbox"
     __table_args__ = (
         CheckConstraint("attempts >= 0", name="ck_notification_outbox_attempts"),
+        CheckConstraint(
+            "(player_id IS NULL) <> (chat_id IS NULL)",
+            name="ck_notification_outbox_recipient",
+        ),
         UniqueConstraint("dedupe_key", name="uq_notification_outbox_dedupe_key"),
         Index("ix_notification_outbox_delivery", "sent_at", "available_at", "locked_at"),
         MYSQL,
     )
 
     id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
-    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    player_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=True
+    )
+    # A raw Telegram chat id, not a foreign key: the game does not own the community chat.
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     dedupe_key: Mapped[str] = mapped_column(String(128), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
@@ -961,6 +976,7 @@ class NotificationOutbox(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     locked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from api.app.core.config import SOCIAL_REWARD_CHAT_ID
 from api.app.db.models import Animal, DailyBonus, Expedition, NotificationOutbox, Player, utcnow
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import SAFE_DAILY_ATTEMPTS, SAFE_PRIZE_PERCENT
@@ -25,6 +26,41 @@ KIND_DAILY_BONUS_READY = "daily_bonus_ready"
 KIND_DISEASE_OUTBREAK = "disease_outbreak"
 KIND_SAFE_OPENED = "safe_opened"
 KIND_SAFE_CRACKED = "safe_cracked"
+def enqueue_chat(
+    session: Session,
+    *,
+    chat_id: int,
+    kind: str,
+    dedupe_key: str,
+    text: str,
+) -> bool:
+    """Queue one message for a group chat rather than a personal inbox.
+
+    Used for events that belong to everybody at once. One row instead of one per player:
+    the community chat is where the game is discussed, and twenty identical DMs are how a
+    bot gets muted.
+    """
+    if not chat_id:
+        return False
+    if session.scalar(select(NotificationOutbox.id).where(NotificationOutbox.dedupe_key == dedupe_key)) is not None:
+        return False
+    try:
+        with session.begin_nested():
+            session.add(
+                NotificationOutbox(
+                    chat_id=chat_id,
+                    kind=kind,
+                    dedupe_key=dedupe_key,
+                    payload_json=json.dumps({"text": text}, ensure_ascii=False),
+                    available_at=utcnow(),
+                )
+            )
+            session.flush()
+    except IntegrityError:
+        return False
+    return True
+
+
 def enqueue(
     session: Session,
     *,
@@ -141,13 +177,14 @@ def enqueue_unclaimed_daily_bonuses(session: Session, *, limit: int = 500) -> in
     return len(offers)
 
 
-def enqueue_safe_opened(session: Session, *, limit: int = 500) -> int:
-    """Announce the daily safe window to everyone, once per day.
+def enqueue_safe_opened(session: Session) -> bool:
+    """Announce the daily safe window in the community chat, once per day.
 
     The safe is the one feature with a hard deadline, and it is worthless to a player who
-    finds out about it at midnight — so this is a broadcast rather than a reaction to
-    something the player did. The per-player dedupe key makes a worker that scans every
-    minute for four hours enqueue exactly one message each.
+    finds out about it at midnight — so it is announced rather than waited for. It goes to
+    the chat, not to inboxes: the safe is a shared race, and the chat is where players
+    argue about which digits are still possible. The dedupe key is the day, so a worker
+    scanning every minute for four hours still posts exactly once.
     """
     # Imported here, not at module scope: `safe` reaches `profile` and `income`, and
     # `income` enqueues notifications, so a top-level import closes that cycle.
@@ -155,47 +192,40 @@ def enqueue_safe_opened(session: Session, *, limit: int = 500) -> int:
 
     now = utcnow()
     if not safe.is_open(now):
-        return 0
+        return False
     day, _, closes_at = safe.window(now)
     round_ = safe.current_round(session, now)
     if round_ is None:
-        return 0
+        return False
 
-    pool = ledger.treasury_balance(session, "usd")
-    prize = pool * SAFE_PRIZE_PERCENT // 100
+    prize = ledger.treasury_balance(session, "usd") * SAFE_PRIZE_PERCENT // 100
     closes_local = closes_at.astimezone(MOSCOW_TIMEZONE).strftime("%H:%M")
-    players = session.scalars(select(Player).where(Player.status == "active").limit(limit)).all()
-    for player in players:
-        enqueue(
-            session,
-            player_id=player.id,
-            kind=KIND_SAFE_OPENED,
-            dedupe_key=f"safe-open:{day.isoformat()}:{player.id}",
-            text=(
-                f"🔐 Сейф банка открыт до {closes_local} по Москве. "
-                f"В нём ${prize}. У тебя {SAFE_DAILY_ATTEMPTS} попытки назвать код — "
-                "все догадки вскроются разом после закрытия."
-            ),
-        )
-    return len(players)
+    return enqueue_chat(
+        session,
+        chat_id=SOCIAL_REWARD_CHAT_ID,
+        kind=KIND_SAFE_OPENED,
+        dedupe_key=f"safe-open:{day.isoformat()}",
+        text=(
+            f"🔐 Сейф банка открыт до {closes_local} по Москве. "
+            f"В нём ${prize}. У каждого {SAFE_DAILY_ATTEMPTS} попытки назвать код — "
+            "все догадки вскроются разом после закрытия."
+        ),
+    )
 
 
-def enqueue_safe_cracked(session: Session, result: dict, *, limit: int = 500) -> int:
-    """Tell everyone the code fell, who took the money and what the code was."""
+def enqueue_safe_cracked(session: Session, result: dict) -> bool:
+    """Tell the chat the code fell, who took the money and what the code was."""
     names = ", ".join(payout["nickname"] or "игрок" for payout in result["payouts"]) or "никто"
-    players = session.scalars(select(Player).where(Player.status == "active").limit(limit)).all()
-    for player in players:
-        enqueue(
-            session,
-            player_id=player.id,
-            kind=KIND_SAFE_CRACKED,
-            dedupe_key=f"safe-cracked:{result['round_id']}:{player.id}",
-            text=(
-                f"💥 Сейф вскрыт! Код был {result['secret']}. "
-                f"${result['prize_usd']} забирает {names}. Новый код уже в сейфе — завтра в 19:00."
-            ),
-        )
-    return len(players)
+    return enqueue_chat(
+        session,
+        chat_id=SOCIAL_REWARD_CHAT_ID,
+        kind=KIND_SAFE_CRACKED,
+        dedupe_key=f"safe-cracked:{result['round_id']}",
+        text=(
+            f"💥 Сейф вскрыт! Код был {result['secret']}. "
+            f"${result['prize_usd']} забирает {names}. Новый код уже в сейфе — завтра в 19:00."
+        ),
+    )
 
 
 def enqueue_natural_death_notifications(session: Session, *, limit: int = 500) -> int:
