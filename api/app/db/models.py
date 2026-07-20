@@ -714,6 +714,7 @@ class Duel(Base):
         CheckConstraint(_one_of("kind", GAME_KINDS), name="ck_duels_kind"),
         CheckConstraint(_one_of("status", ("open", "finished", "cancelled")), name="ck_duels_status"),
         CheckConstraint("stake_rub > 0", name="ck_duels_stake"),
+        CheckConstraint("currency IN ('rub', 'usd')", name="ck_duels_currency"),
         Index("ix_duels_status_created", "status", "created_at"),
         Index("ix_duels_creator", "creator_id"),
         MYSQL,
@@ -721,7 +722,11 @@ class Duel(Base):
 
     id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Amount staked, in `currency`. The column keeps its legacy `stake_rub` name — before duels
+    # could be wagered in dollars every stake was in rubles — but it holds the stake in whatever
+    # `currency` the lobby was created with. Read the pair together; never assume rubles.
     stake_rub: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="rub", server_default="rub")
     creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
     creator_joined: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     opponent_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)

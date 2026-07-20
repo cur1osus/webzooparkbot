@@ -28,11 +28,13 @@ def test_creator_can_join_and_three_players_get_70_20_10(db):
     for telegram_id in (1001, 1002, 1003):
         _grant_rub(telegram_id, 10)
 
-    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake_rub=10))
+    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=10))
     game_id = created["game"]["id"]
     assert created["new_rub"] == 10
     assert created["game"]["participant_count"] == 0
     assert created["game"]["max_players"] == 3
+    assert created["game"]["stake"] == 10
+    assert created["game"]["currency"] == "rub"
 
     owner_joined = games.join_duel(1001, game_id)
     assert owner_joined["game"]["viewer_joined"] is True
@@ -44,7 +46,7 @@ def test_creator_can_join_and_three_players_get_70_20_10(db):
 
     assert finished["game"]["status"] == "finished"
     assert finished["game"]["participant_count"] == 3
-    assert sorted(participant["reward_rub"] for participant in finished["game"]["participants"]) == [3, 6, 21]
+    assert sorted(participant["reward"] for participant in finished["game"]["participants"]) == [3, 6, 21]
 
     with get_session() as session:
         balances = [session.query(Player).filter_by(telegram_id=tg_id).one().balance_rub for tg_id in (1001, 1002, 1003)]
@@ -56,7 +58,7 @@ def test_expired_two_player_lobby_uses_70_30_and_timer_resolves(db):
     for telegram_id in (1001, 1002):
         _grant_rub(telegram_id, 10)
 
-    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake_rub=10))
+    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=10))
     game_id = created["game"]["id"]
     games.join_duel(1001, game_id)
     games.join_duel(1002, game_id)
@@ -71,7 +73,57 @@ def test_expired_two_player_lobby_uses_70_30_and_timer_resolves(db):
 
     resolved = games.resolve_duel(1001, game_id)
     assert resolved["game"]["status"] == "finished"
-    assert sorted(participant["reward_rub"] for participant in resolved["game"]["participants"]) == [6, 14]
+    assert sorted(participant["reward"] for participant in resolved["game"]["participants"]) == [6, 14]
+
+
+def _grant_usd(telegram_id: int, amount: int) -> None:
+    with get_session() as session:
+        player = session.query(Player).filter_by(telegram_id=telegram_id).one()
+        ledger.grant(session, player, "usd", amount, "daily_bonus")
+        session.commit()
+
+
+def test_dollar_duel_charges_and_pays_out_in_dollars(db):
+    _register_players(1001, 1002)
+    for telegram_id in (1001, 1002):
+        _grant_usd(telegram_id, 100)
+
+    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=100, currency="usd"))
+    game_id = created["game"]["id"]
+    assert created["game"]["currency"] == "usd"
+    assert created["game"]["stake"] == 100
+
+    games.join_duel(1001, game_id)
+    games.join_duel(1002, game_id)
+
+    with get_session() as session:
+        duel = session.get(games.Duel, game_id)
+        assert duel is not None
+        duel.expires_at = utcnow() - timedelta(seconds=1)
+        session.commit()
+
+    resolved = games.resolve_duel(1001, game_id)
+    assert resolved["game"]["status"] == "finished"
+
+    with get_session() as session:
+        players = [session.query(Player).filter_by(telegram_id=tg).one() for tg in (1001, 1002)]
+        # Zero-sum in dollars: nothing is created or burned, so the table's dollars are exactly
+        # what they held before (100 granted + $1 registration bonus each), and no rubles moved.
+        assert sum(p.balance_usd for p in players) == 202
+        assert all(p.balance_rub == 0 for p in players)
+
+
+def test_dollar_duel_needs_dollars_not_rubles(db):
+    _register_players(1001, 1002)
+    _grant_rub(1001, 1_000_000)  # rich in rubles, but the stake is in dollars
+
+    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=100, currency="usd"))
+    game_id = created["game"]["id"]
+    try:
+        games.join_duel(1001, game_id)
+        assert False, "joining a dollar duel without dollars must fail"
+    except Exception as error:  # noqa: BLE001 - InsufficientFunds is an HTTPException
+        assert "Недостаточно" in str(getattr(error, "detail", error))
 
 
 def test_solo_stake_is_calculated_from_locked_balance_percentage(db):

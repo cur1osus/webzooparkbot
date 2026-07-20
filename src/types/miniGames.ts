@@ -1,10 +1,16 @@
 export type GameKind = 'basketball' | 'darts' | 'bowling' | 'dice' | 'football';
 
+/** Currency a duel is wagered in. Rubles are the everyday currency; dollars are the premium
+ *  one bought at the bank. A lobby fixes its currency at creation and every stake, refund and
+ *  payout moves in it. */
+export type DuelCurrency = 'rub' | 'usd';
+
 /** Player versus player, zero-sum. `duel_moves` and `duel_bonus` items apply here. */
 export interface Duel {
   id: number;
   kind: GameKind | string;
-  stake_rub: number;
+  stake: number;
+  currency: DuelCurrency;
   creator_nickname: string;
   created_at: string;
   expires_at: string | null;
@@ -18,7 +24,7 @@ export interface Duel {
     nickname: string;
     score: number | null;
     place: number | null;
-    reward_rub: number;
+    reward: number;
   }>;
   creator_score: number | null;
   opponent_score: number | null;
@@ -44,8 +50,10 @@ export interface DuelResponse {
 
 export interface DuelCancelResponse {
   ok: boolean;
-  refunded_rub: number;
+  refunded: number;
+  currency: DuelCurrency;
   new_rub: number;
+  new_usd: number;
 }
 
 export interface DuelResolveResponse {

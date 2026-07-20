@@ -11,6 +11,7 @@ import json
 import logging
 from datetime import date, datetime, timedelta
 from random import SystemRandom
+from typing import cast
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -28,12 +29,14 @@ from api.app.zoopark.catalog import (
     COCKTAIL_FRUITS,
     COCKTAIL_LENGTH,
     COCKTAIL_REWARD_PAW,
+    Currency,
     DUEL_BASE_MOVES,
     DUEL_DICE_SIDES,
     DUEL_DURATION_MINUTES,
     DUEL_MAX_PLAYERS,
     DUEL_REWARD_DISTRIBUTION,
     GAME_KINDS,
+    MAX_STAKE_BY_CURRENCY,
     MAX_STAKE_RUB,
     SOLO_MATCH_MAX_ROUNDS,
     SOLO_MATCH_MIN_ROUNDS,
@@ -50,12 +53,18 @@ random = SystemRandom()
 COCKTAIL_RESET_HOUR = 10
 
 
-def _validate_stake(value: int) -> int:
+def _validate_stake(value: int, currency: str = "rub") -> int:
     if value <= 0:
         raise HTTPException(400, "Ставка должна быть больше нуля")
-    if value > MAX_STAKE_RUB:
+    if value > MAX_STAKE_BY_CURRENCY.get(currency, MAX_STAKE_RUB):
         raise HTTPException(400, "Слишком крупная ставка")
     return value
+
+
+def _validate_currency(currency: str) -> str:
+    if currency not in ("rub", "usd"):
+        raise HTTPException(400, "Ставка может быть только в рублях или долларах")
+    return currency
 
 
 def _validate_kind(kind: str) -> str:
@@ -129,7 +138,7 @@ def _duel_payload(session: Session, duel: Duel, viewer_player_id: int | None = N
             "nickname": player.nickname if player else "—",
             "score": score,
             "place": places.get(player_id),
-            "reward_rub": prizes.get(player_id, 0),
+            "reward": prizes.get(player_id, 0),
         })
 
     if duel.status == "finished":
@@ -142,7 +151,8 @@ def _duel_payload(session: Session, duel: Duel, viewer_player_id: int | None = N
     return {
         "id": duel.id,
         "kind": duel.kind,
-        "stake_rub": int(duel.stake_rub),
+        "stake": int(duel.stake_rub),
+        "currency": duel.currency,
         "creator_nickname": creator.nickname if creator else "—",
         "created_at": duel.created_at.isoformat(),
         "expires_at": _duel_expires_at(duel).isoformat(),
@@ -172,7 +182,8 @@ def open_duels(tg_id: int | None = None) -> dict:
 
 
 def create_duel(tg_id: int, body: DuelCreateBody) -> dict:
-    stake = _validate_stake(body.stake_rub)
+    currency = _validate_currency(body.currency)
+    stake = _validate_stake(body.stake, currency)
     kind = _validate_kind(body.kind)
 
     with get_session() as session:
@@ -185,6 +196,7 @@ def create_duel(tg_id: int, body: DuelCreateBody) -> dict:
         duel = Duel(
             kind=kind,
             stake_rub=stake,
+            currency=currency,
             creator_id=player.id,
             creator_joined=False,
             status="open",
@@ -239,7 +251,7 @@ def join_duel(tg_id: int, duel_id: int) -> dict:
 
         sync_player_income(session, joiner)
         stake = int(duel.stake_rub)
-        ledger.spend(session, joiner, "rub", stake, "duel_stake", ref_table="duels", ref_id=duel.id)
+        ledger.spend(session, joiner, cast(Currency, duel.currency), stake, "duel_stake", ref_table="duels", ref_id=duel.id)
         score = _roll_score(session, joiner_id)
 
         if joiner_id == duel.creator_id:
@@ -273,7 +285,7 @@ def _resolve_duel_locked(session: Session, duel: Duel) -> None:
         for _, player_id, _ in slots:
             player = players.get(player_id)
             if player:
-                ledger.grant(session, player, "rub", int(duel.stake_rub), "duel_refund", ref_table="duels", ref_id=duel.id)
+                ledger.grant(session, player, cast(Currency, duel.currency), int(duel.stake_rub), "duel_refund", ref_table="duels", ref_id=duel.id)
         duel.status = "cancelled"
         duel.resolved_at = utcnow()
         return
@@ -284,7 +296,7 @@ def _resolve_duel_locked(session: Session, duel: Duel) -> None:
         player = players.get(player_id)
         prize = prizes.get(player_id, 0)
         if player and prize:
-            ledger.grant(session, player, "rub", prize, "duel_payout", ref_table="duels", ref_id=duel.id)
+            ledger.grant(session, player, cast(Currency, duel.currency), prize, "duel_payout", ref_table="duels", ref_id=duel.id)
 
     duel.winner_id = ranked[0][1]
     duel.status = "finished"
@@ -328,13 +340,19 @@ def cancel_duel(tg_id: int, duel_id: int) -> dict:
         for _, participant_id, _ in slots:
             participant = players.get(participant_id)
             if participant:
-                ledger.grant(session, participant, "rub", int(duel.stake_rub), "duel_refund", ref_table="duels", ref_id=duel.id)
+                ledger.grant(session, participant, cast(Currency, duel.currency), int(duel.stake_rub), "duel_refund", ref_table="duels", ref_id=duel.id)
                 if participant_id == player.id:
                     refunded = int(duel.stake_rub)
         duel.status = "cancelled"
         duel.resolved_at = utcnow()
 
-        result = {"ok": True, "refunded_rub": refunded, "new_rub": ledger.balance(player, "rub")}
+        result = {
+            "ok": True,
+            "refunded": refunded,
+            "currency": duel.currency,
+            "new_rub": ledger.balance(player, "rub"),
+            "new_usd": ledger.balance(player, "usd"),
+        }
         session.commit()
         return result
 

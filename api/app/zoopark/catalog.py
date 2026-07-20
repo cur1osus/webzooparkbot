@@ -1143,7 +1143,12 @@ PROPERTY_KINDS: tuple[PropertyKind, ...] = tuple(ITEM_PROPERTIES)
 # only thing draining rubles out of the casino, and a 10% bet refund would invert it.
 
 GAME_KINDS = ("basketball", "darts", "bowling", "dice", "football")
+# Upper safety bounds on a single duel stake — the real limit is the player's balance, checked
+# at spend time. These only guard against an overflowing pot (stake × 3 players). Dollars are
+# ~100× denser than rubles, so the dollar cap is set 100× lower to keep the pot in the same range.
 MAX_STAKE_RUB = 10_000_000_000
+MAX_STAKE_USD = 100_000_000
+MAX_STAKE_BY_CURRENCY: dict[str, int] = {"rub": MAX_STAKE_RUB, "usd": MAX_STAKE_USD}
 SOLO_STAKE_PCTS = (5, 10, 15)
 DUEL_BASE_MOVES = 5
 DUEL_MAX_PLAYERS = 3

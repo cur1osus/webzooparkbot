@@ -11,7 +11,8 @@ class DonateInvoiceBody(BaseModel):
 
 class DuelCreateBody(BaseModel):
     kind: str
-    stake_rub: int = Field(ge=1)
+    stake: int = Field(ge=1)
+    currency: Literal["rub", "usd"] = "rub"
 
 
 class SoloStartBody(BaseModel):

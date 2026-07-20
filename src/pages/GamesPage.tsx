@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fmt } from '@/utils/format';
-import type { Duel, GameState } from '@/types';
+import type { Duel, DuelCurrency, GameState } from '@/types';
 import { GAMES } from '@/data/games';
 import {
   apiConfig,
@@ -20,11 +20,17 @@ import { copyTmaText, shareTmaUrl } from '@/lib/tma';
 import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
 
 type GamesTab = 'solo' | 'multi' | 'cocktail' | 'safe';
-type BetAmount = 1 | 10 | 100;
 type MultiScreen = 'list' | 'share';
 
-const BET_AMOUNTS: BetAmount[] = [1, 10, 100];
 const DUEL_DURATION_SECONDS = 10 * 60;
+
+const CURRENCY_SYMBOL: Record<DuelCurrency, string> = { rub: '₽', usd: '$' };
+const CURRENCY_GENITIVE: Record<DuelCurrency, string> = { rub: 'рублях', usd: 'долларах' };
+
+/** A stake or reward with its currency sign, e.g. "₽1 250" or "$40". */
+function stakeLabel(amount: number, currency: DuelCurrency): string {
+  return `${CURRENCY_SYMBOL[currency]}${fmt(amount)}`;
+}
 
 const GAME_COLORS: Record<string, { from: string; to: string; glow: string }> = {
   basketball: { from: 'var(--c-orange)', to: 'var(--c-red)', glow: 'rgba(var(--c-orange-rgb),0.35)' },
@@ -38,7 +44,7 @@ function getGameDef(gameType: string) {
   return GAMES.find((game) => game.id === gameType);
 }
 
-function parseRubInput(value: string): number {
+function parseAmount(value: string): number {
   return Number(value.replace(/\D/g, '') || 0);
 }
 
@@ -59,6 +65,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const [busy, setBusy] = useState(false);
   const [selectedGame, setSelectedGame] = useState<string>('dice');
   const [betInput, setBetInput] = useState('1');
+  const [currency, setCurrency] = useState<DuelCurrency>('rub');
   const [message, setMessage] = useState<string | null>(null);
   const [screen, setScreen] = useState<MultiScreen>('list');
   const [createdGame, setCreatedGame] = useState<Duel | null>(null);
@@ -92,8 +99,9 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const games = useMemo(() => openGameList ?? [], [openGameList]);
   const botUsername = normalizeBotUsername(config?.bot_username);
   const error = actionError ?? (openGamesError instanceof Error ? openGamesError.message : null);
-  const bet = parseRubInput(betInput);
-  const betTooHigh = bet > gs.rub;
+  const bet = parseAmount(betInput);
+  const balance = currency === 'usd' ? gs.usd : gs.rub;
+  const betTooHigh = bet > balance;
   const canCreate = bet > 0 && !betTooHigh;
   const currentCreatedGame = createdGame;
   const createdGameDef = currentCreatedGame ? getGameDef(currentCreatedGame.kind) : null;
@@ -134,10 +142,6 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     }
   }, [games, currentCreatedGame, nowMs, refetchGames]);
 
-  const setPresetBet = (amount: BetAmount) => {
-    setBetInput(String(amount));
-  };
-
   const updateBetInput = (value: string) => {
     setBetInput(value.replace(/\D/g, '').slice(0, 15));
   };
@@ -150,7 +154,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
     setCreatedGame(null);
     setCopiedInvite(false);
     try {
-      const result = await apiCreateDuel(selectedGame, bet);
+      const result = await apiCreateDuel(selectedGame, bet, currency);
       setCreatedGame(result.game);
       setScreen('share');
       setMessage('Комната создана. Вступи сам и пригласи ещё игроков.');
@@ -179,7 +183,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
   const shareInviteLink = () => {
     if (!currentCreatedGame || !createdGameLink) return;
     const title = createdGameDef?.name ?? currentCreatedGame.kind;
-    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ₽${fmt(currentCreatedGame.stake_rub)}`);
+    void shareTmaUrl(createdGameLink, `Заходи сыграть в ${title} в ZooPark. Ставка: ${stakeLabel(currentCreatedGame.stake, currentCreatedGame.currency)}`);
   };
 
   const joinGame = async (gameId: number) => {
@@ -228,7 +232,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
           <div>
             <p className="m-0 font-extrabold text-[18px]">Игра создана</p>
             <p className="m-0 mt-1 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {createdGameDef?.name ?? currentCreatedGame.kind} · ставка ₽{fmt(currentCreatedGame.stake_rub)}
+              {createdGameDef?.name ?? currentCreatedGame.kind} · ставка {stakeLabel(currentCreatedGame.stake, currentCreatedGame.currency)}
             </p>
           </div>
           <div className="surface-subtle w-full px-3 py-[10px] rounded-xl text-[12px] break-all select-all text-left" style={{ color: 'var(--tg-theme-hint-color)' }}>
@@ -266,7 +270,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
               className="w-full py-[13px] rounded-xl border-none font-extrabold text-[15px] disabled:opacity-50"
               style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
             >
-              Войти в игру · ₽{fmt(currentCreatedGame.stake_rub)}
+              Войти в игру · {stakeLabel(currentCreatedGame.stake, currentCreatedGame.currency)}
             </button>
           )}
           {currentCreatedGame.status === 'open' && currentCreatedGame.viewer_joined && (
@@ -318,7 +322,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
       <div className="card flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <p className="m-0 font-bold text-[15px]">Создать игру</p>
-          <span className="text-[12px] text-tg-hint">Баланс: ₽{fmt(gs.rub)}</span>
+          <span className="text-[12px] text-tg-hint">Баланс: ₽{fmt(gs.rub)} · ${fmt(gs.usd)}</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -341,35 +345,40 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
           })}
         </div>
 
-        <div className="flex gap-2">
-          {BET_AMOUNTS.map((amount) => {
-            const active = amount === bet;
-            return (
-              <button
-                key={amount}
-                onClick={() => setPresetBet(amount)}
-                className="flex-1 py-2 rounded-xl border-none font-bold text-[13px]"
-                style={{
-                  background: active ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
-                  color: active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
-                  border: `1px solid ${active ? 'rgba(var(--c-green-rgb),0.3)' : 'var(--surface-overlay-border)'}`,
-                }}
-              >
-                ₽{fmt(amount)}
-              </button>
-            );
-          })}
+        <div className="flex flex-col gap-2">
+          <label className="text-[12px] font-semibold" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Валюта ставки
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {(['rub', 'usd'] as DuelCurrency[]).map((code) => {
+              const active = code === currency;
+              return (
+                <button
+                  key={code}
+                  onClick={() => setCurrency(code)}
+                  className="py-2 rounded-xl border-none font-bold text-[14px]"
+                  style={{
+                    background: active ? 'rgba(var(--c-green-rgb),0.15)' : 'var(--surface-subtle)',
+                    color: active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
+                    border: `1px solid ${active ? 'rgba(var(--c-green-rgb),0.3)' : 'var(--surface-overlay-border)'}`,
+                  }}
+                >
+                  {CURRENCY_SYMBOL[code]} {code === 'rub' ? 'Рубли' : 'Доллары'}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">
           <label className="text-[12px] font-semibold" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            Произвольная ставка
+            Сумма ставки
           </label>
           <input
             value={betInput}
             onChange={(event) => updateBetInput(event.target.value)}
             inputMode="numeric"
-            placeholder="Введите сумму в рублях"
+            placeholder={`Введите сумму в ${CURRENCY_GENITIVE[currency]}`}
             className="text-input text-[15px]"
             style={{ padding: '12px 14px' }}
           />
@@ -377,7 +386,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
             <p className="m-0 text-[12px]" style={{ color: 'var(--c-red-soft)' }}>Ставка должна быть больше нуля</p>
           )}
           {betTooHigh && (
-            <p className="m-0 text-[12px]" style={{ color: 'var(--c-red-soft)' }}>Недостаточно рублей для ставки ₽{fmt(bet)}</p>
+            <p className="m-0 text-[12px]" style={{ color: 'var(--c-red-soft)' }}>Недостаточно средств для ставки {stakeLabel(bet, currency)}</p>
           )}
         </div>
 
@@ -445,7 +454,7 @@ function MultiTab({ gs, onRefresh, inviteGameId }: { gs: GameState; onRefresh: (
               )}
             </div>
             <p className="mt-[2px] mb-0 text-xs" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {g.creator_nickname} · ₽{fmt(g.stake_rub)} · {g.participant_count}/{g.max_players} игроков
+              {g.creator_nickname} · {stakeLabel(g.stake, g.currency)} · {g.participant_count}/{g.max_players} игроков
             </p>
             <p className="mt-[3px] mb-0 text-[11px] font-bold tabular-nums" style={{ color: duelSecondsLeft(g.expires_at, nowMs) <= 60 ? 'var(--c-red-soft)' : 'var(--c-orange)' }}>
               ⏱ {formatDuelTimer(duelSecondsLeft(g.expires_at, nowMs))} на вход

@@ -40,9 +40,9 @@ class Bonuses:
         Already summed and capped — this is what the game actually applies, which is *not*
         the linear sum of the per-item labels once a cap bites. Global kinds first, then
         per-species. Feeds the profile summary so the player sees the real total."""
-        globals_ = [(kind, None, value) for kind, value in self._global.items()]
-        species = [(kind, species_id, value) for (kind, species_id), value in self._by_species.items()]
-        return globals_ + species
+        out: list[tuple[str, int | None, int]] = [(kind, None, value) for kind, value in self._global.items()]
+        out += [(kind, species_id, value) for (kind, species_id), value in self._by_species.items()]
+        return out
 
     def income_multiplier(self) -> float:
         return 1 + self.total("income_total") / 100

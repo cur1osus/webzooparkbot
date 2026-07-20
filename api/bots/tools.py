@@ -541,12 +541,12 @@ def _clan_spec(tg_id: int, specialization: str, **_):
 # ── Игры ──────────────────────────────────────────────────────────────────────
 
 
-@tool("create_duel", "Создать дуэль со ставкой. Ставка списывается сразу, победитель забирает банк.",
+@tool("create_duel", "Создать дуэль со ставкой в рублях. Ставка списывается сразу, победитель забирает банк.",
       {"kind": {"type": "string", "description": "вид игры из list_duels"},
        "stake_rub": {"type": "integer", "minimum": 1}},
       ["kind", "stake_rub"])
 def _create_duel(tg_id: int, kind: str, stake_rub: int, **_):
-    return games_service.create_duel(tg_id, DuelCreateBody(kind=kind, stake_rub=stake_rub))
+    return games_service.create_duel(tg_id, DuelCreateBody(kind=kind, stake=stake_rub, currency="rub"))
 
 
 @tool("join_duel", "Войти в чужую открытую дуэль.", {"duel_id": {"type": "integer"}}, ["duel_id"])

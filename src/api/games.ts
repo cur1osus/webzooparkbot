@@ -3,6 +3,7 @@ import type {
   CocktailState,
   DuelActionResponse,
   DuelCancelResponse,
+  DuelCurrency,
   DuelResponse,
   DuelsResponse,
   DuelResolveResponse,
@@ -15,10 +16,10 @@ import type {
 import { req } from './client';
 
 export const apiGetOpenDuels = () => req<DuelsResponse>('/duels');
-export const apiCreateDuel = (kind: string, stake_rub: number) =>
+export const apiCreateDuel = (kind: string, stake: number, currency: DuelCurrency) =>
   req<DuelActionResponse>('/duels', {
     method: 'POST',
-    body: JSON.stringify({ kind, stake_rub: Math.floor(stake_rub) }),
+    body: JSON.stringify({ kind, stake: Math.floor(stake), currency }),
   });
 export const apiGetDuel = (duel_id: number) =>
   req<DuelResponse>(`/duels/${duel_id}`);
