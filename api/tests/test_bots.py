@@ -12,7 +12,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from api.bots import agent, memory_store, runner, tools
+from api.bots import agent, dreaming, memory_store, runner, tools
 from api.bots.characters import CHARACTERS, get
 from api.bots.runner import _awake, _journal
 
@@ -91,6 +91,18 @@ def test_finish_expedition_is_hidden_until_a_raid_has_landed(monkeypatch):
 
     monkeypatch.setattr(progression_service, "has_collectible_expedition", lambda _tg: True)
     assert "finish_expedition" in _tool_names(tools.schemas(tg_id=-1002, player_id=1))
+
+
+def test_safe_guess_is_hidden_while_the_safe_is_shut(monkeypatch):
+    """Guessing a closed safe is impossible; the rival used to spend a round learning that,
+    and blind guesses at an open-but-empty board waste its few daily attempts."""
+    from api.app.zoopark import safe as safe_service
+
+    monkeypatch.setattr(safe_service, "has_open_attempt", lambda _tg: False)
+    assert "safe_guess" not in _tool_names(tools.schemas(tg_id=-1002, player_id=1))
+
+    monkeypatch.setattr(safe_service, "has_open_attempt", lambda _tg: True)
+    assert "safe_guess" in _tool_names(tools.schemas(tg_id=-1002, player_id=1))
 
 
 def test_schemas_without_ids_show_every_tool():
@@ -280,6 +292,65 @@ def test_a_failed_journal_does_not_make_the_rival_take_the_turn_again(db, monkey
         profile = session.get(BotProfile, player_id)
         assert profile.next_turn_at is not None, "расписание не должно откатываться вместе с логом"
         assert profile.next_turn_at >= before + timedelta(minutes=44)
+
+
+# ── dreaming (memory consolidation) ───────────────────────────────────────────
+
+
+def _reply(text):
+    return {"choices": [{"message": {"content": text}}]}
+
+
+def test_a_small_notebook_is_left_alone(tmp_path, monkeypatch):
+    """The dream is pressure-triggered: below the threshold there is nothing to consolidate,
+    and it must not spend a model call to decide that."""
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    memory_store.remember(1, "единственная заметка")
+
+    def must_not_be_called(_payload):
+        raise AssertionError("модель не должна вызываться для маленького блокнота")
+
+    result = dreaming.run_dream(1, ask=must_not_be_called)
+    assert result["dreamed"] is False
+    assert len(memory_store.load(1)) == 1
+
+
+def test_dreaming_distils_a_full_notebook_and_keeps_a_backup(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    for i in range(dreaming.DREAM_AFTER_NOTES):
+        memory_store.remember(2, f"баланс {i} руб, коплю на паки")
+
+    ask = lambda _payload: _reply('["экспедиция глубины 1 разгромила отряд", "паки за доллары"]')
+    result = dreaming.run_dream(2, ask=ask)
+
+    assert result["dreamed"] is True
+    notes = memory_store.load(2)
+    assert len(notes) == 2
+    assert "разгромила" in notes[0]["заметка"]
+    assert (tmp_path / "bot_2.pre-dream.json").exists(), "оригинал должен сохраниться для отката"
+
+
+def test_a_dream_that_cannot_be_parsed_leaves_the_notebook_untouched(tmp_path, monkeypatch):
+    """A bloated notebook beats a wiped one: if the model answers with nothing usable, the
+    raw notes stay exactly as they were."""
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    for i in range(dreaming.DREAM_AFTER_NOTES):
+        memory_store.remember(3, f"заметка {i}")
+
+    for reply in (_reply("никакого json тут нет"), _reply("{}"), None):
+        result = dreaming.run_dream(3, ask=lambda _p, r=reply: r)
+        assert result["dreamed"] is False
+    assert len(memory_store.load(3)) == dreaming.DREAM_AFTER_NOTES
+
+
+def test_a_dream_never_leaves_more_notes_than_the_cap(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    for i in range(dreaming.DREAM_AFTER_NOTES):
+        memory_store.remember(4, f"заметка {i}")
+
+    flood = json.dumps([f"вывод {i}" for i in range(100)])
+    dreaming.run_dream(4, ask=lambda _p: _reply(flood))
+    assert len(memory_store.load(4)) <= dreaming.DREAM_TARGET_NOTES
 
 
 # ── characters and rhythm ─────────────────────────────────────────────────────

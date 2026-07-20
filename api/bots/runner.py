@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from api.app.db.connection import get_session
 from api.app.db.models import BotPlan, BotProfile, Player, utcnow
-from api.bots import agent, characters, memory_store
+from api.bots import agent, characters, dreaming, memory_store
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,14 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
             session.commit()
     except Exception:
         logger.exception("bot %s: ход прошёл, но не записался в журнал", nickname)
+
+    # Between turns, not during one: if the notebook has grown enough, consolidate it. The
+    # turn is already recorded and the schedule already moved, so a dream that fails or hangs
+    # costs nothing but its own model call — it never blocks or re-runs the turn.
+    try:
+        dreaming.run_dream(player_id)
+    except Exception:
+        logger.exception("bot %s: сон упал", nickname)
     return True
 
 

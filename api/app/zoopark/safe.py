@@ -180,6 +180,28 @@ def _attempts_used(session: Session, round_id: int, player_id: int, day: date) -
 # ─── Player-facing ────────────────────────────────────────────────────────────
 
 
+def has_open_attempt(tg_id: int) -> bool:
+    """Whether the safe is open right now and this player still has a guess left.
+
+    Cheap on purpose: it gates whether a rival is even shown `safe_guess`, checked once at
+    the top of a turn. When the safe is shut, guessing is impossible; showing the tool only
+    when a guess can be spent stops a rival from wasting a round trying while it is closed.
+    """
+    now = utcnow()
+    if not is_open(now):
+        return False
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            return False
+        round_ = current_round(session, now, create=False)
+        if round_ is None:
+            return False
+        day, _opens, _closes = window(now)
+        used = _attempts_used(session, round_.id, player.id, day)
+        return used < SAFE_DAILY_ATTEMPTS
+
+
 def safe_state(tg_id: int) -> dict:
     with get_session() as session:
         player = get_player(session, tg_id)

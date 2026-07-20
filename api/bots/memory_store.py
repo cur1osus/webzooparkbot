@@ -75,6 +75,29 @@ def remember(player_id: int, note: str) -> dict:
     return {"ok": True, "всего_заметок": len(notes), "вытеснено_старых": dropped}
 
 
+def overwrite(player_id: int, notes: list[dict]) -> None:
+    """Replace the whole notebook. Used by the dream pass, which distils many raw notes into
+    a few durable ones; `remember` only ever appends."""
+    _save(player_id, notes[-MAX_NOTES:])
+
+
+def snapshot(player_id: int) -> Path | None:
+    """Copy the current notebook aside before the dream rewrites it, so a bad consolidation
+    can be read back and, if ever needed, restored. Overwritten each dream — one level of
+    undo is enough; the point is provenance, not history."""
+    notes = load(player_id)
+    if not notes:
+        return None
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    backup = MEMORY_DIR / f"bot_{player_id}.pre-dream.json"
+    backup.write_text(json.dumps(notes, ensure_ascii=False, indent=1), encoding="utf-8")
+    return backup
+
+
+def make_note(text: str) -> dict:
+    return {"когда": datetime.now(timezone.utc).strftime("%d.%m %H:%M"), "заметка": text[:MAX_NOTE_CHARS]}
+
+
 def forget(player_id: int, index: int) -> dict:
     notes = load(player_id)
     if not 0 <= index < len(notes):

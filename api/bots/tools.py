@@ -412,8 +412,11 @@ def _dismiss_expedition(tg_id: int, expedition_id: int | None = None, **_):
 # ── Банк и развитие ───────────────────────────────────────────────────────────
 
 
-@tool("exchange_to_usd", "Обменять рубли на доллары по текущему курсу. Обратного обмена нет. "
-                         "Доллары нужны для кузницы и лечения.",
+@tool("exchange_to_usd", "Обменять рубли на доллары по текущему курсу. Обмен в одну сторону — "
+                         "обратно доллары в рубли не превратишь, так что меняй только то, что "
+                         "точно потратишь на доллары (паки, кузница, лечение). Курс гуляет: "
+                         "посмотри get_bank, там история, и не сливай по дну — обмен по низкому "
+                         "курсу это подарок казне. Если курс низкий, а доллары не горят — подожди.",
       {"amount_rub": {"type": "integer", "minimum": 1},
        "exchange_all": {"type": "boolean", "description": "обменять весь рублёвый баланс"}})
 def _exchange(tg_id: int, amount_rub: int = 0, exchange_all: bool = False, **_):
@@ -586,11 +589,16 @@ def _cocktail_guess(tg_id: int, fruits: list[str], **_):
     return games_service.cocktail_guess(tg_id, CocktailGuessBody(fruits=fruits))
 
 
-@tool("safe_guess", "Назвать код сейфа банка. Смотри доску в safe_state и подбирай код, который не "
-                    "противоречит ни одной опубликованной подсказке. Ответа на попытку не будет — "
-                    "подсказка придёт вместе со всеми после закрытия окна.",
+@tool("safe_guess", "Назвать код сейфа банка. Сначала смотри доску в safe_state и подбирай код, "
+                    "который не противоречит ни одной опубликованной подсказке. Если доска пуста, "
+                    "подсказок нет — это чистая лотерея, а попыток в день всего несколько; не трать "
+                    "их вслепую, дождись, пока на доске появятся чужие догадки. Ответа на свою "
+                    "попытку сразу не будет — подсказка придёт вместе со всеми после закрытия окна.",
       {"code": {"type": "string", "description": "4 цифры, например 0473"}},
-      ["code"])
+      ["code"],
+      # Only shown while the safe is open and a guess remains. Closed, it cannot be used at
+      # all; the rival used to spend a round finding that out.
+      available=lambda tg_id, _player_id: safe_service.has_open_attempt(tg_id))
 def _safe_guess(tg_id: int, code: str, **_):
     return safe_service.safe_guess(tg_id, SafeGuessBody(code=code))
 
