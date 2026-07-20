@@ -223,10 +223,18 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
         result.reasoning_tokens += int(completion_details.get("reasoning_tokens") or 0)
 
         try:
-            message = data["choices"][0]["message"]
+            choice = data["choices"][0]
+            message = choice["message"]
         except (KeyError, IndexError, TypeError):
             result.stopped_because = "неожиданный ответ модели"
             break
+
+        # `length` means the round hit MAX_TOKENS and whatever it was emitting is cut off —
+        # including, possibly, a tool call's arguments mid-string. We still process the calls
+        # that parsed; the truncated one is caught below and turned into an error, never run.
+        truncated = choice.get("finish_reason") == "length"
+        if truncated:
+            logger.warning("bot %s: ответ обрезан по MAX_TOKENS", nickname)
 
         calls = message.get("tool_calls") or []
         # The assistant turn must go back verbatim, tool_calls included, or the model loses
@@ -250,12 +258,24 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
         for entry in calls:
             function = entry.get("function") or {}
             name = function.get("name") or ""
+            raw_arguments = function.get("arguments") or "{}"
             try:
-                arguments = json.loads(function.get("arguments") or "{}")
+                arguments = json.loads(raw_arguments)
+                if not isinstance(arguments, dict):
+                    raise json.JSONDecodeError("не объект", raw_arguments, 0)
+                malformed = False
             except json.JSONDecodeError:
-                arguments = {}
+                arguments, malformed = {}, True
 
-            if dry_run and name not in _READ_ONLY and name != "end_turn":
+            if malformed:
+                # The arguments did not parse — almost always because the round was truncated
+                # mid-call. Substituting {} and running it anyway once let a no-argument
+                # mutating tool (cure_all_animals, clan_leave, reroll_daily_bonus) fire on a
+                # fragment the model never finished asking for. Refuse it instead; the model
+                # sees the error and reissues the call whole. A tool is never run on a guess.
+                output = {"ok": False, "error": "аргументы не разобрались — ответ, похоже, "
+                                                "обрезан; повтори этот вызов целиком и короче"}
+            elif dry_run and name not in _READ_ONLY and name != "end_turn":
                 output = {"ok": False, "error": "пробный прогон: изменяющие действия отключены"}
             else:
                 output = tools.call(name, tg_id, player_id, arguments)
@@ -265,13 +285,23 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
                 "tool_call_id": entry.get("id"),
                 "content": json.dumps(output, ensure_ascii=False, default=str)[:4000],
             })
-            if name == "end_turn":
+            # Only a cleanly-parsed end_turn ends the turn: a truncated one has no summary and
+            # is not a real decision to stop.
+            if name == "end_turn" and not malformed:
                 result.summary = str(arguments.get("summary") or "")[:500]
                 result.stopped_because = "закончил сам"
                 finished = True
 
         if finished:
             break
+
+        if truncated:
+            # Told, so the next round comes back shorter instead of being cut off again.
+            messages.append({
+                "role": "user",
+                "content": "Твой прошлый ответ обрезался по длине — отвечай короче, "
+                           "по одному-двум шагам за раз.",
+            })
 
     logger.info(
         "bot %s: ход окончен (%s), кругов %s, действий %s, %.4f ₽",

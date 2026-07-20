@@ -294,6 +294,62 @@ def test_a_failed_journal_does_not_make_the_rival_take_the_turn_again(db, monkey
         assert profile.next_turn_at >= before + timedelta(minutes=44)
 
 
+# ── truncated tool calls ──────────────────────────────────────────────────────
+
+
+def _round(name, arguments, *, finish="stop"):
+    return {"choices": [{"finish_reason": finish,
+                         "message": {"tool_calls": [{"id": "1", "function": {
+                             "name": name, "arguments": arguments}}]}}],
+            "usage": {}}
+
+
+def test_a_tool_call_with_truncated_arguments_is_not_executed(tmp_path, monkeypatch):
+    """A round cut off by MAX_TOKENS can leave a tool call's arguments as half a JSON string.
+    Substituting {} and running it once let a no-argument mutating tool fire on a fragment;
+    now the call is refused and only reissued whole."""
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(agent, "ROUTERAI_API_KEY", "test-key")
+    monkeypatch.setattr(agent.tools, "schemas", lambda *a, **k: [])
+
+    executed = []
+    monkeypatch.setattr(agent.tools, "call",
+                        lambda name, tg_id, player_id, arguments: executed.append(name) or {"ok": True})
+
+    replies = iter([
+        _round("cure_all_animals", '{"partia', finish="length"),  # truncated mid-arguments
+        _round("end_turn", '{"summary": "готово"}'),
+    ])
+    monkeypatch.setattr(agent, "_ask", lambda payload: next(replies))
+
+    result = agent.run_turn(get("gambler"), tg_id=-1002, player_id=1, nickname="Сфорца")
+
+    assert "cure_all_animals" not in executed, "обрубок мутирующего тула не должен выполниться"
+    bad = next(c for c in result.tool_calls if c["name"] == "cure_all_animals")
+    assert bad["результат"]["ok"] is False
+    assert result.stopped_because == "закончил сам"
+
+
+def test_a_truncated_end_turn_does_not_end_the_turn(tmp_path, monkeypatch):
+    """If the round that carried end_turn was cut off, its summary never arrived — it is not
+    a real decision to stop, so the turn must continue."""
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(agent, "ROUTERAI_API_KEY", "test-key")
+    monkeypatch.setattr(agent.tools, "schemas", lambda *a, **k: [])
+    monkeypatch.setattr(agent.tools, "call", lambda *a, **k: {"ok": True})
+
+    replies = iter([
+        _round("end_turn", '{"summ', finish="length"),      # truncated end_turn — ignored
+        _round("end_turn", '{"summary": "по-настоящему"}'),  # the real one ends it
+    ])
+    monkeypatch.setattr(agent, "_ask", lambda payload: next(replies))
+
+    result = agent.run_turn(get("gambler"), tg_id=-1002, player_id=1, nickname="Сфорца")
+    assert result.stopped_because == "закончил сам"
+    assert result.summary == "по-настоящему"
+    assert result.rounds == 2, "первый (обрезанный) end_turn не должен был завершить ход"
+
+
 # ── dreaming (memory consolidation) ───────────────────────────────────────────
 
 
