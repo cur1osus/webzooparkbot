@@ -4,7 +4,6 @@ import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
 import { AnimalDetailCard } from '@/components/AnimalDetailCard';
 import { AnimalArt } from '@/components/AnimalArt';
-import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
 import type { Animal, GameState, GeneTier, MaintenancePollStatus } from '@/types';
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
@@ -445,9 +444,9 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                           setSelectedAnimal(a);
                         }
                       }}
-                      className="card card-pressable relative text-left border-none w-full"
+                      className="card card-pressable text-left border-none w-full"
                       style={{
-                        padding: '10px 56px 10px 12px',
+                        padding: '10px 12px',
                         border: isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
                         boxShadow: isFavorite ? '0 0 14px rgba(243, 181, 63, 0.3)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
                       }}
@@ -462,12 +461,6 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                           <p className="m-0 text-[11px] text-tg-hint truncate">{a.species_name} · ₽{fmt(a.income)}/мин</p>
                         </div>
                       </div>
-                      <AnimalFavoriteButton
-                        className="absolute right-2 top-2"
-                        isFavorite={isFavorite}
-                        busy={favoriteBusyId === a.id}
-                        onToggle={() => void toggleFavorite(a)}
-                      />
                       <div className="mt-[6px] flex min-w-0 items-center justify-between gap-2">
                         {life ? (
                           <p className="m-0 min-w-0 truncate text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>
@@ -526,6 +519,9 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
       {selectedAnimal && (
         <AnimalDetailCard
           animal={selectedAnimal}
+          isFavorite={favoriteOverrides.get(selectedAnimal.id) ?? selectedAnimal.is_favorite}
+          favoriteBusy={favoriteBusyId === selectedAnimal.id}
+          onToggleFavorite={() => void toggleFavorite(selectedAnimal)}
           onClose={() => setSelectedAnimal(null)}
           onRelease={async animal => {
             await apiReleaseAnimal(animal.id);

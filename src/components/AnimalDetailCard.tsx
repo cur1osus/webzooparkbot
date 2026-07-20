@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimalArt } from '@/components/AnimalArt';
+import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
 import type { Animal, GeneTier } from '@/types';
 import { fmt, formatCountdown, formatDateShort } from '@/utils/format';
 import {
@@ -79,8 +80,11 @@ function formatMultiplier(value: number): string {
   return `×${value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',')}`;
 }
 
-export function AnimalDetailCard({ animal, onClose, onRelease }: {
+export function AnimalDetailCard({ animal, isFavorite = animal.is_favorite, favoriteBusy = false, onToggleFavorite, onClose, onRelease }: {
   animal: Animal;
+  isFavorite?: boolean;
+  favoriteBusy?: boolean;
+  onToggleFavorite?: () => void;
   onClose: () => void;
   /** When provided, a "release" action is shown — a voluntary, irreversible cull.
    *  Should resolve after the animal is gone (parent closes the card); rejects surface here. */
@@ -144,6 +148,10 @@ export function AnimalDetailCard({ animal, onClose, onRelease }: {
     >
       <div
         className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[88vh] overflow-y-auto"
+        style={isFavorite ? {
+          border: '1.5px solid #f3b53f',
+          boxShadow: '0 -12px 40px rgba(0, 0, 0, 0.55), 0 0 18px rgba(243, 181, 63, 0.28)',
+        } : undefined}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Hero: species identity ── */}
@@ -173,14 +181,23 @@ export function AnimalDetailCard({ animal, onClose, onRelease }: {
               </span>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Закрыть"
-            className="tap-target self-start -mr-1 -mt-1 border-none bg-transparent text-[18px] cursor-pointer"
-            style={{ color: 'var(--tg-theme-hint-color)' }}
-          >
-            ✕
-          </button>
+          <div className="flex shrink-0 items-start gap-1 -mr-1 -mt-1">
+            {onToggleFavorite && (
+              <AnimalFavoriteButton
+                isFavorite={isFavorite}
+                busy={favoriteBusy}
+                onToggle={onToggleFavorite}
+              />
+            )}
+            <button
+              onClick={onClose}
+              aria-label="Закрыть"
+              className="tap-target border-none bg-transparent text-[18px] cursor-pointer"
+              style={{ color: 'var(--tg-theme-hint-color)' }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* ── Signature: life countdown ── */}
