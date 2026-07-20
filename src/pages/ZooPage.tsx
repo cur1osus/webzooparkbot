@@ -445,11 +445,11 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                           setSelectedAnimal(a);
                         }
                       }}
-                      className="card card-pressable text-left border-none w-full"
+                      className="card card-pressable relative text-left border-none w-full"
                       style={{
-                        padding: '10px 12px',
-                        border: isFavorite ? '1.5px solid var(--c-gold)' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
-                        boxShadow: isFavorite ? '0 0 14px color-mix(in srgb, var(--c-gold) 25%, transparent)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
+                        padding: '10px 56px 10px 12px',
+                        border: isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
+                        boxShadow: isFavorite ? '0 0 14px rgba(243, 181, 63, 0.3)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
                       }}
                     >
                       <div className="flex items-center gap-[8px]">
@@ -461,12 +461,13 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                           <p className="m-0 text-[13px] font-bold truncate">{a.name}</p>
                           <p className="m-0 text-[11px] text-tg-hint truncate">{a.species_name} · ₽{fmt(a.income)}/мин</p>
                         </div>
-                        <AnimalFavoriteButton
-                          isFavorite={isFavorite}
-                          busy={favoriteBusyId === a.id}
-                          onToggle={() => void toggleFavorite(a)}
-                        />
                       </div>
+                      <AnimalFavoriteButton
+                        className="absolute right-2 top-2"
+                        isFavorite={isFavorite}
+                        busy={favoriteBusyId === a.id}
+                        onToggle={() => void toggleFavorite(a)}
+                      />
                       <div className="mt-[6px] flex min-w-0 items-center justify-between gap-2">
                         {life ? (
                           <p className="m-0 min-w-0 truncate text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>

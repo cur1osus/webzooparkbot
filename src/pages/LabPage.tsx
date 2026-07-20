@@ -305,11 +305,11 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onToggleFavor
                         onPick(a);
                       }
                     }}
-                    className="flex items-center gap-3 px-3 py-[10px] rounded-xl text-left w-full"
+                    className="relative flex items-center gap-3 px-3 pr-14 py-[10px] rounded-xl text-left w-full"
                     style={{
                       background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-                      border: a.is_favorite ? '1px solid var(--c-gold)' : '1px solid transparent',
-                      boxShadow: a.is_favorite ? '0 0 12px color-mix(in srgb, var(--c-gold) 18%, transparent)' : 'none',
+                      border: a.is_favorite ? '1px solid #f3b53f' : '1px solid transparent',
+                      boxShadow: a.is_favorite ? '0 0 12px rgba(243, 181, 63, 0.22)' : 'none',
                       cursor: incompatible ? 'not-allowed' : 'pointer',
                       opacity: incompatible ? 0.4 : 1,
                     }}>
@@ -331,6 +331,7 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onToggleFavor
                 </p>
               </div>
               <AnimalFavoriteButton
+                className="absolute right-2 top-1/2 -translate-y-1/2"
                 isFavorite={a.is_favorite}
                 busy={favoriteBusyId === a.id}
                 onToggle={() => onToggleFavorite(a)}
