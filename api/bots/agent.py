@@ -170,7 +170,10 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
         logger.warning("ROUTERAI_API_KEY is not set; rivals cannot play")
         return result
 
-    schemas = tools.schemas()
+    # Built once for the turn: a state-gated tool (finish_expedition) is shown only if it
+    # would do something now, and expeditions run for hours, so its availability cannot flip
+    # mid-turn. Rebuilding every round would just re-query for no change.
+    schemas = tools.schemas(tg_id, player_id)
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": _opening_message(character, player_id, nickname)},

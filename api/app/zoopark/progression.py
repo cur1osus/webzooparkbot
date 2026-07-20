@@ -1188,6 +1188,31 @@ def get_expeditions(tg_id: int) -> dict:
         }
 
 
+def has_collectible_expedition(tg_id: int) -> bool:
+    """Whether `finish_expedition` would actually collect something right now.
+
+    An expedition is collectible once it has landed (`ends_at` passed) and has not yet been
+    resolved — the same condition `finish_expedition` acts on. Kept cheap (an EXISTS, no
+    payload building) because it is checked once at the top of every rival's turn to decide
+    whether the collect tool is even worth showing it.
+    """
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            return False
+        season = ensure_player_season(session, player)
+        return session.scalar(
+            select(Expedition.id)
+            .where(
+                Expedition.player_id == player.id,
+                Expedition.season_id == season.id,
+                Expedition.resolved_at.is_(None),
+                Expedition.ends_at <= utcnow(),
+            )
+            .limit(1)
+        ) is not None
+
+
 def start_expedition(tg_id: int, body: StartExpeditionBody) -> dict:
     animal_ids = list(dict.fromkeys(body.animal_ids))
     if len(animal_ids) != len(body.animal_ids):

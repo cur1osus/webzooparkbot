@@ -76,6 +76,56 @@ def test_the_cocktail_tool_names_the_fruits_it_will_accept():
         assert fruit in entry.description, "палитра должна быть видна и в самом описании"
 
 
+def _tool_names(schemas):
+    return {s["function"]["name"] for s in schemas}
+
+
+def test_finish_expedition_is_hidden_until_a_raid_has_landed(monkeypatch):
+    """The rival called finish_expedition at the top of every single turn on the off chance,
+    because a description asking it not to is one it ignores. A tool it cannot see is one it
+    cannot waste a call on."""
+    from api.app.zoopark import progression as progression_service
+
+    monkeypatch.setattr(progression_service, "has_collectible_expedition", lambda _tg: False)
+    assert "finish_expedition" not in _tool_names(tools.schemas(tg_id=-1002, player_id=1))
+
+    monkeypatch.setattr(progression_service, "has_collectible_expedition", lambda _tg: True)
+    assert "finish_expedition" in _tool_names(tools.schemas(tg_id=-1002, player_id=1))
+
+
+def test_schemas_without_ids_show_every_tool():
+    """The MCP server and the schema tests ask for the whole toolset, not a turn's view of
+    it. A gate must never hide a tool when there is no player to evaluate it against."""
+    assert _tool_names(tools.schemas()) == set(tools.REGISTRY)
+
+
+def test_a_gate_that_raises_shows_the_tool_rather_than_dropping_it(monkeypatch):
+    """A predicate is a hint. A bug in one must fail open — a rival that cannot collect a
+    finished expedition is worse than one that makes an occasional empty call."""
+    from api.app.zoopark import progression as progression_service
+
+    def boom(_tg):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(progression_service, "has_collectible_expedition", boom)
+    assert "finish_expedition" in _tool_names(tools.schemas(tg_id=-1002, player_id=1))
+
+
+def test_get_expeditions_no_longer_goads_the_rival_into_collecting(monkeypatch):
+    """The old description ("невыбранная добыча — это потерянный доход") is exactly what made
+    it call finish_expedition defensively; the tool now points at the gated tool instead."""
+    assert "потерянный доход" not in tools.REGISTRY["get_expeditions"].description
+
+
+def test_the_collectible_predicate_runs_against_the_real_schema(player):
+    """The gate query runs on MySQL in production and SQLite in tests. A fresh player has no
+    expedition, so it must return False without throwing — the point is that the SQL is
+    valid, so this cannot pass on SQLite while failing on MySQL for a syntax reason."""
+    from api.app.zoopark.progression import has_collectible_expedition
+
+    assert has_collectible_expedition(player) is False
+
+
 def test_end_turn_exists_so_a_rival_can_stop_early():
     """Without it the only way a turn ends is by exhausting the budget, which both costs
     money and reads as a bot that cannot tell when it is finished."""

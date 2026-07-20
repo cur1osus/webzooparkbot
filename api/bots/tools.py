@@ -94,6 +94,13 @@ class Tool:
     properties: dict[str, Any]
     required: list[str] = field(default_factory=list)
     run: Callable[..., Any] = None  # type: ignore[assignment]
+    # A tool that only makes sense in some game states can gate its own visibility. The
+    # agent evaluates this once at the top of a turn and drops the tool from the list it
+    # shows the model when it returns False — a description telling the model "call this only
+    # when X" is a request it will ignore, while a tool it cannot see is one it cannot waste
+    # a call on. None means always visible. The dispatcher still runs the tool if called, so
+    # gating is a hint, never a lock.
+    available: Callable[[int, int], bool] | None = None
 
     def schema(self) -> dict:
         return {
@@ -114,9 +121,10 @@ class Tool:
 REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name: str, description: str, properties: dict | None = None, required: list[str] | None = None):
+def tool(name: str, description: str, properties: dict | None = None, required: list[str] | None = None,
+         available: Callable[[int, int], bool] | None = None):
     def decorate(fn):
-        REGISTRY[name] = Tool(name, description, properties or {}, required or [], fn)
+        REGISTRY[name] = Tool(name, description, properties or {}, required or [], fn, available)
         return fn
 
     return decorate
@@ -163,8 +171,9 @@ def _list_localities(tg_id: int, **_):
     return progression_service.list_localities(tg_id)
 
 
-@tool("get_expeditions", "Идущие и готовые к сбору экспедиции. Проверяй в начале хода: "
-                         "невыбранная добыча — это потерянный доход.")
+@tool("get_expeditions", "Идущие экспедиции: где, какая глубина, когда вернутся. Когда добыча "
+                         "готова к сбору, появится отдельный инструмент finish_expedition — "
+                         "пока его нет, забирать нечего.")
 def _get_expeditions(tg_id: int, **_):
     return progression_service.get_expeditions(tg_id)
 
@@ -384,9 +393,12 @@ def _start_expedition(tg_id: int, locality_id: int, animal_ids: list[int], depth
     )
 
 
-@tool("finish_expedition", "Забрать результат готовой экспедиции. Вызывай только если "
-                           "get_expeditions показал готовую к сбору — иначе это пустой вызов.",
-      {"expedition_id": {"type": "integer", "description": "не указывай — заберётся самая старая готовая"}})
+@tool("finish_expedition", "Забрать результат готовой экспедиции.",
+      {"expedition_id": {"type": "integer", "description": "не указывай — заберётся самая старая готовая"}},
+      # Only shown when a raid has actually landed. The rival used to call this at the top of
+      # every turn on the off chance, because a description asking it not to is a description
+      # it ignores; hiding the tool until there is something to collect ends the empty call.
+      available=lambda tg_id, _player_id: progression_service.has_collectible_expedition(tg_id))
 def _finish_expedition(tg_id: int, expedition_id: int | None = None, **_):
     return progression_service.finish_expedition(tg_id, expedition_id)
 
@@ -687,5 +699,18 @@ def _end_turn(summary: str, **_):
     return {"ok": True, "ход_завершён": True, "итог": summary}
 
 
-def schemas() -> list[dict]:
-    return [entry.schema() for entry in REGISTRY.values()]
+def schemas(tg_id: int | None = None, player_id: int | None = None) -> list[dict]:
+    """The toolset to hand the model. With a player's ids, tools that gate their own
+    visibility are dropped when they would do nothing in the current game state; without
+    ids (the MCP server, tests) every tool is returned. A gate that raises is treated as
+    "show it" — a bug in a predicate must not hide a working tool."""
+    entries = []
+    for entry in REGISTRY.values():
+        if entry.available is not None and tg_id is not None and player_id is not None:
+            try:
+                if not entry.available(tg_id, player_id):
+                    continue
+            except Exception:
+                logger.exception("gate for %s raised; showing it", entry.name)
+        entries.append(entry.schema())
+    return entries
