@@ -12,13 +12,26 @@ const HABITATS: Record<Habitat, { emoji: string; name: string; color: string }> 
 };
 
 type GlobalTrack = DevelopmentTrack;
-type TrackLevel = { level: number; cost: number; effects: string[] };
+
+/** One measurable effect of a track. `absolute` words the cumulative bonus a level reaches
+ *  (shown under «Сейчас» and in the full ladder); `gain` words what a single upgrade adds —
+ *  the delta, plus the total it lands on — so «Следующий шаг» answers «на сколько вырастет».
+ *  The two differ because the ladder is non-linear: +1, +2, +3, +3, +3 for the gentle tracks. */
+type TrackStat = {
+  absolute: (pct: number) => string;
+  gain: (added: number, total: number) => string;
+};
+
+/** `values[i]` is the cumulative percent stat `i` reaches at this level — mirrors the
+ *  matching `*_BY_LEVEL` tuple in `catalog.py`, so the card can never drift from the server. */
+type TrackLevel = { level: number; cost: number; values: number[] };
 
 const TRACKS: Record<GlobalTrack, {
   icon: string;
   title: string;
   summary: string;
   accent: string;
+  stats: TrackStat[];
   levels: TrackLevel[];
 }> = {
   vet: {
@@ -26,12 +39,17 @@ const TRACKS: Record<GlobalTrack, {
     title: 'Ветеринарный блок',
     summary: 'Животные реже болеют, а лечение обходится дешевле.',
     accent: 'var(--c-cyan)',
+    stats: [
+      { absolute: p => `болезни случаются на ${p}% реже`, gain: (a, t) => `болезни реже ещё на ${a}% (итого ${t}%)` },
+      { absolute: p => `лечение дешевле на ${p}%`, gain: (a, t) => `лечение дешевле ещё на ${a}% (итого ${t}%)` },
+    ],
+    // Mirrors `catalog.DEVELOPMENT_EFFECT_PERCENT_BY_LEVEL` = (0, 1, 3, 6, 9, 12).
     levels: [
-      { level: 1, cost: 20_000, effects: ['болезни случаются на 1% реже', 'лечение дешевле на 1%'] },
-      { level: 2, cost: 100_000, effects: ['болезни случаются на 3% реже', 'лечение дешевле на 3%'] },
-      { level: 3, cost: 400_000, effects: ['болезни случаются на 6% реже', 'лечение дешевле на 6%'] },
-      { level: 4, cost: 1_500_000, effects: ['болезни случаются на 9% реже', 'лечение дешевле на 9%'] },
-      { level: 5, cost: 5_000_000, effects: ['болезни случаются на 12% реже', 'лечение дешевле на 12%'] },
+      { level: 1, cost: 20_000, values: [1, 1] },
+      { level: 2, cost: 100_000, values: [3, 3] },
+      { level: 3, cost: 400_000, values: [6, 6] },
+      { level: 4, cost: 1_500_000, values: [9, 9] },
+      { level: 5, cost: 5_000_000, values: [12, 12] },
     ],
   },
   genetics: {
@@ -39,31 +57,54 @@ const TRACKS: Record<GlobalTrack, {
     title: 'Генетический центр',
     summary: 'Больше удачных потомков и меньше шансов получить слабые гены.',
     accent: 'var(--c-purple)',
+    stats: [
+      { absolute: p => `шанс успешного скрещивания выше на ${p}%`, gain: (a, t) => `шанс успеха выше ещё на ${a}% (итого ${t}%)` },
+      { absolute: p => `слабейший ген выпадает реже на ${p}%`, gain: (a, t) => `слабый ген реже ещё на ${a}% (итого ${t}%)` },
+    ],
+    // Mirrors `catalog.DEVELOPMENT_EFFECT_PERCENT_BY_LEVEL` = (0, 1, 3, 6, 9, 12).
     levels: [
-      { level: 1, cost: 30_000, effects: ['к шансу успешного скрещивания добавляется 1%', 'шанс получить слабейший ген ниже на 1%'] },
-      { level: 2, cost: 150_000, effects: ['к шансу успешного скрещивания добавляется 3%', 'шанс получить слабейший ген ниже на 3%'] },
-      { level: 3, cost: 600_000, effects: ['к шансу успешного скрещивания добавляется 6%', 'шанс получить слабейший ген ниже на 6%'] },
-      { level: 4, cost: 2_000_000, effects: ['к шансу успешного скрещивания добавляется 9%', 'шанс получить слабейший ген ниже на 9%'] },
-      { level: 5, cost: 7_000_000, effects: ['к шансу успешного скрещивания добавляется 12%', 'шанс получить слабейший ген ниже на 12%'] },
+      { level: 1, cost: 30_000, values: [1, 1] },
+      { level: 2, cost: 150_000, values: [3, 3] },
+      { level: 3, cost: 600_000, values: [6, 6] },
+      { level: 4, cost: 2_000_000, values: [9, 9] },
+      { level: 5, cost: 7_000_000, values: [12, 12] },
     ],
   },
-  // Mirrors `catalog.EXPEDITION_CORPS_POWER_PERCENT_BY_LEVEL`. Unlike the other two tracks
-  // this one is not a gentle nudge: genes cap a five-animal squad at 90 power, so without a
-  // multiplier no amount of breeding could ever reach the deepest raids.
+  // Mirrors `catalog.EXPEDITION_CORPS_POWER_PERCENT_BY_LEVEL` = (0, 8, 18, 30, 44, 60). Unlike
+  // the other two tracks this one is not a gentle nudge: genes cap a five-animal squad at 90
+  // power, so without a multiplier no amount of breeding could ever reach the deepest raids.
   expedition: {
     icon: '🧭',
     title: 'Экспедиционный корпус',
     summary: 'Отряд бьёт сильнее, чем позволяют гены, — и открывает глубокие рейды.',
     accent: 'var(--c-gold)',
+    stats: [
+      { absolute: p => `сила отряда выше на ${p}%`, gain: (a, t) => `сила отряда выше ещё на ${a}% (итого ${t}%)` },
+    ],
     levels: [
-      { level: 1, cost: 50_000, effects: ['сила отряда выше на 8%'] },
-      { level: 2, cost: 250_000, effects: ['сила отряда выше на 18%'] },
-      { level: 3, cost: 900_000, effects: ['сила отряда выше на 30%'] },
-      { level: 4, cost: 3_000_000, effects: ['сила отряда выше на 44%'] },
-      { level: 5, cost: 9_000_000, effects: ['сила отряда выше на 60%'] },
+      { level: 1, cost: 50_000, values: [8] },
+      { level: 2, cost: 250_000, values: [18] },
+      { level: 3, cost: 900_000, values: [30] },
+      { level: 4, cost: 3_000_000, values: [44] },
+      { level: 5, cost: 9_000_000, values: [60] },
     ],
   },
 };
+
+/** Absolute wording for every stat at a level's cumulative values. */
+function absoluteEffects(track: (typeof TRACKS)[GlobalTrack], values: number[]): string[] {
+  return track.stats.map((stat, index) => stat.absolute(values[index] ?? 0));
+}
+
+/** What one upgrade adds: the per-stat delta from the current level (0 when unbuilt) to the
+ *  next, and the total it reaches. This is the line the player was missing on the card. */
+function gainEffects(track: (typeof TRACKS)[GlobalTrack], currentValues: number[] | undefined, nextValues: number[]): string[] {
+  return track.stats.map((stat, index) => {
+    const total = nextValues[index] ?? 0;
+    const added = total - (currentValues?.[index] ?? 0);
+    return stat.gain(added, total);
+  });
+}
 
 function LevelDots({ level, max = 5 }: { level: number; max?: number }) {
   return (
@@ -104,17 +145,17 @@ function TrackCard({ kind, level, busy, onUpgrade }: { kind: GlobalTrack; level:
 
       <div className="mt-3 rounded-xl px-3 py-2" style={{ background: 'rgba(0,0,0,0.12)' }}>
         <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px] text-tg-hint">Сейчас · уровень {level}</p>
-        {current ? <EffectLines effects={current.effects} /> : <p className="m-0 mt-1 text-[11px] text-tg-hint">Базовый уровень без дополнительных бонусов.</p>}
+        {current ? <EffectLines effects={absoluteEffects(track, current.values)} /> : <p className="m-0 mt-1 text-[11px] text-tg-hint">Базовый уровень без дополнительных бонусов.</p>}
       </div>
 
       {!maxed && next && <div className="mt-2 rounded-xl px-3 py-2" style={{ background: `color-mix(in srgb, ${track.accent} 10%, transparent)`, border: `1px solid color-mix(in srgb, ${track.accent} 18%, transparent)` }}>
         <p className="m-0 text-[10px] font-extrabold uppercase tracking-[0.6px]" style={{ color: track.accent }}>Следующий шаг · уровень {next.level}</p>
-        <EffectLines effects={next.effects} />
+        <EffectLines effects={gainEffects(track, current?.values, next.values)} />
       </div>}
 
       <details className="mt-2">
         <summary className="cursor-pointer text-[11px] font-bold text-tg-hint">Показать все 5 уровней</summary>
-        <div className="mt-2 flex flex-col gap-1">{track.levels.map(item => <div key={item.level} className="flex gap-2 rounded-lg px-2 py-1.5 text-[10px]" style={{ background: item.level <= level ? 'rgba(var(--c-gold-rgb),0.08)' : 'rgba(255,255,255,0.035)', opacity: item.level < level ? 0.62 : 1 }}><span className="w-8 shrink-0 font-extrabold">{item.level <= level ? '✓' : `Ур. ${item.level}`}</span><span className="flex-1 text-tg-hint">{item.effects[0]}</span><span className="shrink-0 font-bold">₽{fmt(item.cost)}</span></div>)}</div>
+        <div className="mt-2 flex flex-col gap-1">{track.levels.map(item => <div key={item.level} className="flex gap-2 rounded-lg px-2 py-1.5 text-[10px]" style={{ background: item.level <= level ? 'rgba(var(--c-gold-rgb),0.08)' : 'rgba(255,255,255,0.035)', opacity: item.level < level ? 0.62 : 1 }}><span className="w-8 shrink-0 font-extrabold">{item.level <= level ? '✓' : `Ур. ${item.level}`}</span><span className="flex-1 text-tg-hint flex flex-col gap-0.5">{absoluteEffects(track, item.values).map(effect => <span key={effect}>{effect}</span>)}</span><span className="shrink-0 font-bold">₽{fmt(item.cost)}</span></div>)}</div>
       </details>
 
       <button type="button" disabled={busy || maxed} onClick={onUpgrade} className="w-full mt-3 rounded-xl py-2 border-none text-[12px] font-extrabold" style={{ background: maxed ? 'rgba(255,255,255,0.08)' : track.accent, color: maxed ? 'var(--tg-theme-hint-color)' : 'var(--tg-theme-button-text-color)' }}>
