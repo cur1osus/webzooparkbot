@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFinishSoloGame, apiStartSoloGame } from '@/api';
 import type { SoloBetPercent, SoloGameResult, SoloThrowRound } from '@/types';
 import { fmt } from '@/utils/format';
@@ -82,7 +82,9 @@ interface BasketballSoloPanelProps {
   bet: number;
   betPercent: SoloBetPercent;
   canStart: boolean;
+  autoStart?: boolean;
   initialSession?: SoloGameResult | null;
+  onMatchStarted?: (match: SoloGameResult) => void;
   onMatchFinished?: () => void;
   onRefresh: () => void;
 }
@@ -97,7 +99,7 @@ function getVisibleScore(gameId: string, history: SoloThrowRound[]) {
   );
 }
 
-export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canStart, initialSession = null, onMatchFinished, onRefresh }: BasketballSoloPanelProps) {
+export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canStart, autoStart = false, initialSession = null, onMatchStarted, onMatchFinished, onRefresh }: BasketballSoloPanelProps) {
   const [phase, setPhase] = useState<BasketballPhase>('idle');
   const [animLabel, setAnimLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -106,6 +108,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
   const [visibleHistory, setVisibleHistory] = useState<SoloThrowRound[]>([]);
   const tgsRef = useRef<TgsHandle>(null);
   const finishSentRef = useRef(false);
+  const autoStartRequestedRef = useRef(false);
 
   const sessionHistory = session?.history ?? [];
   const hasPendingRounds = visibleHistory.length < sessionHistory.length;
@@ -149,7 +152,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
     finishSentRef.current = false;
   };
 
-  const playRound = async (round: SoloThrowRound, isLastRound: boolean) => {
+  const playRound = useCallback(async (round: SoloThrowRound, isLastRound: boolean) => {
     setAnimLabel('Ваш бросок');
     setPhase('player-anim');
     await tgsRef.current?.playAnimation(`/telegram-dice/${gameRule.assetDir}/${round.player_roll}.tgs`);
@@ -164,9 +167,9 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
     }
     setAnimLabel('');
     setPhase(isLastRound ? 'result' : 'idle');
-  };
+  }, [gameRule.assetDir]);
 
-  const startMatch = async () => {
+  const startMatch = useCallback(async () => {
     if (!canStart) return;
     setError(null);
     setPhase('loading');
@@ -180,6 +183,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
       setSession(result);
       setSessionBet(result.stake_rub);
       setVisibleHistory([]);
+      onMatchStarted?.(result);
       onRefresh();
 
       await playRound(result.history[0], result.history.length === 1);
@@ -187,7 +191,13 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
       setError(e instanceof Error ? e.message : 'Ошибка запуска игры');
       setPhase('idle');
     }
-  };
+  }, [betPercent, canStart, gameId, onMatchStarted, onRefresh, playRound]);
+
+  useEffect(() => {
+    if (!autoStart || initialSession || autoStartRequestedRef.current || !canStart) return;
+    autoStartRequestedRef.current = true;
+    void startMatch();
+  }, [autoStart, canStart, initialSession, startMatch]);
 
   const continueMatch = async () => {
     if (!session || !hasPendingRounds) return;

@@ -86,7 +86,7 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
           subtitle={`Матч со ставкой ${betPercent}%`}
           onBack={() => setScreen('setup')}
         />
-        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} betPercent={betPercent} canStart={canStart} initialSession={currentMatch?.kind === game.id ? currentMatch : null} onMatchFinished={() => setCurrentMatch(null)} onRefresh={onRefresh} />
+        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} betPercent={betPercent} canStart={canStart} autoStart initialSession={currentMatch?.kind === game.id ? currentMatch : null} onMatchStarted={setCurrentMatch} onMatchFinished={() => setCurrentMatch(null)} onRefresh={onRefresh} />
       </div>
     );
   }
