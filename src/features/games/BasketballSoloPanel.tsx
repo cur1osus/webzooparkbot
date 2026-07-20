@@ -199,6 +199,9 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
   // The server never returns a draw: it reruns the match until someone wins.
   const resultColor = session?.won ? 'var(--c-green)' : 'var(--c-orange)';
   const displayBet = sessionBet ?? bet;
+  const currentRound = session
+    ? Math.min(sessionHistory.length, Math.max(visibleHistory.length + (isAnimating ? 1 : 0), 1))
+    : null;
   const lastPlayer = lastRound ? getRollResult(gameId, lastRound.player_roll) : null;
   const lastAi = lastRound ? getRollResult(gameId, lastRound.ai_roll) : null;
 
@@ -220,6 +223,9 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
           <div className="text-center px-4">
             <p className="m-0 text-[13px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>
               Ставка ₽{fmt(displayBet)}
+            </p>
+            <p className="m-0 mt-1 text-[11px] font-semibold tabular-nums" style={{ color: gameRule.accent }}>
+              {currentRound ? `Ход ${currentRound} из ${sessionHistory.length}` : 'Ходов: 2–7'}
             </p>
             <p className="m-0 text-[22px]">{gameEmoji}</p>
           </div>
