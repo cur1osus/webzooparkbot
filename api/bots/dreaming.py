@@ -34,7 +34,7 @@ DREAM_AFTER_NOTES = 24
 # The model is asked to come back with at most this many conclusions. Fewer, denser notes is
 # the whole point; the cap keeps a dream from just reprinting the input.
 DREAM_TARGET_NOTES = 12
-MAX_TOKENS = 4000
+MAX_TOKENS = 8000
 
 _SYSTEM = (
     "Ты помогаешь игроку привести в порядок его заметки о собственной игре в браузерном "

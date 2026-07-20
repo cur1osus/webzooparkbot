@@ -46,7 +46,7 @@ MAX_TOOL_CALLS = 40
 DEADLINE_SECONDS = 600
 REQUEST_TIMEOUT = 240
 ATTEMPTS = 3
-MAX_TOKENS = 3000
+MAX_TOKENS = 6000
 
 # ₽ per token on RouterAI, GET /api/v1/models, 2026-07-19. Cached input is ~5x cheaper,
 # and the tool schemas are a stable ~6k-token prefix, so nearly all of it caches after the
