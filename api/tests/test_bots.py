@@ -53,6 +53,29 @@ def test_schemas_are_wellformed_for_the_api():
         assert function["parameters"]["type"] == "object"
 
 
+def test_the_squad_bounds_a_tool_advertises_are_the_ones_the_game_enforces():
+    """`start_expedition` used to advertise "1-16 своих зверей" while the game enforced 3-5.
+    The model cannot see the rule except by being refused, so a stale bound here costs it
+    real calls every turn."""
+    from api.app.zoopark.catalog import EXPEDITION_SQUAD_MAX, EXPEDITION_SQUAD_MIN
+
+    animals = tools.REGISTRY["start_expedition"].properties["animal_ids"]
+    assert animals["minItems"] == EXPEDITION_SQUAD_MIN
+    assert animals["maxItems"] == EXPEDITION_SQUAD_MAX
+
+
+def test_the_cocktail_tool_names_the_fruits_it_will_accept():
+    """The fruits are emoji. Told only "fruits", the model guesses the words "ананас" and
+    "лимон" and spends its whole turn on "Неизвестный фрукт"."""
+    from api.app.zoopark.catalog import COCKTAIL_FRUITS, COCKTAIL_LENGTH
+
+    entry = tools.REGISTRY["cocktail_guess"]
+    assert set(entry.properties["fruits"]["items"]["enum"]) == set(COCKTAIL_FRUITS)
+    assert entry.properties["fruits"]["minItems"] == COCKTAIL_LENGTH
+    for fruit in COCKTAIL_FRUITS:
+        assert fruit in entry.description, "палитра должна быть видна и в самом описании"
+
+
 def test_end_turn_exists_so_a_rival_can_stop_early():
     """Without it the only way a turn ends is by exhausting the budget, which both costs
     money and reads as a bot that cannot tell when it is finished."""

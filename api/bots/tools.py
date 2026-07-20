@@ -64,6 +64,12 @@ from api.app.schemas.social import (
     TransferCreateBody,
 )
 from api.app.schemas.status import CureBody
+from api.app.zoopark.catalog import (
+    COCKTAIL_FRUITS,
+    COCKTAIL_LENGTH,
+    EXPEDITION_SQUAD_MAX,
+    EXPEDITION_SQUAD_MIN,
+)
 from api.app.zoopark import core as core_service
 from api.app.zoopark import development as development_service
 from api.app.zoopark import economy as economy_service
@@ -358,10 +364,18 @@ def _release_animal(tg_id: int, animal_id: int, **_):
 # ── Экспедиции ────────────────────────────────────────────────────────────────
 
 
-@tool("start_expedition", "Отправить зверей в экспедицию. Глубже — больше добычи и предметов, "
-                          "но выше шанс, что звери вернутся больными или не вернутся.",
+@tool("start_expedition",
+      # The squad bounds come from the catalog rather than a literal: they used to be
+      # written here as "1-16", which is not a rule the game has ever enforced, and the
+      # model spent calls discovering the real one from refusals.
+      f"Отправить зверей в экспедицию. Глубже — больше добычи и предметов, но выше шанс, "
+      f"что звери вернутся больными или не вернутся. Отряд: от {EXPEDITION_SQUAD_MIN} до "
+      f"{EXPEDITION_SQUAD_MAX} зверей — меньше нельзя. В одной местности одновременно идёт "
+      f"только одна экспедиция, и ушедшие звери не приносят дохода, пока не вернутся.",
       {"locality_id": {"type": "integer"},
-       "animal_ids": {"type": "array", "items": {"type": "integer"}, "description": "1-16 своих зверей"},
+       "animal_ids": {"type": "array", "items": {"type": "integer"},
+                      "minItems": EXPEDITION_SQUAD_MIN, "maxItems": EXPEDITION_SQUAD_MAX,
+                      "description": f"{EXPEDITION_SQUAD_MIN}-{EXPEDITION_SQUAD_MAX} своих зверей"},
        "depth": {"type": "integer", "minimum": 1, "maximum": 5}},
       ["locality_id", "animal_ids", "depth"])
 def _start_expedition(tg_id: int, locality_id: int, animal_ids: list[int], depth: int, **_):
@@ -370,7 +384,8 @@ def _start_expedition(tg_id: int, locality_id: int, animal_ids: list[int], depth
     )
 
 
-@tool("finish_expedition", "Забрать результат готовой экспедиции.",
+@tool("finish_expedition", "Забрать результат готовой экспедиции. Вызывай только если "
+                           "get_expeditions показал готовую к сбору — иначе это пустой вызов.",
       {"expedition_id": {"type": "integer", "description": "не указывай — заберётся самая старая готовая"}})
 def _finish_expedition(tg_id: int, expedition_id: int | None = None, **_):
     return progression_service.finish_expedition(tg_id, expedition_id)
@@ -543,8 +558,17 @@ def _start_solo(tg_id: int, kind: str, stake_pct: int = 5, **_):
     return games_service.start_solo_game(tg_id, SoloStartBody(kind=kind, stake_pct=stake_pct))
 
 
-@tool("cocktail_guess", "Назвать состав коктейля в ежедневной головоломке. Разгадка даёт награду.",
-      {"fruits": {"type": "array", "items": {"type": "string"}, "description": "1-8 фруктов"}},
+@tool("cocktail_guess",
+      # The palette has to be spelled out: the fruits are emoji, and a model that has only
+      # been told "fruits" guesses the words "ананас", "лимон" and burns its whole turn on
+      # "Неизвестный фрукт" without ever learning why.
+      f"Назвать состав коктейля в ежедневной головоломке. Разгадка даёт награду. "
+      f"Ровно {COCKTAIL_LENGTH} фрукта, и только из этого набора: "
+      f"{' '.join(COCKTAIL_FRUITS)} — передавай сами эти символы, не их названия. "
+      f"Повторы разрешены. Что угадано, смотри в cocktail_state.",
+      {"fruits": {"type": "array", "items": {"type": "string", "enum": list(COCKTAIL_FRUITS)},
+                  "minItems": COCKTAIL_LENGTH, "maxItems": COCKTAIL_LENGTH,
+                  "description": f"ровно {COCKTAIL_LENGTH} символа из {''.join(COCKTAIL_FRUITS)}"}},
       ["fruits"])
 def _cocktail_guess(tg_id: int, fruits: list[str], **_):
     return games_service.cocktail_guess(tg_id, CocktailGuessBody(fruits=fruits))
@@ -634,10 +658,12 @@ def _claim_transfer(tg_id: int, code: str, **_):
 # ── Память и завершение хода ──────────────────────────────────────────────────
 
 
-@tool("remember", "Записать себе заметку на будущее. Ты сам решаешь, что стоит помнить: "
-                  "что сработало, что оказалось ошибкой, к чему ты идёшь. "
-                  "Эти заметки ты увидишь в начале следующего хода.",
-      {"note": {"type": "string", "description": "одна мысль, коротко"}}, ["note"])
+@tool("remember", "Записать себе вывод на будущее: что сработало, что оказалось ошибкой, "
+                  "к чему ты идёшь. Эти заметки ты увидишь в начале следующего хода. "
+                  "Не записывай баланс, доход и прочее, что и так видно инструментами — "
+                  "к следующему ходу это устареет, а место в блокноте вытеснит нужное. "
+                  "Одна заметка за ход, и только если узнал что-то новое.",
+      {"note": {"type": "string", "description": "один вывод, коротко"}}, ["note"])
 def _remember(player_id: int, note: str, **_):
     return memory_store.remember(player_id, note)
 
