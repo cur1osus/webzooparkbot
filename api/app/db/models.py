@@ -778,6 +778,55 @@ class CocktailDay(Base):
     )
 
 
+class SafeRound(Base):
+    """One bank-safe code, alive until somebody cracks it.
+
+    A round deliberately spans days: the whole point of the game is that published guesses
+    accumulate into a shared deduction board, and rerolling the code every midnight would
+    throw that board away. `opened_on` is only the day the round began — the day a guess
+    belongs to lives on the attempt.
+    """
+
+    __tablename__ = "safe_rounds"
+    __table_args__ = (
+        CheckConstraint("prize_usd >= 0", name="ck_safe_rounds_prize"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    secret: Mapped[str] = mapped_column(String(16), nullable=False)
+    opened_on: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
+    # Set together when a day's reveal finds an exact guess. The prize is frozen here
+    # because the treasury keeps moving after the payout.
+    solved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    prize_usd: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # The last day already revealed, so a crashed worker cannot pay a day out twice.
+    resolved_day: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
+class SafeAttempt(Base):
+    """One sealed guess. `exact`/`misplaced` are computed on submission but stay private
+    until the day's window closes — the client is served attempts of revealed days only."""
+
+    __tablename__ = "safe_attempts"
+    __table_args__ = (
+        Index("ix_safe_attempts_round_day", "round_id", "day"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    round_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("safe_rounds.id", ondelete="CASCADE"), nullable=False)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    # The day whose 19:00 window this guess was sealed in, not the calendar date: a guess
+    # sent at 22:59 and one sent at 19:01 belong to the same reveal.
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    code: Mapped[str] = mapped_column(String(16), nullable=False)
+    exact: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    misplaced: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+
+
 class DailyBonus(Base):
     """One offer per player per Moscow day starting at 07:00. `rerolls_used` is what the `bonus_rerolls` item
     property spends; the offer is generated server-side so a reroll cannot be replayed."""

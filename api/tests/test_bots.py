@@ -65,9 +65,15 @@ def test_read_only_set_covers_no_mutating_tool():
     mutating = {
         "open_pack", "buy_locality", "upgrade_locality", "breed", "release_animal",
         "start_expedition", "create_duel", "join_duel", "create_transfer", "forge_create",
-        "exchange_to_usd", "clan_create", "merchant_buy", "cure_all_animals",
+        "exchange_to_usd", "clan_create", "merchant_buy", "cure_all_animals", "safe_guess",
     }
     assert not (mutating & agent._READ_ONLY)
+
+
+def test_reading_the_safe_is_not_mistaken_for_an_action():
+    """`safe_state` matches none of the `get_`/`list_` prefixes, so without the explicit
+    entry a dry run would refuse it and every turn would report a phantom action."""
+    assert "safe_state" in agent._READ_ONLY
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────────
@@ -209,6 +215,48 @@ def test_a_corrupt_notebook_does_not_stop_the_bot(tmp_path, monkeypatch):
 def test_forget_rejects_a_number_that_is_not_there(tmp_path, monkeypatch):
     monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
     assert memory_store.forget(4, 99)["ok"] is False
+
+
+# ── the safe ──────────────────────────────────────────────────────────────────
+
+
+def test_a_rival_plays_the_safe_through_the_same_service_as_a_player(db, monkeypatch):
+    """The rival must reach the safe by the player's own path, and must learn no more from
+    it than a player does — the secret can only be deduced from the published board."""
+    from datetime import datetime, timezone
+
+    from api.app.schemas.core import RegisterBody
+    from api.app.zoopark import safe
+    from api.app.zoopark.core import register
+
+    midwindow = datetime(2026, 7, 20, 17, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(safe, "utcnow", lambda: midwindow)
+    register(-1001, RegisterBody(nickname="Сфорца"))
+
+    state = tools.call("safe_state", tg_id=-1001, player_id=1, arguments={})
+    assert state["ok"] is True and state["is_open"] is True
+    assert "secret" not in json.dumps(state, ensure_ascii=False)
+
+    guess = tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "0473"})
+    assert guess["ok"] is True and guess["attempts_left"] == 2
+    # The clue is withheld from the rival exactly as it is from a human.
+    assert "exact" not in guess
+
+
+def test_a_rival_gets_no_extra_attempts(db, monkeypatch):
+    from datetime import datetime, timezone
+
+    from api.app.schemas.core import RegisterBody
+    from api.app.zoopark import safe
+    from api.app.zoopark.core import register
+
+    monkeypatch.setattr(safe, "utcnow", lambda: datetime(2026, 7, 20, 17, 0, tzinfo=timezone.utc))
+    register(-1001, RegisterBody(nickname="Сфорца"))
+
+    for _ in range(3):
+        tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "1111"})
+    refused = tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "2222"})
+    assert refused["ok"] is False
 
 
 # ── MCP ───────────────────────────────────────────────────────────────────────

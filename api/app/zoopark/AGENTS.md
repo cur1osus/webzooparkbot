@@ -41,7 +41,9 @@ These are not style preferences. Every one of them was a live exploit.
 ## Domain Split
 
 - `catalog.py`: every balance constant and the species list. No database rows.
-- `ledger.py`: currency movement and the treasury.
+- `ledger.py`: currency movement and the treasury. `debit_treasury` is capped at the
+  balance and returns what it actually took — credit that number, never the number you
+  asked for, or the safe pays out dollars the house does not have.
 - `bonuses.py`: what a player's active items add up to.
 - `income.py`: income, upkeep, diversity, passive accrual.
 - `profile.py`: reads — the player row, the zoo, `build_state`.
@@ -51,6 +53,7 @@ These are not style preferences. Every one of them was a live exploit.
 - `merchant.py`: the three daily offers.
 - `forge.py`: items, their properties, sets.
 - `games.py`: duels, solo games, cocktail, Telegram Stars.
+- `safe.py`: the bank safe — the only path out of the treasury.
 - `social.py`: leaderboard, clans, referrals, transfers.
 - `status.py`: the daily bonus and curing animals.
 - `season.py`: the 30-day season.

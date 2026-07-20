@@ -3,8 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.games import CocktailGuessBody, DonateInvoiceBody, DuelCreateBody, SoloStartBody
+from api.app.schemas.games import CocktailGuessBody, DonateInvoiceBody, DuelCreateBody, SafeGuessBody, SoloStartBody
 from api.app.zoopark import games as games_service
+from api.app.zoopark import safe as safe_service
 
 router = APIRouter(tags=["games"])
 
@@ -47,6 +48,16 @@ def start_solo_game(body: SoloStartBody, tg_id: TelegramId):
 @router.get("/api/solo/stats")
 def solo_stats(tg_id: TelegramId):
     return games_service.solo_stats(tg_id)
+
+
+@router.get("/api/safe")
+def safe_state(tg_id: TelegramId):
+    return safe_service.safe_state(tg_id)
+
+
+@router.post("/api/safe/guess")
+def safe_guess(body: SafeGuessBody, tg_id: TelegramId):
+    return safe_service.safe_guess(tg_id, body)
 
 
 @router.get("/api/donate/info")

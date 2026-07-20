@@ -56,6 +56,7 @@ Reason = Literal[
     "solo_stake",
     "solo_payout",
     "cocktail_reward",
+    "safe_prize",
     "transfer_send",
     "transfer_claim",
     "star_payment",
@@ -155,6 +156,25 @@ def credit_treasury(session: Session, currency: Currency, amount: int) -> int:
         assert row is not None  # noqa: S101 — just inserted under the same transaction
     row.balance += amount
     return int(row.balance)
+
+
+def debit_treasury(session: Session, currency: Currency, amount: int) -> int:
+    """Take money back out of the house — currently only the bank safe.
+
+    Returns what was actually taken, which is capped at the balance: the caller decides a
+    prize from a balance it read earlier, and an exchange committing in between must not
+    be able to drive the treasury negative.
+    """
+    if amount <= 0:
+        return 0
+    row = session.get(Treasury, currency, with_for_update=True)
+    if row is None:
+        return 0
+    taken = min(int(row.balance), amount)
+    if taken <= 0:
+        return 0
+    row.balance -= taken
+    return taken
 
 
 def treasury_balance(session: Session, currency: Currency) -> int:

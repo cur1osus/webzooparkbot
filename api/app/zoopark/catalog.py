@@ -1165,6 +1165,23 @@ COCKTAIL_LENGTH = 4
 COCKTAIL_BASE_ATTEMPTS = 10
 COCKTAIL_REWARD_PAW = 150
 
+# ─── Bank safe ────────────────────────────────────────────────────────────────
+
+# The safe is the only way dollars leave the treasury. It opens once a day for a fixed
+# window; guesses stay sealed until the window closes and are then published in full, so
+# every player deduces from the same board and nobody profits from guessing last.
+SAFE_OPEN_HOUR = 19
+SAFE_WINDOW_HOURS = 4
+SAFE_CODE_LENGTH = 4
+# Digits repeat, which puts the search space at 10^4 rather than 5040. With a handful of
+# players spending SAFE_DAILY_ATTEMPTS each, that is roughly a four-to-five day round.
+SAFE_CODE_DIGITS = "0123456789"
+SAFE_DAILY_ATTEMPTS = 3
+# Half the treasury, so a round pays out visibly without handing one player a balance the
+# rest of the table cannot catch. The remainder stays in the treasury and seeds the next
+# round; it is not burned, because treasury dollars are already out of circulation.
+SAFE_PRIZE_PERCENT = 50
+
 # ─── Daily bonus ──────────────────────────────────────────────────────────────
 
 BONUS_KINDS: tuple[str, ...] = ("rub", "usd", "paw", "locality", "animal")

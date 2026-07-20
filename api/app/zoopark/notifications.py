@@ -14,13 +14,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.app.db.models import Animal, DailyBonus, Expedition, NotificationOutbox, Player, utcnow
+from api.app.zoopark import ledger
+from api.app.zoopark.catalog import SAFE_DAILY_ATTEMPTS, SAFE_PRIZE_PERCENT
 from api.app.zoopark.daily_bonus import roll_daily_bonus_offer
-from api.app.zoopark.time import moscow_period_day
+from api.app.zoopark.time import MOSCOW_TIMEZONE, moscow_period_day
 
 KIND_EXPEDITION_FINISHED = "expedition_finished"
 KIND_ANIMAL_DEATH = "animal_death"
 KIND_DAILY_BONUS_READY = "daily_bonus_ready"
 KIND_DISEASE_OUTBREAK = "disease_outbreak"
+KIND_SAFE_OPENED = "safe_opened"
+KIND_SAFE_CRACKED = "safe_cracked"
 def enqueue(
     session: Session,
     *,
@@ -135,6 +139,63 @@ def enqueue_unclaimed_daily_bonuses(session: Session, *, limit: int = 500) -> in
         if owner is not None:
             enqueue_daily_bonus_ready(session, owner, offer.bonus_date)
     return len(offers)
+
+
+def enqueue_safe_opened(session: Session, *, limit: int = 500) -> int:
+    """Announce the daily safe window to everyone, once per day.
+
+    The safe is the one feature with a hard deadline, and it is worthless to a player who
+    finds out about it at midnight — so this is a broadcast rather than a reaction to
+    something the player did. The per-player dedupe key makes a worker that scans every
+    minute for four hours enqueue exactly one message each.
+    """
+    # Imported here, not at module scope: `safe` reaches `profile` and `income`, and
+    # `income` enqueues notifications, so a top-level import closes that cycle.
+    from api.app.zoopark import safe
+
+    now = utcnow()
+    if not safe.is_open(now):
+        return 0
+    day, _, closes_at = safe.window(now)
+    round_ = safe.current_round(session, now)
+    if round_ is None:
+        return 0
+
+    pool = ledger.treasury_balance(session, "usd")
+    prize = pool * SAFE_PRIZE_PERCENT // 100
+    closes_local = closes_at.astimezone(MOSCOW_TIMEZONE).strftime("%H:%M")
+    players = session.scalars(select(Player).where(Player.status == "active").limit(limit)).all()
+    for player in players:
+        enqueue(
+            session,
+            player_id=player.id,
+            kind=KIND_SAFE_OPENED,
+            dedupe_key=f"safe-open:{day.isoformat()}:{player.id}",
+            text=(
+                f"🔐 Сейф банка открыт до {closes_local} по Москве. "
+                f"В нём ${prize}. У тебя {SAFE_DAILY_ATTEMPTS} попытки назвать код — "
+                "все догадки вскроются разом после закрытия."
+            ),
+        )
+    return len(players)
+
+
+def enqueue_safe_cracked(session: Session, result: dict, *, limit: int = 500) -> int:
+    """Tell everyone the code fell, who took the money and what the code was."""
+    names = ", ".join(payout["nickname"] or "игрок" for payout in result["payouts"]) or "никто"
+    players = session.scalars(select(Player).where(Player.status == "active").limit(limit)).all()
+    for player in players:
+        enqueue(
+            session,
+            player_id=player.id,
+            kind=KIND_SAFE_CRACKED,
+            dedupe_key=f"safe-cracked:{result['round_id']}:{player.id}",
+            text=(
+                f"💥 Сейф вскрыт! Код был {result['secret']}. "
+                f"${result['prize_usd']} забирает {names}. Новый код уже в сейфе — завтра в 19:00."
+            ),
+        )
+    return len(players)
 
 
 def enqueue_natural_death_notifications(session: Session, *, limit: int = 500) -> int:

@@ -12,7 +12,13 @@ from sqlalchemy import or_, select
 from api.app.core.telegram import call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import NotificationOutbox, Player, utcnow
-from api.app.zoopark.notifications import enqueue_natural_death_notifications, enqueue_unclaimed_daily_bonuses
+from api.app.zoopark.notifications import (
+    enqueue_natural_death_notifications,
+    enqueue_safe_cracked,
+    enqueue_safe_opened,
+    enqueue_unclaimed_daily_bonuses,
+)
+from api.app.zoopark.safe import resolve_due_days
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +50,13 @@ class NotificationWorker:
                     with get_session() as session:
                         enqueue_unclaimed_daily_bonuses(session)
                         enqueue_natural_death_notifications(session)
+                        # The safe pays real money, so it resolves on this scan rather
+                        # than lazily on a request: a day must close and pay out whether
+                        # or not anyone opens the app afterwards.
+                        cracked = resolve_due_days(session)
+                        if cracked is not None:
+                            enqueue_safe_cracked(session, cracked)
+                        enqueue_safe_opened(session)
                         session.commit()
                     next_bonus_scan = elapsed + 60.0
                 self.dispatch_due()

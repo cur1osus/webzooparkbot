@@ -13,12 +13,13 @@ import {
   apiResolveDuel,
 } from '@/api';
 import { CocktailTab } from '@/features/games/CocktailTab';
+import { SafeTab } from '@/features/games/SafeTab';
 import { SoloGameFlow } from '@/features/games/SoloGameFlow';
 import { PageHeader } from '@/components/PageHeader';
 import { copyTmaText, shareTmaUrl } from '@/lib/tma';
 import { buildBotLink, normalizeBotUsername } from '@/lib/botLinks';
 
-type GamesTab = 'solo' | 'multi' | 'cocktail';
+type GamesTab = 'solo' | 'multi' | 'cocktail' | 'safe';
 type BetAmount = 1 | 10 | 100;
 type MultiScreen = 'list' | 'share';
 
@@ -603,6 +604,7 @@ export function GamesPage({ gs, onRefresh, initialTab = 'solo', inviteGameId }: 
     { id: 'solo',     emoji: '🤖', label: 'Соло' },
     { id: 'multi',    emoji: '🏆', label: 'Мульти' },
     { id: 'cocktail', emoji: '🥤', label: 'Коктейль' },
+    { id: 'safe',     emoji: '🔐', label: 'Сейф' },
   ];
 
   return (
@@ -644,6 +646,7 @@ export function GamesPage({ gs, onRefresh, initialTab = 'solo', inviteGameId }: 
         {tab === 'solo'     && <SoloTab gs={gs} onRefresh={onRefresh} />}
         {tab === 'multi'    && <MultiTab gs={gs} onRefresh={onRefresh} inviteGameId={inviteGameId} />}
         {tab === 'cocktail' && <CocktailTab onRefresh={onRefresh} />}
+        {tab === 'safe'     && <SafeTab onRefresh={onRefresh} />}
       </div>
     </div>
   );

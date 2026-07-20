@@ -45,7 +45,7 @@ from api.app.schemas.forge import (
     ForgeSetBody,
     ForgeSetIdBody,
 )
-from api.app.schemas.games import CocktailGuessBody, DuelCreateBody, SoloStartBody
+from api.app.schemas.games import CocktailGuessBody, DuelCreateBody, SafeGuessBody, SoloStartBody
 from api.app.schemas.progression import (
     AssignLocalityBody,
     AssignMatchingLocalityBody,
@@ -71,6 +71,7 @@ from api.app.zoopark import forge as forge_service
 from api.app.zoopark import games as games_service
 from api.app.zoopark import merchant as merchant_service
 from api.app.zoopark import progression as progression_service
+from api.app.zoopark import safe as safe_service
 from api.app.zoopark import social as social_service
 from api.app.zoopark import status as status_service
 from api.bots import memory_store
@@ -240,6 +241,13 @@ def _solo_stats(tg_id: int, **_):
 @tool("cocktail_state", "Состояние головоломки с коктейлем: попытки, подсказки, разгадан ли.")
 def _cocktail_state(tg_id: int, **_):
     return games_service.cocktail_state(tg_id)
+
+
+@tool("safe_state", "Сейф банка: открыт ли он сейчас, сколько в нём денег, сколько у тебя осталось попыток "
+                    "и доска вскрытых догадок с подсказками. Вызывай в начале хода — окно короткое, "
+                    "пропустишь день и потеряешь три попытки.")
+def _safe_state(tg_id: int, **_):
+    return safe_service.safe_state(tg_id)
 
 
 @tool("get_referrals", "Свои рефералы и награды за них.")
@@ -540,6 +548,15 @@ def _start_solo(tg_id: int, kind: str, stake_pct: int = 5, **_):
       ["fruits"])
 def _cocktail_guess(tg_id: int, fruits: list[str], **_):
     return games_service.cocktail_guess(tg_id, CocktailGuessBody(fruits=fruits))
+
+
+@tool("safe_guess", "Назвать код сейфа банка. Смотри доску в safe_state и подбирай код, который не "
+                    "противоречит ни одной опубликованной подсказке. Ответа на попытку не будет — "
+                    "подсказка придёт вместе со всеми после закрытия окна.",
+      {"code": {"type": "string", "description": "4 цифры, например 0473"}},
+      ["code"])
+def _safe_guess(tg_id: int, code: str, **_):
+    return safe_service.safe_guess(tg_id, SafeGuessBody(code=code))
 
 
 # ── Профиль и косметика ───────────────────────────────────────────────────────

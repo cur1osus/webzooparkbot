@@ -21,3 +21,7 @@ class SoloStartBody(BaseModel):
 
 class CocktailGuessBody(BaseModel):
     fruits: list[str] = Field(min_length=1, max_length=8)
+
+
+class SafeGuessBody(BaseModel):
+    code: str = Field(min_length=1, max_length=16)
