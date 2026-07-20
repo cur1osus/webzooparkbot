@@ -225,6 +225,7 @@ export function MorePage({ gs, onRefresh }: { gs: GameState; onRefresh: () => vo
 function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh: () => void; botUsername: string | null }) {
   const [amount, setAmount] = useState('');
   const [parts, setParts] = useState('5');
+  const [currency, setCurrency] = useState<'rub' | 'usd'>('rub');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transfers, setTransfers] = useState<TransferOut[]>([]);
@@ -245,11 +246,12 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
     const total = parseFloat(amount);
     const max = parseInt(parts);
     if (!total || total <= 0 || !max || max <= 0) return;
-    if (total > gs.rub) { setError('Недостаточно рублей'); return; }
+    const balance = currency === 'rub' ? gs.rub : gs.usd;
+    if (total > balance) { setError(currency === 'rub' ? 'Недостаточно рублей' : 'Недостаточно долларов'); return; }
     setCreating(true);
     setError(null);
     try {
-      await apiCreateTransfer(total, max);
+      await apiCreateTransfer(total, max, currency);
       setAmount('');
       setParts('5');
       onRefresh();
@@ -274,9 +276,10 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   const total = parseFloat(amount) || 0;
   const max = parseInt(parts) || 0;
   const perPart = total && max ? Math.floor(total / max) : 0;
-  const allIn = Math.floor(gs.rub);
+  const balance = currency === 'rub' ? gs.rub : gs.usd;
+  const symbol = currency === 'rub' ? '₽' : '$';
 
-  const amountPresets = [1, 5, 10, 50].filter(v => v <= gs.rub);
+  const amountPresets = [1, 5, 10, 50].filter(v => v <= balance);
   const partsPresets = [1, 2, 5, 10, 25, 50];
 
   const pillActive: React.CSSProperties = {
@@ -293,7 +296,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
   return (
     <div className="p-[14px] flex flex-col gap-4">
       <div className="giveaway-ledger">
-        <div className="giveaway-ledger-mark">₽</div>
+        <div className="giveaway-ledger-mark">{symbol}</div>
         <div className="min-w-0 flex-1">
           <p className="giveaway-kicker">Поделись балансом</p>
           <p className="m-0 mt-1 text-[21px] leading-none font-black">Раздача денег</p>
@@ -303,13 +306,37 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
         </div>
         <div className="giveaway-ledger-balance">
           <span>баланс</span>
-          <strong>₽ {fmt(allIn)}</strong>
+          <strong>{symbol} {fmt(Math.floor(balance))}</strong>
         </div>
       </div>
 
       {/* ── Форма ── */}
       <div className="card giveaway-form-card flex flex-col gap-0">
         <p className="m-0 mb-[14px] text-[11px] font-semibold text-tg-hint tracking-[0.8px] uppercase">Новая раздача</p>
+
+        <div className="mb-3 grid grid-cols-2 gap-2" role="tablist" aria-label="Валюта раздачи">
+          {(['rub', 'usd'] as const).map(kind => {
+            const active = currency === kind;
+            const meta = kind === 'rub' ? { label: 'Рубли', icon: '₽' } : { label: 'Доллары', icon: '$' };
+            return (
+              <button
+                key={kind}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => { setCurrency(kind); setAmount(''); setError(null); }}
+                className="min-h-11 rounded-xl cursor-pointer font-bold text-[12px]"
+                style={{
+                  background: active ? 'rgba(var(--c-green-rgb),0.14)' : 'transparent',
+                  color: active ? 'var(--c-green)' : 'var(--tg-theme-hint-color)',
+                  border: active ? '1.5px solid var(--c-green)' : '1.5px solid var(--surface-overlay-border)',
+                }}
+              >
+                {meta.icon} {meta.label}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Сумма */}
         <div className="mb-3">
@@ -318,7 +345,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
             <span className="text-[12px] text-tg-hint">
               баланс{' '}
               <span className="font-semibold" style={{ color: 'var(--tg-theme-text-color)' }}>
-                ₽ {fmt(allIn)}
+                {symbol} {fmt(Math.floor(balance))}
               </span>
             </span>
           </div>
@@ -327,7 +354,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
               className="absolute left-[14px] top-1/2 -translate-y-1/2 text-[14px] font-semibold pointer-events-none"
               style={{ color: 'var(--tg-theme-hint-color)' }}
             >
-              ₽
+              {symbol}
             </span>
             <input
               type="number"
@@ -337,11 +364,11 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
               className="text-input text-[15px] font-semibold"
               style={{
                 paddingLeft: '32px',
-                border: total > gs.rub ? '1.5px solid var(--c-red-soft)' : undefined,
+                border: total > balance ? '1.5px solid var(--c-red-soft)' : undefined,
               }}
             />
           </div>
-          {(amountPresets.length > 0 || gs.rub > 0) && (
+          {(amountPresets.length > 0 || balance > 0) && (
             <div className="flex gap-[6px] mt-[8px] flex-wrap">
               {amountPresets.map(v => (
                 <button
@@ -353,12 +380,12 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
                   {v >= 1000 ? `${v / 1000}к` : v}
                 </button>
               ))}
-              {gs.rub > 0 && (
+              {balance > 0 && (
                 <button
-                  onClick={() => setAmount(String(allIn))}
+                  onClick={() => setAmount(String(Math.floor(balance)))}
                   className="px-[12px] py-[5px] rounded-full cursor-pointer text-[12px] font-semibold transition-all"
                   style={
-                    total === allIn
+                    total === Math.floor(balance)
                       ? { background: 'rgba(var(--c-gold-rgb),0.25)', color: 'var(--c-gold)', border: '1.5px solid rgba(var(--c-gold-rgb),0.5)' }
                       : { background: 'transparent', color: 'var(--c-gold)', border: '1.5px solid rgba(var(--c-gold-rgb),0.35)' }
                   }
@@ -404,7 +431,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
           <div className="flex items-center justify-between mb-3">
             <span className="text-[13px] text-tg-hint">Каждый получит</span>
             <span className="text-[15px] font-bold" style={{ color: 'var(--tg-theme-text-color)' }}>
-              ₽ {fmt(perPart)}
+              {symbol} {fmt(perPart)}
             </span>
           </div>
         )}
@@ -419,7 +446,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
 
         <button
           onClick={() => void handleCreate()}
-          disabled={creating || !total || !max || total > gs.rub}
+          disabled={creating || !total || !max || total > balance}
           className="w-full py-[13px] rounded-[12px] border-none cursor-pointer font-bold text-[15px] disabled:opacity-40 transition-opacity"
           style={{ background: 'var(--c-green)', color: 'var(--tg-theme-button-text-color)' }}
         >
@@ -442,7 +469,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
               <div key={t.code} className="card giveaway-transfer-card" style={{ opacity: t.active ? 1 : 0.6 }}>
                 {/* Заголовок */}
                 <div className="flex items-center justify-between mb-[10px]">
-                  <span className="text-[17px] font-bold">₽ {fmt(t.total_rub)}</span>
+                  <span className="text-[17px] font-bold">{t.currency === 'rub' ? '₽' : '$'} {fmt(t.total_amount)}</span>
                   <span
                     className="text-[11px] font-semibold px-[8px] py-[3px] rounded-full"
                     style={{
@@ -475,7 +502,7 @@ function GiveawayPage({ gs, onRefresh, botUsername }: { gs: GameState; onRefresh
                   <span className="text-[12px] text-tg-hint">
                     {t.claims} из {t.max_claims} получили
                   </span>
-                  <span className="text-[12px] text-tg-hint">по ₽ {fmt(t.rub_per_claim)}</span>
+                  <span className="text-[12px] text-tg-hint">по {t.currency === 'rub' ? '₽' : '$'} {fmt(t.amount_per_claim)}</span>
                 </div>
 
                 <p className="m-0 text-[11px] text-tg-hint mb-[10px]">{formatDateShort(t.created_at)}</p>

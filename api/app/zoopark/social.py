@@ -621,15 +621,25 @@ def transfers_create(tg_id: int, body: TransferCreateBody) -> dict:
         transfer = Transfer(
             code=secrets.token_urlsafe(12),
             sender_id=player.id,
+            currency=body.currency,
             amount_per_claim=amount_per_claim,
             max_claims=body.max_claims,
             expires_at=utcnow() + timedelta(hours=TRANSFER_TTL_HOURS),
         )
         session.add(transfer)
         session.flush()
-        ledger.spend(session, player, "rub", total, "transfer_send", ref_table="transfers", ref_id=transfer.id)
+        ledger.spend(session, player, body.currency, total, "transfer_send", ref_table="transfers", ref_id=transfer.id)
 
-        result = {"code": transfer.code, "total_rub": total, "new_rub": ledger.balance(player, "rub")}
+        result = {
+            "code": transfer.code,
+            "currency": body.currency,
+            "total_amount": total,
+            "amount_per_claim": amount_per_claim,
+            f"new_{body.currency}": ledger.balance(player, body.currency),
+        }
+        # Keep the old response fields for clients that still understand ruble-only transfers.
+        if body.currency == "rub":
+            result.update({"total_rub": total, "new_rub": ledger.balance(player, "rub")})
         session.commit()
         return result
 
@@ -659,9 +669,9 @@ def transfer_claim(tg_id: int, code: str) -> dict:
         transfer.claims_used += 1
         if transfer.claims_used >= transfer.max_claims:
             transfer.closed_at = utcnow()
-        ledger.grant(session, player, "rub", amount, "transfer_claim", ref_table="transfers", ref_id=transfer.id)
+        ledger.grant(session, player, transfer.currency, amount, "transfer_claim", ref_table="transfers", ref_id=transfer.id)
 
-        new_rub = ledger.balance(player, "rub")
+        new_balance = ledger.balance(player, transfer.currency)
         try:
             session.commit()
         except IntegrityError as exc:
@@ -669,7 +679,16 @@ def transfer_claim(tg_id: int, code: str) -> dict:
             session.rollback()
             raise HTTPException(400, "Ты уже получил этот перевод") from exc
 
-        return {"ok": True, "rub_received": amount, "new_rub": new_rub}
+        result = {
+            "ok": True,
+            "currency": transfer.currency,
+            "amount_received": amount,
+            f"new_{transfer.currency}": new_balance,
+        }
+        if transfer.currency == "rub":
+            result["rub_received"] = amount
+            result["new_rub"] = new_balance
+        return result
 
 
 def my_transfers(tg_id: int) -> dict:
@@ -687,8 +706,11 @@ def my_transfers(tg_id: int) -> dict:
             "transfers": [
                 {
                     "code": row.code,
-                    "total_rub": row.amount_per_claim * row.max_claims,
-                    "rub_per_claim": row.amount_per_claim,
+                    "currency": row.currency,
+                    "total_amount": row.amount_per_claim * row.max_claims,
+                    "amount_per_claim": row.amount_per_claim,
+                    "total_rub": row.amount_per_claim * row.max_claims if row.currency == "rub" else None,
+                    "rub_per_claim": row.amount_per_claim if row.currency == "rub" else None,
                     "max_claims": row.max_claims,
                     "claims": row.claims_used,
                     "active": row.closed_at is None and row.expires_at > utcnow(),

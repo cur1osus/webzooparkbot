@@ -117,8 +117,11 @@ export interface ReferralResponse {
 
 export interface TransferOut {
   code: string;
-  total_rub: number;
-  rub_per_claim: number;
+  currency: 'rub' | 'usd';
+  total_amount: number;
+  amount_per_claim: number;
+  total_rub: number | null;
+  rub_per_claim: number | null;
   max_claims: number;
   claims: number;
   active: boolean;
@@ -128,12 +131,19 @@ export interface TransferOut {
 
 export interface TransferCreateResponse {
   code: string;
-  total_rub: number;
-  new_rub: number;
+  currency: 'rub' | 'usd';
+  total_amount: number;
+  amount_per_claim: number;
+  total_rub?: number;
+  new_rub?: number;
+  new_usd?: number;
 }
 
 export interface TransferClaimResponse {
   ok: boolean;
-  rub_received: number;
-  new_rub: number;
+  currency: 'rub' | 'usd';
+  amount_received: number;
+  rub_received?: number;
+  new_rub?: number;
+  new_usd?: number;
 }

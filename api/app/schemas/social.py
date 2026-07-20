@@ -29,3 +29,4 @@ class ClanSpecializationBody(BaseModel):
 class TransferCreateBody(BaseModel):
     total_rub: int = Field(ge=1)
     max_claims: int = Field(ge=1, le=100)
+    currency: Literal["rub", "usd"] = "rub"

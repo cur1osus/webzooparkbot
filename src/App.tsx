@@ -180,8 +180,14 @@ export default function App() {
     void apiClaimTransfer(transferCode)
       .then((result) => {
         rememberTransferHandled(state.tg_id, transferCode);
-        patchState({ rub: result.new_rub });
-        setTransferNotice({ kind: 'success', message: `Получено ₽ ${fmt(result.rub_received)} из раздачи` });
+        patchState({
+          ...(result.new_rub !== undefined ? { rub: result.new_rub } : {}),
+          ...(result.new_usd !== undefined ? { usd: result.new_usd } : {}),
+        });
+        setTransferNotice({
+          kind: 'success',
+          message: `Получено ${result.currency === 'usd' ? '$' : '₽'} ${fmt(result.amount_received)} из раздачи`,
+        });
       })
       .catch((e) => {
         // A launch parameter survives reloads in Telegram. Once the server confirms

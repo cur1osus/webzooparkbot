@@ -857,6 +857,7 @@ class Transfer(Base):
     __tablename__ = "transfers"
     __table_args__ = (
         CheckConstraint("amount_per_claim > 0", name="ck_transfers_amount"),
+        CheckConstraint("currency IN ('rub', 'usd')", name="ck_transfers_currency"),
         CheckConstraint("max_claims > 0", name="ck_transfers_max_claims"),
         CheckConstraint("claims_used >= 0 AND claims_used <= max_claims", name="ck_transfers_claims_used"),
         Index("ix_transfers_sender", "sender_id"),
@@ -866,6 +867,7 @@ class Transfer(Base):
     id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="rub", server_default="rub")
     amount_per_claim: Mapped[int] = mapped_column(BigInteger, nullable=False)
     max_claims: Mapped[int] = mapped_column(Integer, nullable=False)
     claims_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

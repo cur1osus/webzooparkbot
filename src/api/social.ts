@@ -44,10 +44,10 @@ export const apiChooseClanSpecialization = (specialization: string) =>
 
 export const apiGetReferrals = () => req<ReferralResponse>('/referrals');
 
-export const apiCreateTransfer = (total_rub: number, max_claims: number) =>
+export const apiCreateTransfer = (total: number, max_claims: number, currency: 'rub' | 'usd') =>
   req<TransferCreateResponse>('/transfers', {
     method: 'POST',
-    body: JSON.stringify({ total_rub: Math.floor(total_rub), max_claims }),
+    body: JSON.stringify({ total_rub: Math.floor(total), max_claims, currency }),
   });
 export const apiClaimTransfer = (code: string) =>
   req<TransferClaimResponse>(`/transfers/${encodeURIComponent(code)}/claim`, { method: 'POST' });
