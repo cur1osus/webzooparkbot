@@ -479,7 +479,7 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
       )}
 
       {tab === 'forge' && (
-        <ForgeTab items={gs.items} sets={gs.item_sets}
+        <ForgeTab items={gs.items} sets={gs.item_sets} bonuses={gs.active_item_bonuses}
           busy={busy}
           message={message}
           onApplySet={(setId) => void runForgeAction(async () => {

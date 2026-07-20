@@ -34,6 +34,16 @@ class Bonuses:
         """Value of a per-species kind, e.g. `income_species` for the giraffes you own."""
         return self._by_species.get((kind, species_id), 0)
 
+    def entries(self) -> list[tuple[str, int | None, int]]:
+        """Every effective value the active items produce, as `(kind, species_id, value)`.
+
+        Already summed and capped — this is what the game actually applies, which is *not*
+        the linear sum of the per-item labels once a cap bites. Global kinds first, then
+        per-species. Feeds the profile summary so the player sees the real total."""
+        globals_ = [(kind, None, value) for kind, value in self._global.items()]
+        species = [(kind, species_id, value) for (kind, species_id), value in self._by_species.items()]
+        return globals_ + species
+
     def income_multiplier(self) -> float:
         return 1 + self.total("income_total") / 100
 

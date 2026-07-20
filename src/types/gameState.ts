@@ -36,6 +36,22 @@ export interface ItemProperty {
   unit: 'percent_bonus' | 'percent_discount' | 'flat';
 }
 
+/** One effective (already summed and capped) total across the player's active items. Unlike
+ *  {@link ItemProperty}, this is what the game actually applies — the naive per-item sum can
+ *  overshoot a cap. Built by `active_bonus_summary` on the server. */
+export interface ActiveItemBonus {
+  kind: PropertyKind;
+  /** The effective value after summing active items and clipping to `cap`. */
+  value: number;
+  species_code: string | null;
+  label: string;
+  unit: 'percent_bonus' | 'percent_discount' | 'flat';
+  /** The kind's ceiling, or null when the effect is uncapped. */
+  cap: number | null;
+  /** True when `value` has reached `cap`, so the client can show a "макс." marker. */
+  capped: boolean;
+}
+
 export type ItemRarity = 'common' | 'rare' | 'epic' | 'mythical' | 'legendary';
 
 /** Where an item came from. A found item was never bought, so selling it refunds no
@@ -121,6 +137,9 @@ export interface GameState {
   season_ends_at: string;
 
   items: ForgeItem[];
+  /** Effective, capped totals of the active loadout — what the game actually applies, so the
+   *  forge can show real numbers instead of summing per-item labels past their caps. */
+  active_item_bonuses: ActiveItemBonus[];
   /** Server-authoritative price to forge the next item; escalates with lifetime creations. */
   forge_create_cost_usd: number;
   item_sets: ForgeSet[];

@@ -1,7 +1,15 @@
 import { useState } from 'react';
-import type { ForgeItem, ForgeSet, PropertyKind } from '@/types';
+import type { ActiveItemBonus, ForgeItem, ForgeSet } from '@/types';
 import { PROPERTY_ICON, PROPERTY_SHORT } from '@/data/itemProperties';
 import { fmt } from '@/utils/format';
+
+/** How the effective value reads next to its label: a percent for the percent kinds, a bare
+ *  count for the flat kinds. The sign is carried by the unit, so a discount shows as "−50%". */
+function bonusValueText(bonus: ActiveItemBonus): string {
+  if (bonus.unit === 'percent_bonus') return `+${bonus.value}%`;
+  if (bonus.unit === 'percent_discount') return `−${bonus.value}%`;
+  return `+${bonus.value}`;
+}
 
 function forgeItemIcon(item: ForgeItem): string {
   const first = item.properties?.[0]?.kind;
@@ -21,8 +29,8 @@ const RARITY_LABEL: Record<string, string> = {
   common: 'Обычный', rare: 'Редкий', epic: 'Эпический', mythical: 'Мифический', legendary: 'Легендарный',
 };
 
-export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems, onItemDetail }: {
-  items: ForgeItem[]; sets: ForgeSet[];
+export function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems, onItemDetail }: {
+  items: ForgeItem[]; sets: ForgeSet[]; bonuses: ActiveItemBonus[];
   busy: boolean; message: string | null;
   onApplySet: (id: string) => void; onCreateSet: (name?: string) => void; onDeleteSet: (id: string) => void;
   onSelectItems: (id: string) => void; onItemDetail: (id: string) => void;
@@ -31,14 +39,9 @@ export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, 
   const activeItems = items.filter(i => i.is_active);
   const activeSet = sets.find(s => s.is_active) ?? null;
   const orderedSets = [...sets].sort((a, b) => Number(b.is_active) - Number(a.is_active));
-  // Mirrors `bonuses.load()` on the server, minus the caps: this is a summary, not a rule.
-  const bonuses: Partial<Record<PropertyKind, number>> = {};
-  for (const item of activeItems) {
-    for (const p of item.properties ?? []) {
-      bonuses[p.kind] = (bonuses[p.kind] ?? 0) + p.value;
-    }
-  }
-  const bonusEntries = Object.entries(bonuses) as [PropertyKind, number][];
+  // The effective, already-capped totals from the server — the numbers the game actually
+  // applies. Summing per-item labels here would overshoot the caps and mislead the player.
+  const bonusEntries = bonuses;
 
   return (
     <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
@@ -80,13 +83,17 @@ export function ForgeTab({ items, sets, busy, message, onApplySet, onCreateSet, 
         </div>
 
         {bonusEntries.length > 0 && (
-          <div className="relative mt-3 flex flex-wrap gap-[6px]">
-            {bonusEntries.map(([type, val]) => (
-              <span key={type} className="px-[9px] py-[5px] rounded-full text-[12px] font-semibold" style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)' }}>
-                {PROPERTY_ICON[type] ?? '✨'} {PROPERTY_SHORT[type] ?? type}: {val}
-              </span>
-            ))}
-          </div>
+          <>
+            <div className="relative mt-3 flex flex-wrap gap-[6px]">
+              {bonusEntries.map((bonus, index) => (
+                <span key={`${bonus.kind}-${bonus.species_code ?? 'all'}-${index}`} className="px-[9px] py-[5px] rounded-full text-[12px] font-semibold inline-flex items-center gap-[5px]" style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)' }}>
+                  {PROPERTY_ICON[bonus.kind] ?? '✨'} {PROPERTY_SHORT[bonus.kind] ?? bonus.kind}: {bonusValueText(bonus)}
+                  {bonus.capped && <span className="px-[5px] py-px rounded-full text-[9px] font-bold uppercase tracking-[0.4px]" style={{ background: 'rgba(var(--c-orange-rgb),0.18)', color: 'var(--c-orange)' }}>макс.</span>}
+                </span>
+              ))}
+            </div>
+            <p className="relative mt-2 mb-0 text-[10px] text-tg-hint">Итог по активным предметам — уже с учётом лимитов. «Макс.» значит, что бонус упёрся в потолок.</p>
+          </>
         )}
       </div>
 

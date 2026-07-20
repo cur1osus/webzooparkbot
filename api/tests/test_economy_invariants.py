@@ -484,6 +484,30 @@ class TestEveryItemPropertyIsApplied:
         with get_session() as session:
             assert bonuses_module.load(session, 1).total("discount_upkeep") == 30
 
+    def test_active_summary_shows_the_capped_total_not_the_naive_sum(self, db, player):
+        """The forge summary must report what the game applies. Two −45% upkeep items sum to
+        −90%, but the cap is 50%, so the player must see −50% flagged as maxed — never −90%."""
+        from api.app.zoopark.core import me
+
+        _activate(player, "discount_upkeep", 45)
+        _activate(player, "discount_upkeep", 45)
+        summary = me(player)["active_item_bonuses"]
+        upkeep = next(entry for entry in summary if entry["kind"] == "discount_upkeep")
+        assert upkeep["value"] == 50  # 90 clipped to the kind's cap
+        assert upkeep["capped"] is True
+        assert "−50%" in upkeep["label"]
+
+    def test_active_summary_omits_uncapped_kinds_from_the_ceiling_flag(self, db, player):
+        """`income_total` has no cap, so a large stack is reported in full and never flagged."""
+        from api.app.zoopark.core import me
+
+        _activate(player, "income_total", 45)
+        _activate(player, "income_total", 45)
+        summary = me(player)["active_item_bonuses"]
+        income = next(entry for entry in summary if entry["kind"] == "income_total")
+        assert income["value"] == 90
+        assert income["capped"] is False
+
 
 def _stock_zoo(telegram_id: int, count: int = 7) -> None:
     """A deterministic zoo whose upkeep is well clear of integer-rounding granularity.

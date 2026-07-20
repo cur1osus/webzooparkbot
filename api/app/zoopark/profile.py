@@ -78,6 +78,33 @@ def _property_payload(item: Item) -> list[dict]:
     return payload
 
 
+def active_bonus_summary(bonuses: Bonuses) -> list[dict]:
+    """The effective, already-capped totals across the player's active items — what the game
+    actually applies. Shown in the forge so a player who stacks two −45% upkeep items sees
+    the real −50%, not a −90% that the caps quietly clip. Same shape as a single item's
+    property, plus `cap`/`capped` so the client can flag an effect that has hit its ceiling."""
+    summary: list[dict] = []
+    for kind, species_id, value in bonuses.entries():
+        spec = ITEM_PROPERTIES.get(cast(PropertyKind, kind))
+        if spec is None or value == 0:
+            continue
+        species = SPECIES_BY_ID.get(species_id) if species_id else None
+        cap = spec["cap"]
+        summary.append(
+            {
+                "kind": kind,
+                "value": value,
+                "species_code": species["code"] if species else None,
+                "label": property_label(kind, value, species["name"] if species else None),
+                "unit": spec["unit"],
+                "cap": cap,
+                "capped": cap is not None and value >= cap,
+            }
+        )
+    summary.sort(key=lambda entry: (entry["kind"], entry["species_code"] or ""))
+    return summary
+
+
 def property_label(kind: str, value: int, species_name: str | None = None) -> str:
     spec = ITEM_PROPERTIES.get(cast(PropertyKind, kind))
     if spec is None:
@@ -325,6 +352,9 @@ def build_state(session: Session, player: Player) -> dict:
         "season_started_at": _iso(season.starts_at),
         "season_ends_at": _iso(season.ends_at),
         "items": items,
+        # Effective, capped totals of the active loadout — the numbers the game applies, so
+        # the forge can stop summing per-item labels past their caps (see `active_bonus_summary`).
+        "active_item_bonuses": active_bonus_summary(bonuses),
         # Price to forge the next item — escalates with lifetime creations, so the client
         # shows the true next cost instead of guessing from items currently on hand.
         "forge_create_cost_usd": forge_create_cost_usd(
