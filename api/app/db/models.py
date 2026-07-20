@@ -40,7 +40,7 @@ from sqlalchemy import (
     TypeDecorator,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.mysql import MEDIUMBLOB
+from sqlalchemy.dialects.mysql import MEDIUMBLOB, MEDIUMTEXT
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from api.app.zoopark.catalog import (
@@ -1146,7 +1146,11 @@ class BotPlan(Base):
     # Round trips to the model. A turn's cost is this number — not the tool count, since the
     # tools are local calls and the model routinely batches ten of them into one round.
     rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    tool_calls: Mapped[str] = mapped_column(Text, nullable=False)
+    # MEDIUMTEXT, not TEXT: a turn on a grown zoo serialises past MySQL's 64 KiB TEXT limit,
+    # and the insert then throws. SQLite's TEXT is unbounded, so the tests never saw it.
+    tool_calls: Mapped[str] = mapped_column(
+        Text().with_variant(MEDIUMTEXT(), "mysql"), nullable=False
+    )
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Why the turn ended: on its own via end_turn, or against a budget. Turns that all end
     # on the limit mean the budget is too tight for what the rival is trying to do.

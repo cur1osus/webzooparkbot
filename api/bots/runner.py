@@ -99,24 +99,64 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
         _print_turn(nickname, character, result)
         return True
 
+    # The schedule is moved first, in a transaction of its own, and the journal is written
+    # second. They used to share one — and when the journal insert failed, the rollback took
+    # the new `next_turn_at` with it, so the rival came back a minute later and paid the
+    # model for another turn. It looped for half an hour that way, at roughly fifteen times
+    # its intended spend, and the journal that would have shown it was the thing failing.
+    # Nothing about recording history is worth re-running the turn it describes.
     with get_session() as session:
-        session.add(BotPlan(
-            player_id=player_id,
-            character=character.key,
-            rounds=result.rounds,
-            tool_calls=json.dumps(result.tool_calls, ensure_ascii=False, default=str),
-            summary=result.summary,
-            stopped_because=result.stopped_because,
-            prompt_tokens=result.prompt_tokens,
-            cached_tokens=result.cached_tokens,
-            completion_tokens=result.completion_tokens,
-            reasoning_tokens=result.reasoning_tokens,
-            cost_micro_rub=result.cost_micro_rub,
-        ))
         profile = session.get(BotProfile, player_id)
         profile.next_turn_at = now + timedelta(minutes=turn_every)
         session.commit()
+
+    try:
+        with get_session() as session:
+            session.add(BotPlan(
+                player_id=player_id,
+                character=character.key,
+                rounds=result.rounds,
+                tool_calls=_journal(result.tool_calls),
+                summary=result.summary,
+                stopped_because=result.stopped_because,
+                prompt_tokens=result.prompt_tokens,
+                cached_tokens=result.cached_tokens,
+                completion_tokens=result.completion_tokens,
+                reasoning_tokens=result.reasoning_tokens,
+                cost_micro_rub=result.cost_micro_rub,
+            ))
+            session.commit()
+    except Exception:
+        logger.exception("bot %s: ход прошёл, но не записался в журнал", nickname)
     return True
+
+
+# MySQL's TEXT holds 64 KiB, and a single `list_animals` on a grown zoo is already a few of
+# them. SQLite has no such ceiling, which is why this only ever failed in production.
+# The column is MEDIUMTEXT now, but the journal is capped anyway: it exists to be read, and
+# a turn's worth of raw catalogue JSON is not readable at any size.
+MAX_RESULT_CHARS = 2_000
+MAX_JOURNAL_CHARS = 200_000
+
+
+def _journal(tool_calls: list[dict]) -> str:
+    """Serialise a turn's calls for the journal, with each result clipped to a readable size."""
+    clipped = []
+    for call in tool_calls:
+        rendered = json.dumps(call.get("результат"), ensure_ascii=False, default=str)
+        if len(rendered) > MAX_RESULT_CHARS:
+            rendered = rendered[:MAX_RESULT_CHARS] + f"… (обрезано, всего {len(rendered)} символов)"
+        clipped.append({
+            "name": call.get("name"),
+            "аргументы": call.get("аргументы"),
+            "результат": rendered,
+        })
+    payload = json.dumps(clipped, ensure_ascii=False, default=str)
+    # A backstop for a turn that is long rather than verbose: better a truncated journal
+    # than an insert that throws and loses the row entirely.
+    if len(payload) > MAX_JOURNAL_CHARS:
+        payload = payload[:MAX_JOURNAL_CHARS] + "…"
+    return payload
 
 
 def _print_turn(nickname: str, character, result: agent.TurnResult) -> None:

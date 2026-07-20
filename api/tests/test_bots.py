@@ -12,9 +12,9 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from api.bots import agent, memory_store, tools
+from api.bots import agent, memory_store, runner, tools
 from api.bots.characters import CHARACTERS, get
-from api.bots.runner import _awake
+from api.bots.runner import _awake, _journal
 
 
 class _Profile:
@@ -164,6 +164,72 @@ def test_actions_exclude_reads():
         {"name": "breed", "аргументы": {}, "результат": {"ok": True}},
     ]
     assert [call["name"] for call in result.actions] == ["breed"]
+
+
+# ── the journal ───────────────────────────────────────────────────────────────
+
+
+def test_a_huge_turn_still_fits_the_journal_column():
+    """MySQL's TEXT holds 64 KiB and a grown zoo serialises past it, which threw on insert
+    and lost the row. SQLite is unbounded, so only production ever saw this."""
+    fat = {"animals": [{"id": i, "name": "зверь", "genes": "x" * 200} for i in range(400)]}
+    payload = _journal([{"name": "list_animals", "аргументы": {}, "результат": fat}] * 30)
+    assert len(payload) <= runner.MAX_JOURNAL_CHARS + 1
+    assert len(payload.encode("utf-8")) < 16 * 1024 * 1024, "должно влезать в MEDIUMTEXT"
+
+
+def test_the_journal_keeps_what_a_review_needs():
+    """Clipping is for the payloads, not the shape: which tool ran with which arguments is
+    the whole point of reading the log a day later."""
+    payload = _journal([{"name": "breed", "аргументы": {"a": 1}, "результат": {"ok": True}}])
+    entry = json.loads(payload)[0]
+    assert entry["name"] == "breed" and entry["аргументы"] == {"a": 1}
+    assert "ok" in entry["результат"]
+
+
+def test_a_clipped_result_says_that_it_was_clipped():
+    payload = _journal([{"name": "list_animals", "аргументы": {}, "результат": {"x": "y" * 9000}}])
+    assert "обрезано" in json.loads(payload)[0]["результат"]
+
+
+def test_a_failed_journal_does_not_make_the_rival_take_the_turn_again(db, monkeypatch):
+    """The journal insert and the schedule update once shared a transaction, so a failing
+    insert rolled back `next_turn_at` too and the rival came back a minute later and paid
+    for another turn. It ran that loop for half an hour at ~15x its intended spend."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from api.app.db.connection import get_session
+    from api.app.db.models import BotProfile, Player, utcnow
+    from api.app.schemas.core import RegisterBody
+    from api.app.zoopark.core import register
+
+    register(-1002, RegisterBody(nickname="Сфорца"))
+    with get_session() as session:
+        player = session.scalar(select(Player).where(Player.telegram_id == -1002))
+        player.is_bot = True
+        player_id = player.id
+        session.add(BotProfile(
+            player_id=player_id, character="gambler", enabled=True, turn_every_minutes=45,
+            wake_hour_utc=0, sleep_hour_utc=0, biography="", created_at=utcnow(),
+        ))
+        session.commit()
+
+    monkeypatch.setattr(runner.agent, "run_turn", lambda *a, **k: agent.TurnResult(rounds=3))
+
+    def explode(_):
+        raise RuntimeError("Data too long for column 'tool_calls'")
+
+    monkeypatch.setattr(runner, "_journal", explode)
+
+    before = utcnow()
+    assert runner._process(player_id, before, dry_run=False) is True
+
+    with get_session() as session:
+        profile = session.get(BotProfile, player_id)
+        assert profile.next_turn_at is not None, "расписание не должно откатываться вместе с логом"
+        assert profile.next_turn_at >= before + timedelta(minutes=44)
 
 
 # ── characters and rhythm ─────────────────────────────────────────────────────
