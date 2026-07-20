@@ -19,6 +19,14 @@ MIDWINDOW = OPEN + timedelta(hours=1)
 CLOSED = OPEN + timedelta(hours=5)
 NEXT_DAY = OPEN + timedelta(days=1, hours=1)
 
+# Коды длиной SAFE_CODE_LENGTH с проверенными подсказками, чтобы смена длины правилась
+# в одном месте, а не в тридцати литералах.
+SECRET = "401729"
+NEAR = "401000"       # (3, 0) — три цифры на месте
+SCRAMBLED = "297401"  # (0, 6) — те же цифры, все не на месте
+MISS = "888888"       # (0, 0)
+OTHER_MISS = "777777"
+
 
 @pytest.fixture()
 def at(monkeypatch):
@@ -102,7 +110,7 @@ def test_guess_is_rejected_outside_the_window(db, at):
     _register(1001)
     at(CLOSED)
     with pytest.raises(HTTPException) as excinfo:
-        safe.safe_guess(1001, SafeGuessBody(code="1234"))
+        safe.safe_guess(1001, SafeGuessBody(code=SECRET))
     assert excinfo.value.status_code == 400
 
 
@@ -110,15 +118,15 @@ def test_only_three_guesses_per_day(db, at):
     _register(1001)
     at(MIDWINDOW)
     for expected_left in (2, 1, 0):
-        assert safe.safe_guess(1001, SafeGuessBody(code="1234"))["attempts_left"] == expected_left
+        assert safe.safe_guess(1001, SafeGuessBody(code=SECRET))["attempts_left"] == expected_left
     with pytest.raises(HTTPException):
-        safe.safe_guess(1001, SafeGuessBody(code="5678"))
+        safe.safe_guess(1001, SafeGuessBody(code=OTHER_MISS))
 
 
 def test_malformed_codes_are_refused(db, at):
     _register(1001)
     at(MIDWINDOW)
-    for code in ("123", "12345", "12a4", "  12"):
+    for code in ("12345", "1234567", "12a456", "  1234"):
         with pytest.raises(HTTPException):
             safe.safe_guess(1001, SafeGuessBody(code=code))
 
@@ -126,8 +134,8 @@ def test_malformed_codes_are_refused(db, at):
 def test_the_response_carries_no_clue(db, at):
     _register(1001)
     at(MIDWINDOW)
-    _force_secret("1234")
-    result = safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    result = safe.safe_guess(1001, SafeGuessBody(code=SECRET))
     assert "exact" not in result and "misplaced" not in result
 
 
@@ -137,14 +145,14 @@ def test_the_response_carries_no_clue(db, at):
 def test_todays_guesses_stay_off_the_board_until_the_window_closes(db, at):
     _register(1001, 1002)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1200"))
-    safe.safe_guess(1002, SafeGuessBody(code="5634"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=NEAR))
+    safe.safe_guess(1002, SafeGuessBody(code=SCRAMBLED))
 
     # Mid-window: a player sees only that their own guesses are locked in.
     state = safe.safe_state(1001)
     assert state["board"] == []
-    assert state["pending_codes"] == ["1200"]
+    assert state["pending_codes"] == [NEAR]
     assert state["is_open"] is True
 
     at(CLOSED)
@@ -153,14 +161,14 @@ def test_todays_guesses_stay_off_the_board_until_the_window_closes(db, at):
     assert state["pending_codes"] == []
     board = {entry["code"]: (entry["exact"], entry["misplaced"]) for entry in state["board"]}
     # Everyone's guesses appear at once, with the clues the other players earned.
-    assert board == {"1200": (2, 0), "5634": (2, 0)}
+    assert board == {NEAR: (3, 0), SCRAMBLED: (0, 6)}
 
 
 def test_a_late_player_cannot_read_the_board_before_guessing(db, at):
     _register(1001, 1002)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
     assert safe.safe_state(1002)["board"] == []
 
 
@@ -170,8 +178,8 @@ def test_a_late_player_cannot_read_the_board_before_guessing(db, at):
 def test_an_uncracked_code_survives_to_the_next_day(db, at):
     _register(1001)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="9999"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=MISS))
 
     at(CLOSED)
     with get_session() as session:
@@ -181,8 +189,8 @@ def test_an_uncracked_code_survives_to_the_next_day(db, at):
     at(NEXT_DAY)
     state = safe.safe_state(1001)
     # Same secret, and yesterday's guess is still on the board to reason from.
-    assert _secret() == "1234"
-    assert [entry["code"] for entry in state["board"]] == ["9999"]
+    assert _secret() == SECRET
+    assert [entry["code"] for entry in state["board"]] == [MISS]
     assert state["attempts_left"] == 3
 
 
@@ -191,8 +199,8 @@ def test_cracking_the_code_pays_half_the_treasury_and_starts_a_new_round(db, at)
     _fill_treasury(1000)
     before = _usd(1001)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -200,7 +208,7 @@ def test_cracking_the_code_pays_half_the_treasury_and_starts_a_new_round(db, at)
         session.commit()
 
     assert result["prize_usd"] == 500
-    assert result["secret"] == "1234"
+    assert result["secret"] == SECRET
     assert [payout["usd"] for payout in result["payouts"]] == [500]
 
     assert _usd(1001) - before == 500
@@ -209,7 +217,7 @@ def test_cracking_the_code_pays_half_the_treasury_and_starts_a_new_round(db, at)
 
     at(NEXT_DAY)
     safe.safe_state(1001)
-    assert _secret() != "1234"
+    assert _secret() != SECRET
 
 
 def test_the_replacement_round_never_reuses_the_cracked_code(db, at):
@@ -217,8 +225,8 @@ def test_the_replacement_round_never_reuses_the_cracked_code(db, at):
     _register(1001)
     _fill_treasury(1000)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -232,7 +240,7 @@ def test_the_replacement_round_never_reuses_the_cracked_code(db, at):
         assert fresh.solved_at is None
         assert fresh.opened_on == DAY + timedelta(days=1)
 
-    assert _secret() != "1234"
+    assert _secret() != SECRET
     assert safe.safe_state(1001)["board"] == [], "the new round starts on a clean board"
 
 
@@ -240,9 +248,9 @@ def test_a_tie_splits_the_prize_evenly(db, at):
     _register(1001, 1002)
     _fill_treasury(1000)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
-    safe.safe_guess(1002, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
+    safe.safe_guess(1002, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -260,8 +268,8 @@ def test_resolving_twice_pays_once(db, at):
     _fill_treasury(1000)
     before = _usd(1001)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -279,8 +287,8 @@ def test_resolving_twice_pays_once(db, at):
 def test_an_empty_treasury_pays_nothing_and_still_ends_the_round(db, at):
     _register(1001)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -297,8 +305,8 @@ def test_the_payout_reconciles_with_the_ledger(db, at):
     _fill_treasury(777)
     before = _usd(1001)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -321,8 +329,8 @@ def test_the_payout_is_journalled_against_the_round(db, at):
     _register(1001)
     _fill_treasury(1000)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     at(CLOSED)
     with get_session() as session:
@@ -347,12 +355,12 @@ def test_an_earlier_day_wins_before_a_later_one(db, at):
     _register(1001, 1002)
     _fill_treasury(1000)
     at(MIDWINDOW)
-    _force_secret("1234")
-    safe.safe_guess(1001, SafeGuessBody(code="1234"))
+    _force_secret(SECRET)
+    safe.safe_guess(1001, SafeGuessBody(code=SECRET))
 
     # A second crack lands the following evening, before anything was resolved.
     at(NEXT_DAY)
-    safe.safe_guess(1002, SafeGuessBody(code="1234"))
+    safe.safe_guess(1002, SafeGuessBody(code=SECRET))
 
     later = NEXT_DAY + timedelta(hours=4)
     with get_session() as session:
@@ -374,6 +382,6 @@ def test_guesses_are_attributed_to_the_window_not_the_calendar_date(db, at):
     _register(1001)
     late = OPEN + timedelta(hours=3, minutes=59)
     at(late)
-    safe.safe_guess(1001, SafeGuessBody(code="1111"))
+    safe.safe_guess(1001, SafeGuessBody(code=MISS))
     with get_session() as session:
         assert session.query(SafeAttempt).one().day == DAY

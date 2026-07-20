@@ -130,12 +130,14 @@ export function SafeTab({ onRefresh }: { onRefresh: () => void }) {
 
       {open && (
         <>
-          <div className="flex gap-2 justify-center">
+          {/* Ячейки тянутся, а не заданы жёстко: шесть штук по 58px не помещаются в
+              375px, и код любой длины должен влезать без горизонтальной прокрутки. */}
+          <div className="flex gap-1.5 justify-center">
             {Array.from({ length: codeLength }, (_, index) => (
               <div
                 key={index}
                 onClick={() => setSlots((current) => current.slice(0, index))}
-                className="w-[58px] h-[68px] rounded-2xl grid place-items-center text-[30px] font-black transition-all duration-150"
+                className="flex-1 min-w-0 max-w-[58px] h-[64px] rounded-2xl grid place-items-center text-[26px] font-black transition-all duration-150"
                 style={{
                   background: slots[index]
                     ? 'rgba(var(--c-gold-rgb),0.12)'

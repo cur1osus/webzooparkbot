@@ -237,7 +237,7 @@ def test_a_rival_plays_the_safe_through_the_same_service_as_a_player(db, monkeyp
     assert state["ok"] is True and state["is_open"] is True
     assert "secret" not in json.dumps(state, ensure_ascii=False)
 
-    guess = tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "0473"})
+    guess = tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "047312"})
     assert guess["ok"] is True and guess["attempts_left"] == 2
     # The clue is withheld from the rival exactly as it is from a human.
     assert "exact" not in guess
@@ -254,8 +254,8 @@ def test_a_rival_gets_no_extra_attempts(db, monkeypatch):
     register(-1001, RegisterBody(nickname="Сфорца"))
 
     for _ in range(3):
-        tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "1111"})
-    refused = tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "2222"})
+        tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "111111"})
+    refused = tools.call("safe_guess", tg_id=-1001, player_id=1, arguments={"code": "222222"})
     assert refused["ok"] is False
 
 

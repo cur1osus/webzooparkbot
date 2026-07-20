@@ -1172,9 +1172,11 @@ COCKTAIL_REWARD_PAW = 150
 # every player deduces from the same board and nobody profits from guessing last.
 SAFE_OPEN_HOUR = 19
 SAFE_WINDOW_HOURS = 4
-SAFE_CODE_LENGTH = 4
-# Digits repeat, which puts the search space at 10^4 rather than 5040. With a handful of
-# players spending SAFE_DAILY_ATTEMPTS each, that is roughly a four-to-five day round.
+SAFE_CODE_LENGTH = 6
+# Digits repeat, so the space is 10^6. Note that widening it does not lengthen a round:
+# simulation puts a solo player at 3 days and three players at 2 days for both 4 and 6
+# digits, because the published clues carry enough information either way. Six is for the
+# feel of it — a longer board to reason over, and no chance of brute-forcing by hand.
 SAFE_CODE_DIGITS = "0123456789"
 SAFE_DAILY_ATTEMPTS = 3
 # Half the treasury, so a round pays out visibly without handing one player a balance the
