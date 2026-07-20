@@ -5,6 +5,8 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi import HTTPException
 
+from sqlalchemy.orm import Session
+
 from api.app.db.connection import get_session
 from api.app.db.models import LedgerEntry, Player, SafeAttempt, SafeRound, TreasuryLedgerEntry
 from api.app.schemas.core import RegisterBody
@@ -218,6 +220,49 @@ def test_cracking_the_code_pays_half_the_treasury_and_starts_a_new_round(db, at)
     at(NEXT_DAY)
     safe.safe_state(1001)
     assert _secret() != SECRET
+
+
+def test_losing_the_race_to_open_a_round_returns_the_winner_s_round(db, at, monkeypatch):
+    """Two players opening the safe at 19:00:00 both try to create the day's round. The
+    loser must come back with the round that won, not with "сейф недоступен" — which is
+    what happened on production the first time two sessions collided."""
+    now = MIDWINDOW
+    with get_session() as session:
+        winner_id = safe.current_round(session, now).id
+        session.commit()
+
+    # SQLite does not reproduce MySQL's REPEATABLE READ, so the loser's blind spot is
+    # simulated: its first two reads see nothing, while the unique index — which is never
+    # snapshotted — still rejects the insert. That is exactly the shape of the production
+    # failure, and it drives the code down the recovery branch.
+    blind = {"reads": 2}
+    real_scalar, real_scalars = Session.scalar, Session.scalars
+
+    class _NothingFound:
+        def first(self):
+            return None
+
+    def blind_scalar(self, *args, **kwargs):
+        if blind["reads"] > 0:
+            blind["reads"] -= 1
+            return None
+        return real_scalar(self, *args, **kwargs)
+
+    def blind_scalars(self, *args, **kwargs):
+        if blind["reads"] > 0:
+            blind["reads"] -= 1
+            return _NothingFound()
+        return real_scalars(self, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "scalar", blind_scalar)
+    monkeypatch.setattr(Session, "scalars", blind_scalars)
+
+    with get_session() as session:
+        recovered = safe.current_round(session, now)
+
+    assert blind["reads"] == 0, "the blind reads must actually have been consumed"
+    assert recovered is not None, "the loser must not be told the safe is unavailable"
+    assert recovered.id == winner_id, "the loser must get the round that won, not a second one"
 
 
 def test_the_replacement_round_never_reuses_the_cracked_code(db, at):

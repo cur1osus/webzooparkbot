@@ -125,8 +125,13 @@ def current_round(session: Session, now: datetime, *, create: bool = True) -> Sa
             session.add(round_)
             session.flush()
     except IntegrityError:
+        # `with_for_update` is what makes this correct, not just careful. MySQL runs
+        # REPEATABLE READ, so this transaction's snapshot predates the row the winner just
+        # committed — a plain SELECT would find nothing even though the unique key just
+        # proved the row exists, and the player would get "сейф недоступен". A locking read
+        # is a current read: it sees the latest committed version.
         round_ = session.scalars(
-            select(SafeRound).where(SafeRound.opened_on == day).order_by(SafeRound.id.desc())
+            select(SafeRound).where(SafeRound.opened_on == day).order_by(SafeRound.id.desc()).with_for_update()
         ).first()
         if round_ is None:
             # The unique key was not what rejected the insert. Left silent, this surfaces
