@@ -4,11 +4,12 @@ import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
 import { AnimalDetailCard } from '@/components/AnimalDetailCard';
 import { AnimalArt } from '@/components/AnimalArt';
+import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
 import type { Animal, GameState, GeneTier, MaintenancePollStatus } from '@/types';
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
-import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiReleaseAnimal, apiSetProfileAvatar } from '@/api';
+import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiReleaseAnimal, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
 import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
@@ -84,21 +85,23 @@ const GENE_TIER_COLORS: Record<GeneTier, string> = {
 
 // Each mode returns a fully-ordered comparator; ties fall back to income so the list never
 // reshuffles arbitrarily between renders.
-function compareAnimals(mode: AnimalSort): (a: Animal, b: Animal) => number {
+function compareAnimals(mode: AnimalSort, favoriteOverrides: Map<number, boolean> = new Map()): (a: Animal, b: Animal) => number {
+  const byFavorite = (a: Animal, b: Animal) =>
+    Number(favoriteOverrides.get(b.id) ?? b.is_favorite) - Number(favoriteOverrides.get(a.id) ?? a.is_favorite);
   const byIncome = (a: Animal, b: Animal) => b.income - a.income;
   switch (mode) {
     case 'income':
-      return byIncome;
+      return (a, b) => byFavorite(a, b) || byIncome(a, b);
     case 'life':
       // Soonest death first — the animals that need attention.
-      return (a, b) => new Date(a.dies_at).getTime() - new Date(b.dies_at).getTime() || byIncome(a, b);
+      return (a, b) => byFavorite(a, b) || new Date(a.dies_at).getTime() - new Date(b.dies_at).getTime() || byIncome(a, b);
     case 'quality':
       // Самые редкие с лучшими генами сверху, обычные со слабыми — внизу.
-      return compareByQuality;
+      return (a, b) => byFavorite(a, b) || compareByQuality(a, b);
     case 'new':
     default:
       // Most recently acquired first — freshly bought animals surface at the top.
-      return (a, b) => new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || byIncome(a, b);
+      return (a, b) => byFavorite(a, b) || new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || byIncome(a, b);
   }
 }
 
@@ -109,15 +112,38 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
   const [message, setMessage] = useState<string | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [animalSort, setAnimalSort] = useState<AnimalSort>('new');
+  const [favoriteOverrides, setFavoriteOverrides] = useState<Map<number, boolean>>(new Map());
+  const [favoriteBusyId, setFavoriteBusyId] = useState<number | null>(null);
   const [defaultProfileAnimal] = useState<ProfileAnimal>(() => getDefaultProfileAnimal(gs.tg_id));
 
   const profileAchievementId = gs.profile_emoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? gs.profile_emoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
   const sortedAnimals = useMemo(
-    () => [...gs.animals].sort(compareAnimals(animalSort)),
-    [gs.animals, animalSort],
+    () => [...gs.animals].sort(compareAnimals(animalSort, favoriteOverrides)),
+    [gs.animals, animalSort, favoriteOverrides],
   );
+
+  async function toggleFavorite(animal: Animal) {
+    if (favoriteBusyId !== null) return;
+    const current = favoriteOverrides.get(animal.id) ?? animal.is_favorite;
+    const next = !current;
+    setFavoriteOverrides(previous => new Map(previous).set(animal.id, next));
+    setFavoriteBusyId(animal.id);
+    try {
+      await apiSetAnimalFavorite(animal.id, next);
+      onRefresh();
+    } catch (e) {
+      setFavoriteOverrides(previous => {
+        const nextOverrides = new Map(previous);
+        nextOverrides.delete(animal.id);
+        return nextOverrides;
+      });
+      showMessage(e instanceof Error ? e.message : 'Не удалось изменить избранное');
+    } finally {
+      setFavoriteBusyId(null);
+    }
+  }
 
   useEffect(() => {
     const onHashChange = () => setSubPageState(getZooSubPageFromHash());
@@ -406,18 +432,27 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                 {sortedAnimals.map(a => {
                   const life = lifeLeft(a.dies_at);
                   const rarityColor = SPECIES_RARITY_META[a.species_rarity].color;
+                  const isFavorite = favoriteOverrides.get(a.id) ?? a.is_favorite;
                   return (
-                    <button
+                    <div
                       key={a.id}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedAnimal(a)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedAnimal(a);
+                        }
+                      }}
                       className="card card-pressable text-left border-none w-full"
                       style={{
                         padding: '10px 12px',
-                        border: `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
-                        boxShadow: `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
+                        border: isFavorite ? '1.5px solid var(--c-gold)' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
+                        boxShadow: isFavorite ? '0 0 14px color-mix(in srgb, var(--c-gold) 25%, transparent)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
                       }}
                     >
-                      <div className="flex items-center gap-[10px]">
+                      <div className="flex items-center gap-[8px]">
                         <span className="relative shrink-0 w-[38px] h-[38px] flex items-center justify-center">
                           <AnimalArt animal={a} size={38} />
                           {a.is_sick && <span className="absolute -top-1 -right-1 text-[11px]">🤒</span>}
@@ -426,6 +461,11 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                           <p className="m-0 text-[13px] font-bold truncate">{a.name}</p>
                           <p className="m-0 text-[11px] text-tg-hint truncate">{a.species_name} · ₽{fmt(a.income)}/мин</p>
                         </div>
+                        <AnimalFavoriteButton
+                          isFavorite={isFavorite}
+                          busy={favoriteBusyId === a.id}
+                          onToggle={() => void toggleFavorite(a)}
+                        />
                       </div>
                       <div className="mt-[6px] flex min-w-0 items-center justify-between gap-2">
                         {life ? (
@@ -435,7 +475,7 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                         ) : <span />}
                         <GeneDots animal={a} />
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

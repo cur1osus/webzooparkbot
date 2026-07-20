@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimalArt } from '@/components/AnimalArt';
+import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
 import { PageHeader } from '@/components/PageHeader';
 import type { Animal, BreedResult, GameState, GeneTier, InheritedGene } from '@/types';
-import { apiBreed, apiGetAnimals } from '@/api';
+import { apiBreed, apiGetAnimals, apiSetAnimalFavorite } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
 import { compareByQuality } from '@/lib/animalQuality';
@@ -191,12 +192,14 @@ function ParentSlot({ label, animal, onClick }: {
 
 // ─── Animal picker overlay ────────────────────────────────────────────────────
 
-function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
+function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteBusyId, onClose }: {
   animals: Animal[];
   exclude: number | null;
   // When the other parent is already chosen, only its species can breed with it.
   mateSpeciesCode: string | null;
   onPick: (a: Animal) => void;
+  onToggleFavorite: (animal: Animal) => void;
+  favoriteBusyId: number | null;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -216,6 +219,8 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
     const needle = query.trim().toLocaleLowerCase();
     const matches = available.filter(a => !needle || `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle));
     return [...matches].sort((a, b) => {
+      const favoriteOrder = Number(b.is_favorite) - Number(a.is_favorite);
+      if (favoriteOrder !== 0) return favoriteOrder;
       // Keep possible partners at the top after the first parent is chosen.
       // The picker still shows other species below them so the search remains useful.
       if (mateSpeciesCode) {
@@ -290,12 +295,21 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
           const rarity = SPECIES_RARITY_META[a.species_rarity];
           const incompatible = mateSpeciesCode !== null && a.species_code !== mateSpeciesCode;
           return (
-            <button key={a.id} onClick={() => { if (!incompatible) onPick(a); }}
-                    disabled={incompatible}
-                    className="flex items-center gap-3 px-3 py-[10px] rounded-xl border-none text-left w-full disabled:cursor-not-allowed"
+            <div key={a.id}
+                    role="button"
+                    tabIndex={incompatible ? -1 : 0}
+                    onClick={() => { if (!incompatible) onPick(a); }}
+                    onKeyDown={event => {
+                      if (!incompatible && (event.key === 'Enter' || event.key === ' ')) {
+                        event.preventDefault();
+                        onPick(a);
+                      }
+                    }}
+                    className="flex items-center gap-3 px-3 py-[10px] rounded-xl text-left w-full"
                     style={{
                       background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-                      border: '1px solid transparent',
+                      border: a.is_favorite ? '1px solid var(--c-gold)' : '1px solid transparent',
+                      boxShadow: a.is_favorite ? '0 0 12px color-mix(in srgb, var(--c-gold) 18%, transparent)' : 'none',
                       cursor: incompatible ? 'not-allowed' : 'pointer',
                       opacity: incompatible ? 0.4 : 1,
                     }}>
@@ -316,7 +330,12 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onClose }: {
                   )}
                 </p>
               </div>
-            </button>
+              <AnimalFavoriteButton
+                isFavorite={a.is_favorite}
+                busy={favoriteBusyId === a.id}
+                onToggle={() => onToggleFavorite(a)}
+              />
+            </div>
           );
         })}
       </div>
@@ -336,6 +355,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   const [breeding, setBreeding] = useState(false);
   const [result, setResult]     = useState<BreedResult | null>(null);
   const [error, setError]       = useState<string | null>(null);
+  const [favoriteBusyId, setFavoriteBusyId] = useState<number | null>(null);
 
   const load = async () => {
     try {
@@ -349,6 +369,22 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   };
 
   useEffect(() => { void load(); }, []);
+
+  async function toggleFavorite(animal: Animal) {
+    if (favoriteBusyId !== null) return;
+    const next = !animal.is_favorite;
+    setAnimals(previous => previous.map(item => item.id === animal.id ? { ...item, is_favorite: next } : item));
+    setFavoriteBusyId(animal.id);
+    try {
+      await apiSetAnimalFavorite(animal.id, next);
+      onRefresh();
+    } catch (e) {
+      setAnimals(previous => previous.map(item => item.id === animal.id ? { ...item, is_favorite: animal.is_favorite } : item));
+      setError(e instanceof Error ? e.message : 'Не удалось изменить избранное');
+    } finally {
+      setFavoriteBusyId(null);
+    }
+  }
 
   const handleBreed = async () => {
     if (!parent1 || !parent2 || breeding) return;
@@ -534,6 +570,8 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             setResult(null);
             setPicking(null);
           }}
+          onToggleFavorite={animal => void toggleFavorite(animal)}
+          favoriteBusyId={favoriteBusyId}
           onClose={() => setPicking(null)}
         />
       )}

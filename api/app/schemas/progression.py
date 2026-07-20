@@ -18,6 +18,11 @@ class ReleaseAnimalBody(BaseModel):
     animal_id: int = Field(gt=0)
 
 
+class FavoriteAnimalBody(BaseModel):
+    animal_id: int = Field(gt=0)
+    is_favorite: bool
+
+
 class BreedBody(BaseModel):
     animal_id_1: int = Field(gt=0)
     animal_id_2: int = Field(gt=0)

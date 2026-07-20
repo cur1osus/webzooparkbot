@@ -173,6 +173,7 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
     return {
         "id": animal.id,
         "name": animal.name or species["name"],
+        "is_favorite": bool(animal.is_favorite),
         "species_code": species["code"],
         "species_name": species["name"],
         "species_emoji": species["emoji"],

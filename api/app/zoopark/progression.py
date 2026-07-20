@@ -23,7 +23,7 @@ from api.app.db.models import (
     Player,
     utcnow,
 )
-from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, FavoriteAnimalBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.bonuses import Bonuses
@@ -662,6 +662,30 @@ def release_animal(tg_id: int, body: ReleaseAnimalBody) -> dict:
         result = {"ok": True, "animal_id": animal.id, "income_rub_per_min": income}
         session.commit()
         return result
+
+
+def favorite_animal(tg_id: int, body: FavoriteAnimalBody) -> dict:
+    """Persist the player's star without requiring a full game-state write."""
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        animal = session.scalars(
+            select(Animal)
+            .where(
+                Animal.id == body.animal_id,
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+            )
+            .with_for_update()
+        ).first()
+        if not animal:
+            raise HTTPException(404, "Животное недоступно")
+        animal.is_favorite = body.is_favorite
+        session.commit()
+        return {"ok": True, "animal_id": animal.id, "is_favorite": animal.is_favorite}
 
 
 # ─── Breeding ─────────────────────────────────────────────────────────────────

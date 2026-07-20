@@ -61,6 +61,12 @@ export const apiReleaseAnimal = (animal_id: number) =>
     body: JSON.stringify({ animal_id }),
   });
 
+export const apiSetAnimalFavorite = (animal_id: number, is_favorite: boolean) =>
+  req<{ ok: boolean; animal_id: number; is_favorite: boolean }>('/animals/favorite', {
+    method: 'POST',
+    body: JSON.stringify({ animal_id, is_favorite }),
+  });
+
 export const apiGetExpeditions = () => req<ExpeditionInfo>('/expeditions');
 /** `depth` picks how hard the raid is; the habitat caps it (see `ExpeditionLocality.max_depth`). */
 export const apiStartExpedition = (locality_id: number, animal_ids: number[], depth = 1) =>

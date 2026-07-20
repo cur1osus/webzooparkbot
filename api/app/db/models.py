@@ -355,6 +355,7 @@ class Animal(Base):
     # Individual pet name (Renaissance-figure pool) so duplicate species are distinguishable.
     # Nullable for animals created before names existed; the client falls back to the species.
     name: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     locality_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("localities.id", ondelete="SET NULL"), nullable=True
     )

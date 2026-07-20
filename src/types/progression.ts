@@ -24,6 +24,7 @@ export interface AnimalIncomeBreakdown {
  */
 export interface Animal {
   id: number;
+  is_favorite: boolean;
   /** Individual pet name (Renaissance figure); falls back to species name on old data. */
   name: string;
   species_code: string;
