@@ -45,6 +45,16 @@ def start_solo_game(body: SoloStartBody, tg_id: TelegramId):
     return games_service.start_solo_game(tg_id, body)
 
 
+@router.get("/api/solo/current")
+def current_solo_game(tg_id: TelegramId):
+    return games_service.current_solo_game(tg_id)
+
+
+@router.post("/api/solo/finish")
+def finish_solo_game(tg_id: TelegramId):
+    return games_service.finish_solo_game(tg_id)
+
+
 @router.get("/api/solo/stats")
 def solo_stats(tg_id: TelegramId):
     return games_service.solo_stats(tg_id)

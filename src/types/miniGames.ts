@@ -76,6 +76,7 @@ export interface SoloThrowRound {
 /** Against the house, which keeps a 4% edge. No item touches it. */
 export interface SoloGameResult {
   ok: boolean;
+  kind: string;
   won: boolean;
   stake_rub: number;
   rub_delta: number;
@@ -84,6 +85,7 @@ export interface SoloGameResult {
   ai_score: number;
   history: SoloThrowRound[];
   result: string;
+  resumed?: boolean;
 }
 
 export interface CocktailGuessResult {

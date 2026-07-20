@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
-import { apiStartSoloGame } from '@/api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiFinishSoloGame, apiStartSoloGame } from '@/api';
 import type { SoloBetPercent, SoloGameResult, SoloThrowRound } from '@/types';
 import { fmt } from '@/utils/format';
 import { TgsPlayer, type TgsHandle } from '@/components/TgsPlayer';
@@ -82,6 +82,8 @@ interface BasketballSoloPanelProps {
   bet: number;
   betPercent: SoloBetPercent;
   canStart: boolean;
+  initialSession?: SoloGameResult | null;
+  onMatchFinished?: () => void;
   onRefresh: () => void;
 }
 
@@ -95,7 +97,7 @@ function getVisibleScore(gameId: string, history: SoloThrowRound[]) {
   );
 }
 
-export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canStart, onRefresh }: BasketballSoloPanelProps) {
+export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canStart, initialSession = null, onMatchFinished, onRefresh }: BasketballSoloPanelProps) {
   const [phase, setPhase] = useState<BasketballPhase>('idle');
   const [animLabel, setAnimLabel] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -103,12 +105,36 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
   const [sessionBet, setSessionBet] = useState<number | null>(null);
   const [visibleHistory, setVisibleHistory] = useState<SoloThrowRound[]>([]);
   const tgsRef = useRef<TgsHandle>(null);
+  const finishSentRef = useRef(false);
 
   const sessionHistory = session?.history ?? [];
   const hasPendingRounds = visibleHistory.length < sessionHistory.length;
   const isAnimating = phase === 'player-anim' || phase === 'ai-anim';
   const finished = Boolean(session && !hasPendingRounds && phase === 'result');
   const gameRule = getGameRule(gameId);
+
+  useEffect(() => {
+    if (!initialSession) return;
+    setSession(initialSession);
+    setSessionBet(initialSession.stake_rub);
+    setVisibleHistory([]);
+    setPhase('idle');
+    setAnimLabel('');
+    setError(null);
+    finishSentRef.current = false;
+  }, [initialSession]);
+
+  useEffect(() => {
+    if (!finished || finishSentRef.current) return;
+    finishSentRef.current = true;
+    void apiFinishSoloGame().then(() => {
+      onMatchFinished?.();
+    }).catch(() => {
+      // Keep the match active on the server if the acknowledgement was lost. A
+      // refresh will restore it and allow the acknowledgement to be retried.
+      finishSentRef.current = false;
+    });
+  }, [finished, onMatchFinished]);
 
   const visibleScore = useMemo(() => getVisibleScore(gameId, visibleHistory), [gameId, visibleHistory]);
   const lastRound = visibleHistory[visibleHistory.length - 1];
@@ -120,6 +146,7 @@ export function BasketballSoloPanel({ gameId, gameEmoji, bet, betPercent, canSta
     setSession(null);
     setSessionBet(null);
     setVisibleHistory([]);
+    finishSentRef.current = false;
   };
 
   const playRound = async (round: SoloThrowRound, isLastRound: boolean) => {

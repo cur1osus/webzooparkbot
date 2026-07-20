@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
-from api.app.db.models import CocktailDay, CocktailRound, Duel, Player, SoloStats, StarPayment, utcnow
+from api.app.db.models import CocktailDay, CocktailRound, Duel, Player, SoloMatch, SoloStats, StarPayment, utcnow
 from api.app.schemas.games import CocktailGuessBody, DonateInvoiceBody, DuelCreateBody, SoloStartBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
@@ -390,6 +390,26 @@ def simulate_solo_match(kind: str) -> tuple[list[dict[str, int]], int, int]:
     return history, player_score, ai_score
 
 
+def _solo_match_payload(match: SoloMatch, new_rub: int, resumed: bool) -> dict:
+    try:
+        history = json.loads(match.history)
+    except (TypeError, ValueError):
+        history = []
+    return {
+        "ok": True,
+        "kind": match.kind,
+        "won": match.won,
+        "stake_rub": int(match.stake_rub),
+        "rub_delta": int(match.rub_delta),
+        "new_rub": int(new_rub),
+        "history": history,
+        "player_score": int(match.player_score),
+        "ai_score": int(match.ai_score),
+        "result": f"Счёт: {match.player_score} — {match.ai_score}",
+        "resumed": resumed,
+    }
+
+
 def start_solo_game(tg_id: int, body: SoloStartBody) -> dict:
     kind = _validate_kind(body.kind)
 
@@ -398,6 +418,15 @@ def start_solo_game(tg_id: int, body: SoloStartBody) -> dict:
         if not player:
             raise HTTPException(404, "Нет игрока")
         sync_player_income(session, player)
+
+        stored_match = session.scalars(
+            select(SoloMatch)
+            .where(SoloMatch.player_id == player.id)
+            .with_for_update()
+        ).first()
+        if stored_match is not None and stored_match.finished_at is None:
+            return _solo_match_payload(stored_match, ledger.balance(player, "rub"), resumed=True)
+
         stake = _validate_stake(_solo_stake_from_balance(ledger.balance(player, "rub"), body.stake_pct))
 
         # The stake leaves the balance first, so an insufficient balance fails before the
@@ -424,19 +453,49 @@ def start_solo_game(tg_id: int, body: SoloStartBody) -> dict:
         stats.won_rub += stake if won else 0
         stats.lost_rub += 0 if won else stake
 
-        result = {
-            "ok": True,
-            "won": won,
-            "stake_rub": stake,
-            "rub_delta": stake if won else -stake,
-            "new_rub": ledger.balance(player, "rub"),
-            "history": history,
-            "player_score": player_score,
-            "ai_score": ai_score,
-            "result": f"Счёт: {player_score} — {ai_score}",
-        }
+        match = stored_match or SoloMatch(player_id=player.id)
+        match.kind = kind
+        match.stake_rub = stake
+        match.won = won
+        match.rub_delta = stake if won else -stake
+        match.player_score = player_score
+        match.ai_score = ai_score
+        match.history = json.dumps(history, ensure_ascii=False)
+        match.created_at = utcnow()
+        match.finished_at = None
+        if stored_match is None:
+            session.add(match)
+        session.flush()
+        result = _solo_match_payload(match, ledger.balance(player, "rub"), resumed=False)
         session.commit()
         return result
+
+
+def current_solo_game(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        match = session.scalars(
+            select(SoloMatch).where(SoloMatch.player_id == player.id, SoloMatch.finished_at.is_(None))
+        ).first()
+        return {"game": _solo_match_payload(match, ledger.balance(player, "rub"), resumed=True) if match else None}
+
+
+def finish_solo_game(tg_id: int) -> dict:
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        match = session.scalars(
+            select(SoloMatch)
+            .where(SoloMatch.player_id == player.id, SoloMatch.finished_at.is_(None))
+            .with_for_update()
+        ).first()
+        if match is not None:
+            match.finished_at = utcnow()
+            session.commit()
+        return {"ok": True}
 
 
 def solo_stats(tg_id: int) -> dict:

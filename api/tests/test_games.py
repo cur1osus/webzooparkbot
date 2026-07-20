@@ -87,6 +87,29 @@ def test_solo_stake_is_calculated_from_locked_balance_percentage(db):
         assert balance == 1000 + result["rub_delta"]
 
 
+def test_solo_match_is_resumed_without_charging_twice(db):
+    register(1001, RegisterBody(nickname="solo-player"))
+    _grant_rub(1001, 1000)
+
+    first = games.start_solo_game(1001, SoloStartBody(kind="basketball", stake_pct=15))
+    resumed = games.start_solo_game(1001, SoloStartBody(kind="dice", stake_pct=5))
+
+    assert first["resumed"] is False
+    assert resumed["resumed"] is True
+    assert resumed["kind"] == "basketball"
+    assert resumed["history"] == first["history"]
+    assert resumed["rub_delta"] == first["rub_delta"]
+    assert resumed["new_rub"] == first["new_rub"]
+
+    with get_session() as session:
+        balance = session.query(Player).filter_by(telegram_id=1001).one().balance_rub
+        assert balance == 1000 + first["rub_delta"]
+
+    games.finish_solo_game(1001)
+    next_game = games.start_solo_game(1001, SoloStartBody(kind="dice", stake_pct=5))
+    assert next_game["resumed"] is False
+
+
 def test_cocktail_resets_at_10_moscow():
     before_reset = datetime(2026, 7, 20, 6, 59, tzinfo=timezone.utc)
     period_day, next_reset = games._cocktail_period(before_reset)

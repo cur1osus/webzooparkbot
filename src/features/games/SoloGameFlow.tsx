@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { apiGetCurrentSoloGame } from '@/api';
 import type { GameDef } from '@/data/games';
-import type { SoloBetPercent } from '@/types';
+import type { SoloBetPercent, SoloGameResult } from '@/types';
 import { fmt } from '@/utils/format';
 import { BasketballSoloPanel } from './BasketballSoloPanel';
 
@@ -50,6 +51,28 @@ function FlowHeader({ title, subtitle, onBack }: { title: string; subtitle: stri
 export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGameFlowProps) {
   const [betPercent, setBetPercent] = useState<SoloBetPercent>(5);
   const [screen, setScreen] = useState<SoloFlowScreen>('setup');
+  const [currentMatch, setCurrentMatch] = useState<SoloGameResult | null>(null);
+  const [matchChecked, setMatchChecked] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    void apiGetCurrentSoloGame()
+      .then(({ game: match }) => {
+        if (!mounted) return;
+        setCurrentMatch(match);
+        if (match?.kind === game.id) setScreen('match');
+      })
+      .catch(() => {
+        // A failed check must not prevent starting a regular game; the start endpoint
+        // still enforces the active-match lock on the server.
+      })
+      .finally(() => {
+        if (mounted) setMatchChecked(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [game.id]);
 
   const accents = GAME_ACCENTS[game.id] ?? GAME_ACCENTS.dice;
   const bet = getBetAmount(availableRub, betPercent);
@@ -63,7 +86,7 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
           subtitle={`Матч со ставкой ${betPercent}%`}
           onBack={() => setScreen('setup')}
         />
-        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} betPercent={betPercent} canStart={canStart} onRefresh={onRefresh} />
+        <BasketballSoloPanel gameId={game.id} gameEmoji={game.emoji} bet={bet} betPercent={betPercent} canStart={canStart} initialSession={currentMatch?.kind === game.id ? currentMatch : null} onMatchFinished={() => setCurrentMatch(null)} onRefresh={onRefresh} />
       </div>
     );
   }
@@ -75,6 +98,32 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
         subtitle="Сначала выбери ставку, затем начни матч"
         onBack={onBack}
       />
+
+      {matchChecked && currentMatch && currentMatch.kind !== game.id && (
+        <div className="card flex flex-col gap-2" style={{ border: '1px solid color-mix(in srgb, var(--c-orange) 35%, transparent)' }}>
+          <p className="m-0 font-bold text-[15px]">Есть незавершённый матч</p>
+          <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Сначала продолжи игру «{currentMatch.kind}». Новую игру открыть нельзя, пока текущая не завершена.
+          </p>
+        </div>
+      )}
+
+      {matchChecked && currentMatch?.kind === game.id && (
+        <div className="card flex flex-col gap-2" style={{ border: '1px solid color-mix(in srgb, var(--c-orange) 35%, transparent)' }}>
+          <p className="m-0 font-bold text-[15px]">Матч восстановлен</p>
+          <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Он уже оплачен и продолжится с сохранённым количеством ходов.
+          </p>
+          <button
+            type="button"
+            onClick={() => setScreen('match')}
+            className="py-3 rounded-xl border-none font-bold"
+            style={{ background: 'var(--c-orange)', color: 'var(--tg-theme-button-text-color)' }}
+          >
+            Продолжить матч
+          </button>
+        </div>
+      )}
 
       <div
         className="rounded-2xl p-5 text-center relative overflow-hidden"
@@ -151,17 +200,17 @@ export function SoloGameFlow({ game, availableRub, onBack, onRefresh }: SoloGame
         <button
           type="button"
           onClick={() => setScreen('match')}
-          disabled={!canStart}
+          disabled={!canStart || Boolean(currentMatch)}
           className="py-[15px] rounded-2xl border-none font-extrabold text-[16px]"
           style={{
-            background: canStart
+            background: canStart && !currentMatch
               ? `linear-gradient(135deg, ${accents.from}, ${accents.to})`
               : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
-            color: canStart ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
-            boxShadow: canStart ? `0 6px 20px ${accents.glow}` : 'none',
+            color: canStart && !currentMatch ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
+            boxShadow: canStart && !currentMatch ? `0 6px 20px ${accents.glow}` : 'none',
           }}
         >
-          Начать игру
+          {currentMatch ? 'Матч уже идёт' : 'Начать игру'}
         </button>
       </div>
     </div>

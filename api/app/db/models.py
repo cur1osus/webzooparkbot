@@ -750,6 +750,34 @@ class SoloStats(Base):
     lost_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class SoloMatch(Base):
+    """Authoritative result kept until the client has displayed the whole match.
+
+    The stake and outcome are settled when the match starts. Keeping the result here
+    prevents a page refresh or leaving the game screen from creating a second match.
+    """
+
+    __tablename__ = "solo_matches"
+    __table_args__ = (
+        UniqueConstraint("player_id", name="uq_solo_matches_player"),
+        CheckConstraint(_one_of("kind", GAME_KINDS), name="ck_solo_matches_kind"),
+        CheckConstraint("stake_rub > 0", name="ck_solo_matches_stake"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    stake_rub: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    won: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    rub_delta: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    player_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    ai_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    history: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
 class CocktailRound(Base):
     """`expires_at` is stored rather than derived from `started_at + 24h`: solving the
     puzzle should reset the round at the next 10:00 Moscow time, not 24 hours after it began."""

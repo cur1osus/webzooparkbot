@@ -34,6 +34,8 @@ export const apiStartSoloGame = (kind: string, stake_pct: SoloBetPercent) =>
     method: 'POST',
     body: JSON.stringify({ kind, stake_pct }),
   });
+export const apiGetCurrentSoloGame = () => req<{ game: SoloGameResult | null }>('/solo/current');
+export const apiFinishSoloGame = () => req<{ ok: boolean }>('/solo/finish', { method: 'POST' });
 export const apiGetSoloStats = () => req<SoloStats>('/solo/stats');
 
 export const apiCocktailGuess = (fruits: string[]) =>
