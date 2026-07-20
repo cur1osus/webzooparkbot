@@ -29,7 +29,10 @@ function groupByDay(board: SafeBoardEntry[]): Array<[string, SafeBoardEntry[]]> 
 
 export function SafeTab({ onRefresh }: { onRefresh: () => void }) {
   const [state, setState] = useState<SafeState | null>(null);
-  const [slots, setSlots] = useState<string[]>([]);
+  // Fixed-length with holes, like the cocktail board: tapping a cell clears that cell
+  // rather than truncating everything after it, so fixing the third digit does not cost
+  // you the fourth. A digit drops into the first empty cell.
+  const [slots, setSlots] = useState<(string | null)[]>([]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -62,16 +65,46 @@ export function SafeTab({ onRefresh }: { onRefresh: () => void }) {
 
   const codeLength = state?.code_length ?? 4;
   const grouped = useMemo(() => groupByDay(state?.board ?? []), [state?.board]);
-  const ready = slots.length === codeLength;
-  const canGuess = Boolean(state?.is_open) && (state?.attempts_left ?? 0) > 0 && ready && !sending;
+  const empty = useMemo(() => Array<string | null>(codeLength).fill(null), [codeLength]);
+  // The code length arrives with the state, so the board starts empty and is sized here.
+  const cells = slots.length === codeLength ? slots : empty;
+  const spent = (state?.attempts_left ?? 0) === 0;
+  const locked = spent || sending;
+  const ready = cells.every((cell) => cell !== null);
+  const canGuess = Boolean(state?.is_open) && !locked && ready;
+
+  const addDigit = (digit: string) => {
+    if (locked) return;
+    setSlots((current) => {
+      const next = [...(current.length === codeLength ? current : empty)];
+      const index = next.indexOf(null);
+      if (index === -1) return next;
+      next[index] = digit;
+      return next;
+    });
+  };
+
+  const clearAt = (index: number) => {
+    if (locked) return;
+    setSlots((current) => {
+      const next = [...(current.length === codeLength ? current : empty)];
+      next[index] = null;
+      return next;
+    });
+  };
+
+  const clearAll = () => {
+    if (locked) return;
+    setSlots(empty);
+  };
 
   const submit = async () => {
     if (!canGuess) return;
     setSending(true);
     setError(null);
     try {
-      const result = await apiSafeGuess(slots.join(''));
-      setSlots([]);
+      const result = await apiSafeGuess(cells.join(''));
+      setSlots(empty);
       setState((current) =>
         current
           ? { ...current, attempts_left: result.attempts_left, pending_codes: [...current.pending_codes, result.accepted] }
@@ -133,39 +166,44 @@ export function SafeTab({ onRefresh }: { onRefresh: () => void }) {
           {/* Ячейки тянутся, а не заданы жёстко: шесть штук по 58px не помещаются в
               375px, и код любой длины должен влезать без горизонтальной прокрутки. */}
           <div className="flex gap-1.5 justify-center">
-            {Array.from({ length: codeLength }, (_, index) => (
+            {cells.map((cell, index) => (
               <div
                 key={index}
-                onClick={() => setSlots((current) => current.slice(0, index))}
+                onClick={() => cell && clearAt(index)}
                 className="flex-1 min-w-0 max-w-[58px] h-[64px] rounded-2xl grid place-items-center text-[26px] font-black transition-all duration-150"
                 style={{
-                  background: slots[index]
+                  background: cell
                     ? 'rgba(var(--c-gold-rgb),0.12)'
                     : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-                  border: slots[index]
+                  border: cell
                     ? '1px solid rgba(var(--c-gold-rgb),0.45)'
                     : '1.5px dashed color-mix(in srgb, var(--tg-theme-hint-color) 28%, transparent)',
-                  cursor: slots[index] ? 'pointer' : 'default',
+                  cursor: cell && !locked ? 'pointer' : 'default',
+                  opacity: locked ? 0.75 : 1,
                 }}
               >
-                {slots[index] ?? <span style={{ fontSize: 18, color: 'var(--tg-theme-hint-color)' }}>?</span>}
+                {cell ?? <span style={{ fontSize: 18, color: 'var(--tg-theme-hint-color)' }}>?</span>}
               </div>
             ))}
           </div>
+
+          <p className="m-0 text-xs text-center" style={{ color: 'var(--tg-theme-hint-color)' }}>
+            Нажми цифру — добавить · Нажми ячейку — убрать
+          </p>
 
           <div className="grid grid-cols-5 gap-2">
             {DIGITS.map((digit) => (
               <button
                 key={digit}
                 type="button"
-                onClick={() => setSlots((current) => (current.length < codeLength ? [...current, digit] : current))}
-                disabled={state.attempts_left === 0 || sending}
+                onClick={() => addDigit(digit)}
+                disabled={locked}
                 className="py-3 rounded-[14px] text-[20px] font-black transition-transform duration-100 active:scale-90"
                 style={{
                   border: '2px solid rgba(var(--c-gold-rgb),0.35)',
                   background: 'rgba(var(--c-gold-rgb),0.07)',
                   color: 'var(--tg-theme-text-color)',
-                  opacity: state.attempts_left === 0 || sending ? 0.4 : 1,
+                  opacity: locked ? 0.4 : 1,
                 }}
               >
                 {digit}
@@ -173,22 +211,37 @@ export function SafeTab({ onRefresh }: { onRefresh: () => void }) {
             ))}
           </div>
 
-          <button
-            onClick={() => void submit()}
-            disabled={!canGuess}
-            className="py-[13px] rounded-[14px] border-none font-extrabold text-sm"
-            style={{
-              background: canGuess ? 'linear-gradient(135deg, var(--c-gold), #d08a00)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
-              color: canGuess ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
-              boxShadow: canGuess ? '0 4px 16px rgba(var(--c-gold-rgb),0.35)' : 'none',
-            }}
-          >
-            {sending
-              ? 'Запечатываем...'
-              : state.attempts_left === 0
-                ? 'Попытки на сегодня кончились'
-                : `Запечатать код · осталось ${state.attempts_left}`}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={clearAll}
+              disabled={locked}
+              className="flex-1 py-[13px] rounded-[14px] border-none font-bold text-sm"
+              style={{
+                background: 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
+                color: 'var(--tg-theme-text-color)',
+              }}
+            >
+              Очистить
+            </button>
+            <button
+              onClick={() => void submit()}
+              disabled={!canGuess}
+              className="flex-[2] py-[13px] rounded-[14px] border-none font-extrabold text-sm"
+              style={{
+                background: canGuess
+                  ? 'linear-gradient(135deg, var(--c-gold), #d08a00)'
+                  : 'color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)',
+                color: canGuess ? 'var(--tg-theme-button-text-color)' : 'var(--tg-theme-hint-color)',
+                boxShadow: canGuess ? '0 4px 16px rgba(var(--c-gold-rgb),0.35)' : 'none',
+              }}
+            >
+              {sending
+                ? 'Запечатываем...'
+                : spent
+                  ? 'Попытки кончились'
+                  : `Запечатать · осталось ${state.attempts_left}`}
+            </button>
+          </div>
 
           {state.pending_codes.length > 0 && (
             <div className="card flex flex-col gap-2">
