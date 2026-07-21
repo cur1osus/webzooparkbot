@@ -484,8 +484,9 @@ def test_a_character_never_carries_a_raw_avatar():
 
 def test_opening_message_carries_the_notes_and_the_budget(tmp_path, monkeypatch):
     monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(agent.audit, "as_text", lambda _tg: "")
     memory_store.remember(1, "паки меня трижды подводили")
-    message = agent._opening_message(get("gambler"), 1, "Рагнар")
+    message = agent._opening_message(get("gambler"), -1002, 1, "Рагнар")
     assert "Рагнар" in message
     assert "паки меня трижды подводили" in message
     assert str(agent.MAX_ROUNDS) in message
@@ -593,3 +594,81 @@ def test_the_safe_tool_asks_for_as_many_digits_as_the_safe_has():
     assert code["minLength"] == SAFE_CODE_LENGTH
     assert code["maxLength"] == SAFE_CODE_LENGTH
     assert str(SAFE_CODE_LENGTH) in code["description"]
+
+
+# ── ревизор ───────────────────────────────────────────────────────────────────
+
+
+def _zoo_with_a_misplaced_animal(player):
+    """A player owning two localities, with one animal standing in the wrong one."""
+    from api.app.schemas.progression import AssignLocalityBody, BuyLocalityBody
+    from api.app.zoopark import progression
+
+    progression.open_pack(player)
+    from api.app.db.connection import get_session
+    from api.app.db.models import Player
+    from api.app.zoopark import ledger
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        ledger.grant(session, row, "rub", 5_000_000, "admin_grant")
+        session.commit()
+
+    animal = progression.list_available_animals(player)["animals"][0]
+    home = animal["habitat"]
+    wrong = next(h for h in ("desert", "fields", "forest", "antarctica", "mountains") if h != home)
+    owned = {loc["habitat"]: loc["id"] for loc in progression.list_localities(player)["localities"]}
+    for habitat in (home, wrong):
+        if habitat not in owned:
+            owned[habitat] = progression.buy_locality(player, BuyLocalityBody(habitat=habitat))["id"]
+    progression.assign_locality(player, AssignLocalityBody(animal_id=animal["id"], locality_id=owned[wrong]))
+    return animal, home
+
+
+def test_the_auditor_names_an_animal_standing_outside_its_habitat(db, player):
+    """The turn that prompted this closed with «все звери при своих средах» while fourteen
+    were not. The auditor reads the database, so it cannot be talked out of the number."""
+    from api.bots import audit
+
+    animal, home = _zoo_with_a_misplaced_animal(player)
+    lines = audit.findings(player)
+
+    assert any(str(animal["id"]) in line and home in line for line in lines), lines
+    assert "локация" in audit.as_text(player)
+
+
+def test_the_auditor_says_nothing_when_the_zoo_is_in_order(db, player, monkeypatch):
+    """An empty review must produce no block at all — a turn that opens with a list of
+    non-problems teaches the rival to skim it."""
+    from api.app.zoopark import progression, status
+    from api.bots import audit
+
+    monkeypatch.setattr(progression, "list_localities",
+                        lambda _tg: {"localities": [], "unassigned": [], "next_price": None})
+    monkeypatch.setattr(progression, "packs_info", lambda _tg: {"gift_available": False})
+    monkeypatch.setattr(progression, "has_collectible_expedition", lambda _tg: False)
+    monkeypatch.setattr(status, "daily_bonus", lambda _tg: {"claimed": True})
+
+    assert audit.findings(player) == []
+    assert audit.as_text(player) == ""
+
+
+def test_a_broken_auditor_never_costs_the_rival_its_turn(db, player, monkeypatch):
+    """The review is a courtesy, not a precondition. If it raises, the turn goes ahead."""
+    from api.app.zoopark import progression
+    from api.bots import audit
+
+    def boom(_tg):
+        raise RuntimeError("база легла")
+
+    monkeypatch.setattr(progression, "list_localities", boom)
+    assert audit.findings(player) == []
+    assert audit.as_text(player) == ""
+
+
+def test_the_review_reaches_the_opening_message(db, player, monkeypatch):
+    from api.bots import agent, audit
+
+    monkeypatch.setattr(audit, "as_text", lambda _tg: "РЕВИЗОР ОСМОТРЕЛ ТВОЙ ЗООПАРК: всё плохо.")
+    opening = agent._opening_message(get("gambler"), player, 1, "Сфорца")
+    assert "РЕВИЗОР ОСМОТРЕЛ ТВОЙ ЗООПАРК" in opening
+    assert opening.index("ЗАМЕТКИ") < opening.index("РЕВИЗОР"), "заметки идут первыми, ревизор их поправляет"

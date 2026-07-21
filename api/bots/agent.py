@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from api.app.core.config import BOT_PLANNER_MODEL, ROUTERAI_API_KEY, ROUTERAI_BASE_URL
-from api.bots import memory_store, tools
+from api.bots import audit, memory_store, tools
 from api.bots.characters import Character
 
 logger = logging.getLogger(__name__)
@@ -147,12 +147,16 @@ def _ask(payload: dict) -> dict | None:
     return None
 
 
-def _opening_message(character: Character, player_id: int, nickname: str) -> str:
+def _opening_message(character: Character, tg_id: int, player_id: int, nickname: str) -> str:
+    # The auditor's block comes after the notes and says so: the notebook is what the rival
+    # remembers, and it has been wrong. See `audit.py`.
+    review = audit.as_text(tg_id)
     return (
         f"Тебя зовут {nickname}.\n\n"
         f"{character.temperament}\n\n"
         f"ТВОИ ЗАМЕТКИ С ПРОШЛЫХ ХОДОВ:\n{memory_store.as_text(player_id)}\n\n"
-        f"Начинается твой ход. У тебя {MAX_ROUNDS} обращений ко мне — "
+        + (f"{review}\n\n" if review else "")
+        + f"Начинается твой ход. У тебя {MAX_ROUNDS} обращений ко мне — "
         f"в каждом можешь запросить сразу несколько инструментов. Осмотрись и играй."
     )
 
@@ -180,7 +184,7 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
     schemas = tools.schemas(tg_id, player_id)
     messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": _opening_message(character, player_id, nickname)},
+        {"role": "user", "content": _opening_message(character, tg_id, player_id, nickname)},
     ]
     started = time.monotonic()
 
