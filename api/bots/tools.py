@@ -20,6 +20,7 @@ should-call rate over one that only names the action.
 
 from __future__ import annotations
 
+import difflib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -131,11 +132,31 @@ def tool(name: str, description: str, properties: dict | None = None, required: 
     return decorate
 
 
+def _did_you_mean(name: str, limit: int = 3) -> list[str]:
+    """Tools whose names are near `name`, best first.
+
+    A rival reached for `buy_merchant_animal` with `{"slot": 2}` — the right argument for
+    `merchant_buy`, the wrong name — and "нет такого инструмента" told it nothing it could
+    act on, so it wrote the purchase off as a broken interface and moved on.
+
+    Two measures, because neither is enough alone: shared underscore-separated words find
+    `forge_sell` for `sell_item`, where character similarity finds nothing, and character
+    similarity finds `get_bank` for `get_safe`, where no word is shared.
+    """
+    wanted = set(name.split("_"))
+    by_word = sorted(
+        (n for n in REGISTRY if wanted & set(n.split("_"))),
+        key=lambda n: -len(wanted & set(n.split("_"))),
+    )
+    ranked = by_word + difflib.get_close_matches(name, list(REGISTRY), n=limit, cutoff=0.5)
+    return list(dict.fromkeys(ranked))[:limit]
+
+
 def call(name: str, tg_id: int, player_id: int, arguments: dict) -> dict:
     """Dispatch one tool call. Never raises: the model must see every outcome as data."""
     entry = REGISTRY.get(name)
     if entry is None:
-        return {"ok": False, "error": f"нет такого инструмента: {name}"}
+        return {"ok": False, "error": f"нет такого инструмента: {name}", "может быть": _did_you_mean(name)}
     try:
         result = entry.run(tg_id=tg_id, player_id=player_id, **(arguments or {}))
     except HTTPException as exc:

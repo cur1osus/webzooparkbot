@@ -672,3 +672,20 @@ def test_the_review_reaches_the_opening_message(db, player, monkeypatch):
     opening = agent._opening_message(get("gambler"), player, 1, "Сфорца")
     assert "РЕВИЗОР ОСМОТРЕЛ ТВОЙ ЗООПАРК" in opening
     assert opening.index("ЗАМЕТКИ") < opening.index("РЕВИЗОР"), "заметки идут первыми, ревизор их поправляет"
+
+
+def test_an_unknown_tool_comes_back_with_the_name_it_probably_meant():
+    """A rival called `buy_merchant_animal` with `{"slot": 2}` — the right argument for
+    `merchant_buy`, the wrong name — and a bare "нет такого инструмента" left it nothing to
+    recover with, so it recorded the purchase as a broken interface and gave up on it."""
+    result = tools.call("buy_merchant_animal", tg_id=-1, player_id=1, arguments={"slot": 2})
+
+    assert result["ok"] is False
+    assert result["может быть"][0] == "merchant_buy"
+
+
+def test_the_suggestion_uses_shared_words_where_spelling_alone_would_miss():
+    """`forge_sell` shares no run of characters with `sell_item`, and character similarity
+    alone returned `set_theme` for it — the two measures cover each other's blind spots."""
+    assert "forge_sell" in tools.call("sell_item", tg_id=-1, player_id=1, arguments={})["может быть"]
+    assert "get_bank" in tools.call("get_safe", tg_id=-1, player_id=1, arguments={})["может быть"]
