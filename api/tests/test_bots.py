@@ -350,13 +350,15 @@ def test_a_truncated_end_turn_does_not_end_the_turn(tmp_path, monkeypatch):
     assert result.rounds == 2, "первый (обрезанный) end_turn не должен был завершить ход"
 
 
-def test_the_last_round_is_offered_only_the_tools_that_close_a_turn(tmp_path, monkeypatch):
+def test_the_closing_rounds_narrow_until_only_end_turn_is_left(tmp_path, monkeypatch):
     """Being told to wrap up was not enough — over half the turns burned the warning rounds
-    on more tool calls and hit the ceiling with no summary and no note. On the final round
-    everything but `remember` and `end_turn` is taken off the table."""
+    on more tool calls. Hiding the other tools was not enough either: handed `remember` and
+    `end_turn`, the model answered one round with no tool call and no text, and the turn
+    ended with nothing recorded. The last round therefore does not ask — it constrains the
+    call to `end_turn`, so a turn always leaves a summary."""
     monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
     monkeypatch.setattr(agent, "ROUTERAI_API_KEY", "test-key")
-    monkeypatch.setattr(agent, "MAX_ROUNDS", 3)
+    monkeypatch.setattr(agent, "MAX_ROUNDS", 4)
     monkeypatch.setattr(agent.tools, "call", lambda *a, **k: {"ok": True})
 
     every = ["get_me", "open_pack", "remember", "end_turn"]
@@ -364,19 +366,27 @@ def test_the_last_round_is_offered_only_the_tools_that_close_a_turn(tmp_path, mo
         {"type": "function", "function": {"name": n, "description": "", "parameters": {}}} for n in every
     ])
 
-    offered: list[list[str]] = []
+    offered: list[tuple[list[str], object]] = []
 
     def ask(payload):
-        offered.append([t["function"]["name"] for t in payload["tools"]])
-        return _round("get_me", "{}")  # never volunteers end_turn, so it runs to the ceiling
+        offered.append(([t["function"]["name"] for t in payload["tools"]], payload["tool_choice"]))
+        # Never volunteers end_turn, and answers the narrowed round with nothing at all —
+        # exactly what the live rival did.
+        if [t["function"]["name"] for t in payload["tools"]] == ["end_turn"]:
+            return _round("end_turn", '{"summary": "подвёл итог"}')
+        return {"choices": [{"finish_reason": "stop", "message": {"content": ""}}], "usage": {}}
 
     monkeypatch.setattr(agent, "_ask", ask)
 
     result = agent.run_turn(get("gambler"), tg_id=-1002, player_id=1, nickname="Сфорца")
 
-    assert result.stopped_because == "исчерпан лимит обращений"
-    assert offered[0] == every, "в обычном круге должны быть все инструменты"
-    assert offered[-1] == ["remember", "end_turn"], "на последнем круге — только закрывающие"
+    assert offered[0] == (every, "auto"), "в обычном круге — все инструменты, свободный выбор"
+    assert offered[-2][0] == ["remember", "end_turn"], "предпоследний круг — только закрывающие"
+    assert offered[-1][0] == ["end_turn"], "последний круг — только end_turn"
+    assert offered[-1][1] == {"type": "function", "function": {"name": "end_turn"}}, \
+        "последний круг должен принуждать к вызову, а не просить"
+    assert result.stopped_because == "закончил сам"
+    assert result.summary == "подвёл итог", "ход обязан оставить итог"
 
 
 # ── dreaming (memory consolidation) ───────────────────────────────────────────

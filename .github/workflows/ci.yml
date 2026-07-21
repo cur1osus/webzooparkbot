@@ -52,7 +52,7 @@ jobs:
         run: ruff check api
       - name: Type check
         if: matrix.engine == 'sqlite'
-        run: mypy api/app --ignore-missing-imports
+        run: mypy api/app api/bots --ignore-missing-imports
       - name: Test on ${{ matrix.engine }}
         env:
           TEST_DB_URL: ${{ matrix.db_url }}

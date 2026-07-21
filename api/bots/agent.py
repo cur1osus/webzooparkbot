@@ -34,6 +34,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from typing import Any
 
 from api.app.core.config import BOT_PLANNER_MODEL, ROUTERAI_API_KEY, ROUTERAI_BASE_URL
 from api.bots import memory_store, tools
@@ -195,28 +196,37 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
             result.stopped_because = "вышло время на ход"
             break
 
+        # The last two rounds are reserved for closing the turn, and each is narrowed further
+        # than the one before. Asking in words was not enough — over half the turns spent the
+        # warning rounds on more tool calls and hit the ceiling with neither a note nor a
+        # summary. Hiding the other tools was not enough either: handed only `remember` and
+        # `end_turn`, the model answered one round with no tool call and no text at all, and
+        # the turn still ended with nothing recorded. So the last round does not ask.
         remaining = MAX_ROUNDS - result.rounds
         round_schemas = schemas
-        if remaining <= 2:
-            # Told, not cut off: it wraps up its own turn instead of stopping mid-thought.
+        tool_choice: Any = "auto"
+        if remaining == 2:
+            # A round to write the lesson down, with nothing else on the table to spend it on.
+            round_schemas = [s for s in schemas if s["function"]["name"] in _CLOSING]
             messages.append({
                 "role": "user",
-                "content": f"У тебя осталось {remaining} обращений. Заканчивай ход: "
-                           f"сделай последнее важное, при желании запиши заметку и вызови end_turn.",
+                "content": "Осталось 2 обращения. Запиши вывод хода через remember, "
+                           "потом вызови end_turn.",
             })
-        if remaining <= 1:
-            # Asking it to wrap up is not enough — over half the turns spent the warning
-            # rounds on more tool calls and hit the ceiling with nothing written down, so
-            # the turn left neither a summary nor a note. On the last round it gets only
-            # the two tools that close a turn; a tool it cannot see is one it cannot spend
-            # its final round on.
-            round_schemas = [s for s in schemas if s["function"]["name"] in _CLOSING]
+        elif remaining <= 1:
+            # And a round that can only be `end_turn`, so a turn always leaves a summary.
+            round_schemas = [s for s in schemas if s["function"]["name"] == "end_turn"]
+            tool_choice = {"type": "function", "function": {"name": "end_turn"}}
+            messages.append({
+                "role": "user",
+                "content": "Последнее обращение. Вызови end_turn с итогом хода.",
+            })
 
         data = _ask({
             "model": BOT_PLANNER_MODEL,
             "messages": messages,
             "tools": round_schemas,
-            "tool_choice": "auto",
+            "tool_choice": tool_choice,
             "max_tokens": MAX_TOKENS,
             "temperature": 1.0,
         })

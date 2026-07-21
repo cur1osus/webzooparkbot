@@ -107,8 +107,15 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
     # Nothing about recording history is worth re-running the turn it describes.
     with get_session() as session:
         profile = session.get(BotProfile, player_id)
-        profile.next_turn_at = now + timedelta(minutes=turn_every)
-        session.commit()
+        if profile is None:
+            # Deleted while the turn was in flight. Saying so is the point: reaching through
+            # a None here would raise before the schedule moved, which is the same shape as
+            # the bug this ordering exists to prevent — a turn that was paid for and then
+            # immediately taken again.
+            logger.warning("bot %s: профиль исчез за время хода, расписание не сдвинуть", nickname)
+        else:
+            profile.next_turn_at = now + timedelta(minutes=turn_every)
+            session.commit()
 
     try:
         with get_session() as session:

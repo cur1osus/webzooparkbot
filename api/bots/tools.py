@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException
 
@@ -426,8 +426,11 @@ def _exchange(tg_id: int, amount_rub: int = 0, exchange_all: bool = False, **_):
 @tool("upgrade_development", "Прокачать ветеринарию (лечение дешевле), генетику (лучше разведение) "
                              "или экспедиционный корпус (сильнее отряд). Медленные проценты, зато навсегда.",
       {"kind": {"type": "string", "enum": ["vet", "genetics", "expedition"]}}, ["kind"])
+# The model hands over a plain string or int; the schema `enum` only suggests. The real
+# gate is pydantic, whose ValidationError is a ValueError and comes back to the model as an
+# ordinary refusal in `call()` — so the cast states what is already true at runtime.
 def _upgrade_development(tg_id: int, kind: str, **_):
-    return development_service.upgrade(tg_id, UpgradeDevelopmentBody(kind=kind))
+    return development_service.upgrade(tg_id, UpgradeDevelopmentBody(kind=cast(Any, kind)))
 
 
 # ── Кузница ───────────────────────────────────────────────────────────────────
@@ -509,7 +512,7 @@ def _clan_join(tg_id: int, clan_id: int, **_):
       ["request_id", "decision"])
 def _clan_decide(tg_id: int, request_id: int, decision: str, **_):
     return social_service.clan_decide_join_request(
-        tg_id, ClanJoinDecisionBody(request_id=request_id, decision=decision)
+        tg_id, ClanJoinDecisionBody(request_id=request_id, decision=cast(Any, decision))
     )
 
 
@@ -570,7 +573,7 @@ def _cancel_duel(tg_id: int, duel_id: int, **_):
       {"kind": {"type": "string"}, "stake_pct": {"type": "integer", "enum": [5, 10, 15]}},
       ["kind"])
 def _start_solo(tg_id: int, kind: str, stake_pct: int = 5, **_):
-    return games_service.start_solo_game(tg_id, SoloStartBody(kind=kind, stake_pct=stake_pct))
+    return games_service.start_solo_game(tg_id, SoloStartBody(kind=kind, stake_pct=cast(Any, stake_pct)))
 
 
 @tool("cocktail_guess",
