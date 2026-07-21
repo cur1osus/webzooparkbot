@@ -350,6 +350,35 @@ def test_a_truncated_end_turn_does_not_end_the_turn(tmp_path, monkeypatch):
     assert result.rounds == 2, "первый (обрезанный) end_turn не должен был завершить ход"
 
 
+def test_the_last_round_is_offered_only_the_tools_that_close_a_turn(tmp_path, monkeypatch):
+    """Being told to wrap up was not enough — over half the turns burned the warning rounds
+    on more tool calls and hit the ceiling with no summary and no note. On the final round
+    everything but `remember` and `end_turn` is taken off the table."""
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(agent, "ROUTERAI_API_KEY", "test-key")
+    monkeypatch.setattr(agent, "MAX_ROUNDS", 3)
+    monkeypatch.setattr(agent.tools, "call", lambda *a, **k: {"ok": True})
+
+    every = ["get_me", "open_pack", "remember", "end_turn"]
+    monkeypatch.setattr(agent.tools, "schemas", lambda *a, **k: [
+        {"type": "function", "function": {"name": n, "description": "", "parameters": {}}} for n in every
+    ])
+
+    offered: list[list[str]] = []
+
+    def ask(payload):
+        offered.append([t["function"]["name"] for t in payload["tools"]])
+        return _round("get_me", "{}")  # never volunteers end_turn, so it runs to the ceiling
+
+    monkeypatch.setattr(agent, "_ask", ask)
+
+    result = agent.run_turn(get("gambler"), tg_id=-1002, player_id=1, nickname="Сфорца")
+
+    assert result.stopped_because == "исчерпан лимит обращений"
+    assert offered[0] == every, "в обычном круге должны быть все инструменты"
+    assert offered[-1] == ["remember", "end_turn"], "на последнем круге — только закрывающие"
+
+
 # ── dreaming (memory consolidation) ───────────────────────────────────────────
 
 

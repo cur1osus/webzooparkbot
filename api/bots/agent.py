@@ -118,6 +118,9 @@ _READ_ONLY = {
                                                                 "safe_state"}
 }
 
+# The only tools left on the table for the final round: write the lesson down, then close.
+_CLOSING = {"remember", "end_turn"}
+
 
 def _post(payload: dict) -> dict:
     body = json.dumps(payload).encode()
@@ -193,6 +196,7 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
             break
 
         remaining = MAX_ROUNDS - result.rounds
+        round_schemas = schemas
         if remaining <= 2:
             # Told, not cut off: it wraps up its own turn instead of stopping mid-thought.
             messages.append({
@@ -200,11 +204,18 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
                 "content": f"У тебя осталось {remaining} обращений. Заканчивай ход: "
                            f"сделай последнее важное, при желании запиши заметку и вызови end_turn.",
             })
+        if remaining <= 1:
+            # Asking it to wrap up is not enough — over half the turns spent the warning
+            # rounds on more tool calls and hit the ceiling with nothing written down, so
+            # the turn left neither a summary nor a note. On the last round it gets only
+            # the two tools that close a turn; a tool it cannot see is one it cannot spend
+            # its final round on.
+            round_schemas = [s for s in schemas if s["function"]["name"] in _CLOSING]
 
         data = _ask({
             "model": BOT_PLANNER_MODEL,
             "messages": messages,
-            "tools": schemas,
+            "tools": round_schemas,
             "tool_choice": "auto",
             "max_tokens": MAX_TOKENS,
             "temperature": 1.0,
