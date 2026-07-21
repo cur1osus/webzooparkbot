@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploys ZooPark to the live "zomserv" host (REDACTED-HOST). This host runs many
+# Deploys ZooPark to the live "zomserv" host. This host runs many
 # other bots, so this script is deliberately narrow: it writes ONLY into ZooPark's own
 # paths and never rewrites the shared /etc/caddy/Caddyfile. ZooPark's Caddy config lives
 # in the isolated fragment /etc/caddy/sites/zoopark.caddy, which the main Caddyfile
@@ -9,7 +9,7 @@ set -euo pipefail
 # Caddy config at all.
 #
 # History: an earlier deploy.sh targeted the decommissioned "servam" host
-# (REDACTED-OLD-HOST, dead since 2026-06-20) and rewrote the whole Caddyfile. Do not restore
+# (decommissioned 2026-06-20) and rewrote the whole Caddyfile. Do not restore
 # that behaviour — on this shared host it would clobber every other bot's routes.
 #
 # Usage:
@@ -17,7 +17,18 @@ set -euo pipefail
 #   ./deploy.sh --frontend-only # rebuild + upload static site only (UI-only changes)
 #   ./deploy.sh --backend-only  # API code + migrations + restart + webhook, skip the frontend
 
-REMOTE="${REMOTE:-root@REDACTED-HOST}"
+# The host is not in the repository. It used to be the default of `REMOTE`, which was fine
+# while nobody outside could read this file; in a public repository it is a free map to a
+# live box, so it lives in `.deploy.env` (gitignored) or the environment instead.
+if [[ -f "$(dirname "$0")/.deploy.env" ]]; then
+  # shellcheck disable=SC1091
+  source "$(dirname "$0")/.deploy.env"
+fi
+if [[ -z "${REMOTE:-}" || -z "${DOMAIN:-}" ]]; then
+  echo "deploy.sh: задай REMOTE и DOMAIN — в окружении или в .deploy.env рядом со скриптом." >&2
+  echo "  пример: REMOTE=root@203.0.113.10   DOMAIN=zoopark.example.com" >&2
+  exit 1
+fi
 WWW_DIR="${WWW_DIR:-/var/www/zoopark}"
 APP_DIR="${APP_DIR:-/opt/webzooparkbot}"
 API_DIR="${API_DIR:-${APP_DIR}/api}"
@@ -28,7 +39,6 @@ SERVICE="${SERVICE:-webzooparkbot-api}"
 # blocks the game from coming back up; skipped without complaint if it isn't installed yet.
 BOTS_SERVICE="${BOTS_SERVICE:-webzooparkbot-bots}"
 API_UPSTREAM="${API_UPSTREAM:-127.0.0.1:8900}"
-DOMAIN="${DOMAIN:-REDACTED-DOMAIN}"
 PUBLIC_URL="https://${DOMAIN}"
 
 DO_FRONTEND=1
