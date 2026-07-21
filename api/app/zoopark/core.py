@@ -53,7 +53,11 @@ logger = logging.getLogger(__name__)
 _BOT_USERNAME_CACHE_TTL_SECONDS = 300.0
 _bot_username_cache_lock = threading.Lock()
 _bot_username_cache: str | None = None
-_bot_username_cache_at = 0.0
+# `None` means "never fetched", and it has to be a sentinel rather than 0.0. `time.monotonic()`
+# is uptime on Linux, so for the first five minutes after a boot `now - 0.0` is *inside* the
+# TTL — production answered `bot_username: None` for five minutes after every restart without
+# ever asking Telegram, and no machine with a normal uptime could reproduce it.
+_bot_username_cache_at: float | None = None
 
 PROFILE_ACHIEVEMENT_PREFIX = "achievement:"
 ONLINE_WINDOW = timedelta(seconds=30)
@@ -121,15 +125,20 @@ def _normalise_bot_username(value: object) -> str | None:
     return username or None
 
 
+def _fresh(now: float) -> bool:
+    at = _bot_username_cache_at
+    return at is not None and now - at < _BOT_USERNAME_CACHE_TTL_SECONDS
+
+
 def _telegram_bot_username() -> str | None:
     """Read the username from Telegram, whose Bot API is the source of truth."""
     global _bot_username_cache, _bot_username_cache_at
     now = time.monotonic()
-    if now - _bot_username_cache_at < _BOT_USERNAME_CACHE_TTL_SECONDS:
+    if _fresh(now):
         return _bot_username_cache
     with _bot_username_cache_lock:
         now = time.monotonic()
-        if now - _bot_username_cache_at < _BOT_USERNAME_CACHE_TTL_SECONDS:
+        if _fresh(now):
             return _bot_username_cache
         try:
             payload = call_bot_api("getMe", {})

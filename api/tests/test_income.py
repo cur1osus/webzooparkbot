@@ -138,7 +138,10 @@ class TestAccrual:
             row = session.query(Player).filter_by(telegram_id=player).one()
             row.income_rub_per_min = 600
             row.upkeep_rub_per_min = 100
-            row.income_synced_at = utcnow() - timedelta(minutes=10)
+            # Anchored on a whole second: accrual counts whole seconds, and MySQL rounds a
+            # DATETIME to one while SQLite keeps the microseconds, so a fractional anchor
+            # makes the expected payout differ by an engine's rounding rather than by rate.
+            row.income_synced_at = (utcnow() - timedelta(minutes=10)).replace(microsecond=0)
             session.commit()
 
         with get_session() as session:
