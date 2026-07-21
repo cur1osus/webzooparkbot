@@ -417,6 +417,28 @@ class TestExpeditionLifecycle:
         assert after["income_rub_per_min"] == before["income_rub_per_min"]
         assert after["upkeep_rub_per_min"] < before["upkeep_rub_per_min"]
 
+    def test_the_animal_list_agrees_with_me_about_the_habitat_bonus(self, db, player, grant):
+        """`/api/animals` used to compute every animal as if it lived nowhere, so it reported
+        `habitat_bonus: false` and a smaller income than `/api/me` for the very same animal."""
+        from api.app.zoopark.core import me
+        from api.app.schemas.progression import AssignLocalityBody, BuyLocalityBody
+
+        progression.open_pack(player)
+        grant(player, "rub", 1_000_000)
+        animal = progression.list_available_animals(player)["animals"][0]
+        localities = progression.list_localities(player)["localities"]
+        locality = next(
+            (loc for loc in localities if loc["habitat"] == animal["habitat"]),
+            None,
+        ) or progression.buy_locality(player, BuyLocalityBody(habitat=animal["habitat"]))
+        progression.assign_locality(player, AssignLocalityBody(animal_id=animal["id"], locality_id=locality["id"]))
+
+        listed = next(a for a in progression.list_available_animals(player)["animals"] if a["id"] == animal["id"])
+        from_me = next(a for a in me(player)["animals"] if a["id"] == animal["id"])
+
+        assert listed["habitat_bonus"] is True
+        assert listed["income"] == from_me["income"]
+
     def test_global_development_tracks_upgrade(self, db, player, grant):
         from api.app.schemas.development import UpgradeDevelopmentBody
         from api.app.zoopark import development

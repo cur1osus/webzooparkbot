@@ -76,6 +76,7 @@ from api.app.zoopark.catalog import (
     pack_reward_range,
 )
 from api.app.zoopark.income import (
+    alive_animals,
     alive_clause,
     animal_base_income_rub_per_min,
     available_animals,
@@ -238,6 +239,11 @@ def list_available_animals(tg_id: int) -> dict:
 
     Breeding used to read this out of `GET /api/packs/info`, which had no business
     knowing about it.
+
+    The locality's habitat is joined in, so `habitat_bonus` and `income` here say the
+    same thing as `/api/me` does. They used to be computed with no locality at all, which
+    reported every animal as living outside its habitat — a rival read that for days and
+    concluded from it that the x1.5 bonus was broken.
     """
     with get_session() as session:
         player = get_player(session, tg_id)
@@ -245,9 +251,9 @@ def list_available_animals(tg_id: int) -> dict:
             raise HTTPException(404, "Нет игрока")
         season = ensure_player_season(session, player)
         bonuses = bonuses_module.load(session, player.id)
-        animals = available_animals(session, player.id, season.id)
+        rows = alive_animals(session, player.id, season.id)
         session.commit()
-        return {"animals": [animal_payload(a, None, bonuses) for a in animals]}
+        return {"animals": [animal_payload(a, habitat, bonuses) for a, habitat in rows]}
 
 
 def packs_info(tg_id: int) -> dict:
