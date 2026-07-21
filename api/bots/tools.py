@@ -357,8 +357,10 @@ def _assign_animal(tg_id: int, animal_id: int, locality_id: int | None = None, *
     )
 
 
-@tool("assign_matching_animals", "Разом поселить в локацию всех бесхозных зверей её среды. "
-                                 "Быстрее, чем по одному, когда только что пришла пачка зверей.",
+@tool("assign_matching_animals", "Собрать в локацию всех своих зверей её среды разом — и бесхозных, "
+                                 "и тех, кто сейчас сидит в чужой локации. Один вызов вместо вызова "
+                                 "на каждого зверя. Если ревизор пишет, что звери стоят не в своей "
+                                 "среде при живой подходящей локации — это чинится отсюда.",
       {"locality_id": {"type": "integer"}}, ["locality_id"])
 def _assign_matching(tg_id: int, locality_id: int, **_):
     return progression_service.assign_matching_locality(

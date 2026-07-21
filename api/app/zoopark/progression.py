@@ -8,7 +8,7 @@ from random import SystemRandom
 from typing import cast
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -591,7 +591,18 @@ def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
 
 
 def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> dict:
-    """Place every currently unassigned animal into the selected matching locality."""
+    """Bring every animal of this locality's habitat into it — homeless or merely misplaced.
+
+    It used to move only animals with no locality at all, which left the worse case
+    untouched: an animal standing in someone else's habitat earns two thirds of what it
+    would here, and there was no way to fix a group of them except one call each. A rival
+    with nine such animals, and a matching locality already bought and empty, worked
+    through them a couple per turn.
+
+    Nothing is taken away by this. An animal is only ever moved *into* its own habitat, and
+    outside it there is no upside to be preserved — the multiplier is the only thing a
+    locality does for an animal.
+    """
     with get_session() as session:
         player = get_player(session, tg_id, for_update=True)
         if not player:
@@ -614,7 +625,9 @@ def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> di
             .where(
                 Animal.player_id == player.id,
                 Animal.season_id == season.id,
-                Animal.locality_id.is_(None),
+                # Anywhere but here: no locality at all, or the wrong one. `!=` alone would
+                # drop the homeless, since NULL compares to nothing.
+                or_(Animal.locality_id.is_(None), Animal.locality_id != locality.id),
                 Animal.habitat == locality.habitat,
                 alive_clause(),
                 Animal.id.not_in(on_expedition_subquery()),

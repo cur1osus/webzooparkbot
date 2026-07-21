@@ -52,21 +52,33 @@ function AnimalChip({ animal, onRemove }: { animal: Animal; onRemove: () => void
   );
 }
 
+/** How many animals the "Распределить сразу" button would pull into this locality.
+ *
+ * Not just the homeless ones. An animal standing in another habitat earns two thirds of
+ * what it would here, and the endpoint moves those too — so the count has to match, or the
+ * button reports less than it does. */
+function matchingCountFor(info: LocalitiesInfo, locality: Locality): number {
+  const elsewhere = info.localities
+    .filter(other => other.id !== locality.id)
+    .flatMap(other => other.animals);
+  return [...info.unassigned, ...elsewhere].filter(a => a.habitat === locality.habitat).length;
+}
+
 // ─── Locality card ─────────────────────────────────────────────────────────────
 
-function LocalityCard({ locality, unassigned, onAdd, onAssignMatching, assigningMatching, onRemove }: {
+function LocalityCard({ locality, unassigned, matchingCount, onAdd, onAssignMatching, assigningMatching, onRemove }: {
   locality: Locality;
   unassigned: Animal[];
   onAdd: () => void;
   onAssignMatching: () => void;
   assigningMatching: boolean;
+  matchingCount: number;
   onRemove: (id: number) => void;
 }) {
   const hab = HABITAT_INFO[locality.habitat];
   const totalIncome = locality.animals.reduce((s, a) => s + a.income, 0);
 
   const canAdd = unassigned.length > 0;
-  const matchingCount = unassigned.filter(animal => animal.habitat === locality.habitat).length;
   const hasAnimals = locality.animals.length > 0;
   const [collapsed, setCollapsed] = useState(hasAnimals);
   return (
@@ -343,6 +355,7 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
               key={loc.id}
               locality={loc}
               unassigned={info.unassigned}
+              matchingCount={matchingCountFor(info, loc)}
               onAdd={() => setAssigning({ localityId: loc.id, habitat: loc.habitat })}
               onAssignMatching={() => void handleAssignMatching(loc.id)}
               assigningMatching={assigningMatchingId === loc.id}

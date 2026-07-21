@@ -640,3 +640,59 @@ class TestBreeding:
 
 def test_tier_index_is_ordered():
     assert BREED_TIER_INDEX["low"] < BREED_TIER_INDEX["medium"] < BREED_TIER_INDEX["high"]
+
+
+class TestAssigningEveryMatchingAnimal:
+    """`assign_matching_locality` used to move only animals with no locality at all, which
+    left the worse case alone: an animal standing in another habitat earns two thirds of
+    what it would at home, and fixing a group of them cost one call each."""
+
+    def test_it_collects_the_homeless_and_the_misplaced_alike(self, db, player, grant):
+        from api.app.schemas.progression import (
+            AssignLocalityBody, AssignMatchingLocalityBody, BuyLocalityBody,
+        )
+
+        progression.open_pack(player)
+        grant(player, "rub", 5_000_000)
+        animals = progression.list_available_animals(player)["animals"]
+        home_habitat = animals[0]["habitat"]
+        owned = {loc["habitat"]: loc["id"] for loc in progression.list_localities(player)["localities"]}
+        wrong_habitat = next(h for h in ("desert", "fields", "forest", "antarctica", "mountains")
+                             if h != home_habitat)
+        for habitat in (home_habitat, wrong_habitat):
+            if habitat not in owned:
+                owned[habitat] = progression.buy_locality(player, BuyLocalityBody(habitat=habitat))["id"]
+
+        # One animal parked in the wrong habitat, the rest left homeless.
+        of_habitat = [a for a in animals if a["habitat"] == home_habitat]
+        progression.assign_locality(
+            player, AssignLocalityBody(animal_id=of_habitat[0]["id"], locality_id=owned[wrong_habitat])
+        )
+
+        result = progression.assign_matching_locality(
+            player, AssignMatchingLocalityBody(locality_id=owned[home_habitat])
+        )
+
+        assert result["assigned_count"] == len(of_habitat), "и бесхозные, и заблудившийся"
+        after = progression.list_available_animals(player)["animals"]
+        for animal in after:
+            if animal["habitat"] == home_habitat:
+                assert animal["locality_id"] == owned[home_habitat]
+                assert animal["habitat_bonus"] is True
+
+    def test_an_animal_already_home_is_not_counted_again(self, db, player, grant):
+        from api.app.schemas.progression import AssignMatchingLocalityBody, BuyLocalityBody
+
+        progression.open_pack(player)
+        grant(player, "rub", 5_000_000)
+        habitat = progression.list_available_animals(player)["animals"][0]["habitat"]
+        owned = {loc["habitat"]: loc["id"] for loc in progression.list_localities(player)["localities"]}
+        locality_id = owned.get(habitat) or progression.buy_locality(
+            player, BuyLocalityBody(habitat=habitat)
+        )["id"]
+
+        first = progression.assign_matching_locality(player, AssignMatchingLocalityBody(locality_id=locality_id))
+        second = progression.assign_matching_locality(player, AssignMatchingLocalityBody(locality_id=locality_id))
+
+        assert first["assigned_count"] > 0
+        assert second["assigned_count"] == 0, "повтор не должен пересчитывать тех, кто уже дома"
