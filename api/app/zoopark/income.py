@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 import random
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import trunc
 
 from sqlalchemy import and_, select
@@ -255,14 +255,24 @@ def _accrue_until(session: Session, player: Player, until: datetime) -> int:
     Returns the net rubles moved. The clock only advances when something was actually
     paid: a player whose net income is 3 ₽/min would otherwise lose every ruble to
     `trunc()` if the client polled once a second.
+
+    Time is counted, and the clock advanced, in whole seconds — never to `until` itself.
+    MySQL's DATETIME holds no fraction, so writing `until` stored it rounded down and the
+    next call measured from the rounded-down value: every poll billed the game for up to
+    an extra second it had not lived through. `GET /api/me` accrues and has no rate limit,
+    so a client polling in a loop minted money — measured at 258x the honest rate against
+    a real MySQL. Whole seconds round-trip exactly, on either engine, so polling faster
+    now earns exactly nothing extra.
     """
     net_per_min = int(player.income_rub_per_min) - int(player.upkeep_rub_per_min)
+    elapsed = int((until - player.income_synced_at).total_seconds())
     if net_per_min == 0:
-        player.income_synced_at = until
+        player.income_synced_at += timedelta(seconds=max(elapsed, 0))
+        return 0
+    if elapsed <= 0:
         return 0
 
-    elapsed_minutes = (until - player.income_synced_at).total_seconds() / 60.0
-    accrued = trunc(elapsed_minutes * net_per_min)
+    accrued = trunc(elapsed / 60.0 * net_per_min)
     if accrued == 0:
         # Less than one ruble has been earned. Leave the clock where it is so the
         # fraction is not silently dropped.
@@ -277,7 +287,7 @@ def _accrue_until(session: Session, player: Player, until: datetime) -> int:
         if payable:
             ledger.spend(session, player, "rub", payable, "upkeep")
 
-    player.income_synced_at = until
+    player.income_synced_at += timedelta(seconds=elapsed)
     return accrued
 
 
@@ -294,13 +304,18 @@ def _maybe_disease_outbreak(session: Session, player: Player, now: datetime) -> 
     locality — the more animals crowded there, the more fall ill.
     """
     last = player.outbreak_checked_at
-    player.outbreak_checked_at = now
     if last is None:
         # First check for this player: establish the anchor, strike nothing.
+        player.outbreak_checked_at = now
         return
-    elapsed_days = (now - last).total_seconds() / 86_400.0
-    if elapsed_days <= 0:
+    # Whole seconds, for the same reason the accrual counts them: the stored anchor carries
+    # no fraction on MySQL, so advancing it to `now` handed the next check up to an extra
+    # second of "elapsed" — and a client polling in a loop could rain outbreaks on itself.
+    elapsed_seconds = int((now - last).total_seconds())
+    if elapsed_seconds <= 0:
         return
+    player.outbreak_checked_at = last + timedelta(seconds=elapsed_seconds)
+    elapsed_days = elapsed_seconds / 86_400.0
 
     healthy = session.scalars(
         select(Animal).where(

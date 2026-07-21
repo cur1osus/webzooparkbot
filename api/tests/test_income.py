@@ -108,6 +108,31 @@ class TestAccrual:
             assert row.income_synced_at == before
             session.commit()
 
+    def test_polling_in_a_loop_earns_no_more_than_waiting(self, db, player):
+        """`GET /api/me` accrues and is not rate limited, so the accrual has to be immune to
+        how often it is called. It was not: the clock was advanced to a `datetime` carrying
+        microseconds, MySQL's DATETIME dropped them, and each poll re-billed the fraction it
+        had already been paid for. Against a real MySQL that came to 258x the honest rate."""
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            row.income_rub_per_min = 3323
+            row.upkeep_rub_per_min = 0
+            row.income_synced_at = utcnow() - timedelta(minutes=5)
+            session.commit()
+
+        # Whatever the storage does to the anchor, a thousand polls covering the same five
+        # minutes must pay the same five minutes.
+        for _ in range(1000):
+            with get_session() as session:
+                row = session.query(Player).filter_by(telegram_id=player).one()
+                income.accrue(session, row)
+                session.commit()
+
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            earned = ledger.balance(row, "rub")
+        assert 3323 * 5 <= earned <= 3323 * 6, f"начислено {earned} ₽ вместо ~{3323 * 5}"
+
     def test_time_passing_pays_out(self, db, player):
         with get_session() as session:
             row = session.query(Player).filter_by(telegram_id=player).one()

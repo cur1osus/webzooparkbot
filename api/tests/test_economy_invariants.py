@@ -436,19 +436,21 @@ class TestEveryItemPropertyIsApplied:
     def test_discount_packs_lowers_the_pack_price(self, db, player):
         before = pack_price_usd_for_tier("rare")
         _activate(player, "discount_packs", 40)
+        pid = _player_id(player)
         with get_session() as session:
-            bonuses = bonuses_module.load(session, 1)
+            bonuses = bonuses_module.load(session, pid)
         assert pack_price_usd_for_tier("rare", bonuses.pack_discount_multiplier()) < before
 
     def test_duel_properties_reach_the_roll(self, db, player):
         _activate(player, "duel_moves", 3)
         _activate(player, "duel_bonus", 5)
+        pid = _player_id(player)
         with get_session() as session:
-            active = bonuses_module.load(session, 1)
+            active = bonuses_module.load(session, pid)
         assert active.total("duel_moves") == 3
         assert active.total("duel_bonus") == 5
         with get_session() as session:
-            scores = {games._roll_score(session, 1) for _ in range(50)}
+            scores = {games._roll_score(session, pid) for _ in range(50)}
         assert min(scores) >= 8 + 5  # eight dice, each at least one, plus the flat bonus
 
     def test_bonus_rerolls_are_spendable(self, db, player):
@@ -464,8 +466,9 @@ class TestEveryItemPropertyIsApplied:
     def test_discount_caps_are_enforced(self, db, player):
         _activate(player, "discount_bank", 60)
         _activate(player, "discount_bank", 60)  # a second item stacks, then clips at 80
+        pid = _player_id(player)
         with get_session() as session:
-            assert bonuses_module.load(session, 1).total("discount_bank") == 80
+            assert bonuses_module.load(session, pid).total("discount_bank") == 80
 
     def test_discount_upkeep_lowers_the_stored_maintenance_rate(self, db, player):
         from api.app.zoopark.core import me
@@ -481,8 +484,9 @@ class TestEveryItemPropertyIsApplied:
         _activate(player, "discount_upkeep", 30)
         after = me(player)["upkeep_rub_per_min"]
         assert after < before
+        pid = _player_id(player)
         with get_session() as session:
-            assert bonuses_module.load(session, 1).total("discount_upkeep") == 30
+            assert bonuses_module.load(session, pid).total("discount_upkeep") == 30
 
     def test_active_summary_shows_the_capped_total_not_the_naive_sum(self, db, player):
         """The forge summary must report what the game applies. Two −45% upkeep items sum to
@@ -540,6 +544,13 @@ def _stock_zoo(telegram_id: int, count: int = 7) -> None:
                 species_id=SPECIES_ID_BY_CODE["dragon"],
             )
         session.commit()
+
+
+def _player_id(telegram_id: int) -> int:
+    """The row id, looked up rather than assumed. It used to be written as a literal 1, which
+    held only because SQLite hands out ids again after a delete; MySQL does not."""
+    with get_session() as session:
+        return session.query(Player).filter_by(telegram_id=telegram_id).one().id
 
 
 def _activate(telegram_id: int, kind: str, value: int, species_id: int | None = None) -> None:

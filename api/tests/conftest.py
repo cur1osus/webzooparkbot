@@ -2,8 +2,15 @@
 
 The previous suite mocked `get_session` and asserted on the mock. It could not have
 caught a missing unique key, a lost row lock or a ledger that disagreed with a balance,
-because none of those live in Python. Here every test runs the actual schema in an
-in-memory SQLite database, with foreign keys switched on.
+because none of those live in Python. Here every test runs the actual schema, with
+foreign keys switched on.
+
+The engine is in-memory SQLite by default, so a local run stays instant. Set `TEST_DB_URL`
+to a MySQL DSN to run the same suite against the engine production actually uses — CI does
+both. That is not belt-and-braces: SQLite's `TEXT` is unbounded and MySQL's is 64 KiB, and
+four production bugs came out of exactly that gap while the SQLite suite stayed green. One
+of them, a rival's turn journal overflowing the column, rolled back the schedule with it
+and cost real money in model calls before anyone noticed.
 """
 
 from __future__ import annotations
@@ -13,7 +20,9 @@ from pathlib import Path
 
 import pytest
 
-os.environ.setdefault("DB_URL", "sqlite://")
+TEST_DB_URL = os.environ.get("TEST_DB_URL", "sqlite://")
+
+os.environ.setdefault("DB_URL", TEST_DB_URL)
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("DEV_AUTH", "1")
 os.environ.setdefault("ALLOWED_TG_IDS", "*")
@@ -29,22 +38,48 @@ import api.app.db.connection as connection  # noqa: E402
 from api.app.db.models import Base, Player  # noqa: E402
 
 
-@pytest.fixture()
-def db():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+@pytest.fixture(scope="session")
+def _engine():
+    """One engine and one schema for the whole run. Building the schema per test is free on
+    in-memory SQLite and decidedly not on MySQL, where DDL is neither transactional nor
+    cheap — the `db` fixture empties the tables instead."""
+    if TEST_DB_URL.startswith("sqlite"):
+        engine = create_engine(
+            TEST_DB_URL,
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
 
-    @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(dbapi_connection, _record):
-        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+        @event.listens_for(engine, "connect")
+        def _enable_foreign_keys(dbapi_connection, _record):
+            dbapi_connection.execute("PRAGMA foreign_keys=ON")
+    else:
+        engine = create_engine(TEST_DB_URL, pool_pre_ping=True)
 
-    previous = connection._engine
-    connection._engine = engine
-    connection._session_factory.configure(bind=engine)
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    yield engine
+    Base.metadata.drop_all(engine)
+    engine.dispose()
+
+
+@pytest.fixture()
+def db(_engine):
+    previous = connection._engine
+    connection._engine = _engine
+    connection._session_factory.configure(bind=_engine)
+
+    # Emptied child-first, so foreign keys hold throughout and a leftover row can never be
+    # what makes the next test pass.
+    #
+    # The auto-increment counters are deliberately *not* wound back. SQLite reuses ids after
+    # a delete and MySQL does not, so a test that assumes "the player is id 1" passes on one
+    # engine and fails on the other — but resetting the counters costs a DDL statement per
+    # table per test, which took the MySQL run from eleven seconds to six minutes and made it
+    # flaky besides. Tests look their ids up instead.
+    with _engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
 
     from api.app.db.connection import get_session
     from api.app.db.seed import seed_species, seed_treasury
@@ -54,10 +89,8 @@ def db():
         seed_treasury(session)
         session.commit()
 
-    yield engine
+    yield _engine
 
-    Base.metadata.drop_all(engine)
-    engine.dispose()
     connection._engine = previous
 
 

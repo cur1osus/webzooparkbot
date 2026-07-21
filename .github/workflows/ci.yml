@@ -8,6 +8,35 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+
+    # The suite runs twice: once on in-memory SQLite, which is what a developer gets locally,
+    # and once on the MySQL production actually uses. The two disagree in ways that have bitten
+    # us repeatedly — TEXT is unbounded on one and 64 KiB on the other, DATETIME keeps
+    # microseconds on one and drops them on the other — and every one of those bugs reached
+    # production with the SQLite suite green.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: sqlite
+            db_url: "sqlite://"
+          - engine: mysql
+            db_url: "mysql+pymysql://root:ci@127.0.0.1:3306/zoopark_test?charset=utf8mb4"
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci
+          MYSQL_DATABASE: zoopark_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,11 +48,22 @@ jobs:
           pip install -r api/requirements.txt
           pip install pytest mypy ruff
       - name: Lint
+        if: matrix.engine == 'sqlite'
         run: ruff check api
       - name: Type check
+        if: matrix.engine == 'sqlite'
         run: mypy api/app --ignore-missing-imports
-      - name: Test
+      - name: Test on ${{ matrix.engine }}
+        env:
+          TEST_DB_URL: ${{ matrix.db_url }}
         run: pytest api/tests -q
+      - name: Migrations build the same schema the models describe
+        if: matrix.engine == 'mysql'
+        env:
+          DB_URL: ${{ matrix.db_url }}
+        run: |
+          mysql -h 127.0.0.1 -uroot -pci -e "DROP DATABASE zoopark_test; CREATE DATABASE zoopark_test CHARACTER SET utf8mb4;"
+          cd api && alembic upgrade head
 
   frontend:
     runs-on: ubuntu-latest
