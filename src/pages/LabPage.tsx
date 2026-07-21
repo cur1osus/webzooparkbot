@@ -8,6 +8,7 @@ import { apiBreed, apiGetAnimals, apiSetAnimalFavorite } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
 import { compareByQuality } from '@/lib/animalQuality';
+import { useStoredChoice } from '@/hooks/useStoredChoice';
 
 const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
 // Mirrors BREED_COST_INCOME_HOURS: a breeding attempt costs this many hours of the two
@@ -24,6 +25,7 @@ const PICKER_SORTS: Array<{ id: PickerSort; label: string }> = [
   { id: 'quality',      label: 'Качество' },
   { id: 'reproduction', label: 'Размножение' },
 ];
+const PICKER_SORT_IDS = PICKER_SORTS.map(option => option.id);
 
 function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
   if (!a || !b) return null;
@@ -192,8 +194,9 @@ function ParentSlot({ label, animal, onClick }: {
 
 // ─── Animal picker overlay ────────────────────────────────────────────────────
 
-function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteBusyId, onClose }: {
+function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteBusyId, onClose }: {
   animals: Animal[];
+  tgId: number;
   exclude: number | null;
   // When the other parent is already chosen, only its species can breed with it.
   mateSpeciesCode: string | null;
@@ -203,7 +206,7 @@ function AnimalPicker({ animals, exclude, mateSpeciesCode, onPick, onToggleFavor
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<PickerSort>('new');
+  const [sort, setSort] = useStoredChoice<PickerSort>('breed-picker-sort', tgId, PICKER_SORT_IDS, 'new');
   const available = useMemo(() => {
     const breedable = animals.filter(a => a.can_breed && a.id !== exclude);
     // The first slot should never offer a dead end: if the player has no other
@@ -563,6 +566,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
       {picking !== null && (
         <AnimalPicker
           animals={animals}
+          tgId={gs.tg_id}
           exclude={picking === 1 ? parent2?.id ?? null : parent1?.id ?? null}
           mateSpeciesCode={picking === 1 ? parent2?.species_code ?? null : parent1?.species_code ?? null}
           onPick={a => {

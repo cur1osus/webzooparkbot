@@ -23,6 +23,7 @@ import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { getDefaultProfileAnimal, type ProfileAnimal } from '@/data/profileAnimals';
 import { SPECIES_RARITY_META } from '@/data/packs';
 import { compareByQuality } from '@/lib/animalQuality';
+import { useStoredChoice } from '@/hooks/useStoredChoice';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -68,6 +69,8 @@ const ANIMAL_SORTS: { id: AnimalSort; label: string }[] = [
   { id: 'quality', label: 'Качество' },
 ];
 
+const ANIMAL_SORT_IDS = ANIMAL_SORTS.map(s => s.id);
+
 const ANIMAL_GENE_ORDER = [
   { key: 'survival', label: 'Выживаемость' },
   { key: 'appearance', label: 'Внешность' },
@@ -110,7 +113,7 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
-  const [animalSort, setAnimalSort] = useState<AnimalSort>('new');
+  const [animalSort, setAnimalSort] = useStoredChoice<AnimalSort>('zoo-animal-sort', gs.tg_id, ANIMAL_SORT_IDS, 'new');
   const [favoriteOverrides, setFavoriteOverrides] = useState<Map<number, boolean>>(new Map());
   const [favoriteBusyId, setFavoriteBusyId] = useState<number | null>(null);
   const [defaultProfileAnimal] = useState<ProfileAnimal>(() => getDefaultProfileAnimal(gs.tg_id));
