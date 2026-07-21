@@ -22,6 +22,13 @@ WorkingDirectory=/opt/webzooparkbot
 ExecStart=/opt/webzooparkbot/start-bots.sh
 Restart=on-failure
 RestartSec=10
+# A turn is bounded by the agent's own deadline (600s) plus a consolidation call, and SIGTERM
+# is only acted on once the turn in flight returns — deliberately, because a turn killed
+# halfway has already been paid for to the model while its schedule has not moved, so the
+# rival wakes up and pays for the same turn again. systemd's default here is 90s, which meant
+# every deploy that landed mid-turn ended in SIGKILL. Sized for one turn, not for the queue:
+# the runner hands back any rival whose turn has not started yet.
+TimeoutStopSec=900
 NoNewPrivileges=true
 PrivateTmp=true
 UMask=0077

@@ -30,9 +30,16 @@
 ## Tests
 
 - `pytest api/tests -q` runs the suite on in-memory SQLite. Fast, and what CI runs first.
-- **Before touching anything that stores a timestamp or a large blob, run it on MySQL too:**
-  `TEST_DB_URL='mysql+pymysql://user@/zoopark_test?unix_socket=/tmp/mysql.sock' pytest api/tests -q`.
+- **Before touching anything that stores a timestamp or a large blob, run it on MySQL too**
+  (create `zoopark_test` once, then point `TEST_DB_URL` at your own server — the user and
+  socket below are whatever your local install uses, not a fixed pair):
+  `TEST_DB_URL="mysql+pymysql://$(whoami)@/zoopark_test?unix_socket=/tmp/mysql.sock" pytest api/tests -q`.
   SQLite's `TEXT` is unbounded and MySQL's is 64 KiB; SQLite keeps microseconds in a
   `DATETIME` and MySQL drops them. Both differences have reached production, the second one
   as a money exploit — accrual measured from a rounded-down anchor paid a polling client
   258x. The suite passes on both engines; keep it that way.
+- **A local MariaDB is not the same check as production.** MariaDB *truncates* a `DATETIME`
+  to the second, MySQL 8 *rounds* it — so a half-second gets rounded up into the future on
+  prod and down to the past locally, and the outbox worker that skipped due rows was
+  invisible on a MariaDB laptop. Run `SELECT VERSION()` before trusting a green local run;
+  the real MySQL 8 pass is the `mysql:8.0` matrix job in CI.

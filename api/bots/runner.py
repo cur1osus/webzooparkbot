@@ -190,7 +190,7 @@ def _print_turn(nickname: str, character, result: agent.TurnResult) -> None:
           f"{result.completion_tokens} вых → {result.cost_micro_rub / 1e6:.4f} ₽")
 
 
-def tick(*, dry_run: bool = False) -> int:
+def tick(*, dry_run: bool = False, stop: threading.Event | None = None) -> int:
     now = utcnow()
     with get_session() as session:
         claimed = _claim(session, now)
@@ -200,6 +200,13 @@ def tick(*, dry_run: bool = False) -> int:
     touched = 0
     for player_id in claimed:
         try:
+            # A turn already under way is allowed to finish — it has been paid for, and the
+            # schedule only moves once it does. A turn not yet started is simply given back:
+            # otherwise a shutdown takes as long as every claimed rival in turn, and the
+            # service unit's stop timeout is sized for one.
+            if stop is not None and stop.is_set():
+                logger.info("bot %s: остановка, ход не начат — снимаю claim", player_id)
+                continue
             if _process(player_id, now, dry_run=dry_run):
                 touched += 1
         except Exception:  # noqa: BLE001 — one bad rival must not stop the others
@@ -222,7 +229,7 @@ class BotRunner:
         logger.info("bot runner started, polling every %.0fs", self.poll_seconds)
         while not self._stop.is_set():
             try:
-                tick()
+                tick(stop=self._stop)
             except Exception:  # noqa: BLE001
                 logger.exception("bot runner iteration failed")
             self._stop.wait(self.poll_seconds)

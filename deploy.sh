@@ -200,7 +200,11 @@ if [ -z "${ROUTERAI_API_KEY:-}" ]; then
     echo "[bots] The rivals will run on fallback plans and never replan."
 fi
 
-systemctl restart "$BOTS_SERVICE"
+# --no-block, because the unit now drains: a rival mid-turn keeps the old process alive for
+# up to its deadline rather than being killed, and a deploy must not sit there for it. The
+# wait below still catches the ordinary case — an idle runner restarts in under a second, so
+# a service broken by this deploy is reported here as before.
+systemctl restart --no-block "$BOTS_SERVICE"
 for _ in $(seq 1 15); do
     state="$(systemctl is-active "$BOTS_SERVICE" || true)"
     [ "$state" = "active" ] && exit 0
@@ -211,9 +215,11 @@ for _ in $(seq 1 15); do
     fi
     sleep 1
 done
-echo "[bots] ${BOTS_SERVICE} did not become active in time"
-journalctl -u "$BOTS_SERVICE" -n 40 --no-pager || true
-exit 1
+# Still shutting down: a turn is in flight. The new code takes over when it ends, and the
+# deploy is not the place to wait ten minutes for that.
+echo "[bots] ${BOTS_SERVICE}: ход в полёте, новый код подхватится по его окончании."
+echo "[bots] Проверить: systemctl is-active ${BOTS_SERVICE}"
+exit 0
 ENDSSH
 
   echo "[backend 5/5] Register Telegram webhook"

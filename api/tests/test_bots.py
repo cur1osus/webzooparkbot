@@ -689,3 +689,43 @@ def test_the_suggestion_uses_shared_words_where_spelling_alone_would_miss():
     alone returned `set_theme` for it — the two measures cover each other's blind spots."""
     assert "forge_sell" in tools.call("sell_item", tg_id=-1, player_id=1, arguments={})["может быть"]
     assert "get_bank" in tools.call("get_safe", tg_id=-1, player_id=1, arguments={})["может быть"]
+
+
+def test_a_shutdown_hands_back_a_rival_whose_turn_has_not_started(db, monkeypatch):
+    """`tick` claims every due rival up front, so a stop arriving between two of them used to
+    still run the rest — each for up to the agent deadline. The unit's stop timeout is sized
+    for one turn, so systemd reached it and sent SIGKILL, which is the one ending that costs a
+    turn twice: the model is paid and `next_turn_at` never moves."""
+    import threading
+
+    from sqlalchemy import select
+
+    from api.app.db.connection import get_session
+    from api.app.db.models import BotProfile, Player, utcnow
+    from api.app.schemas.core import RegisterBody
+    from api.app.zoopark.core import register
+
+    register(-1002, RegisterBody(nickname="Сфорца"))
+    with get_session() as session:
+        player = session.scalar(select(Player).where(Player.telegram_id == -1002))
+        player.is_bot = True
+        player_id = player.id
+        session.add(BotProfile(
+            player_id=player_id, character="gambler", enabled=True, turn_every_minutes=45,
+            wake_hour_utc=0, sleep_hour_utc=0, biography="", created_at=utcnow(),
+        ))
+        session.commit()
+
+    turns_taken = []
+    monkeypatch.setattr(runner, "_process", lambda pid, *a, **k: turns_taken.append(pid) or True)
+
+    stop = threading.Event()
+    stop.set()
+    assert runner.tick(stop=stop) == 0
+    assert turns_taken == [], "ход не начат — значит и начинать его не надо"
+
+    with get_session() as session:
+        assert session.get(BotProfile, player_id).locked_at is None, "claim должен вернуться"
+
+    assert runner.tick() == 1, "без остановки ход идёт как обычно"
+    assert turns_taken == [player_id]
