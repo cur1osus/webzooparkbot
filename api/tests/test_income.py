@@ -246,3 +246,22 @@ class TestDiseaseOutbreak:
             session.commit()
 
         assert self._sick_count(player) == 0
+
+
+def test_a_timestamp_is_never_stored_ahead_of_when_it_happened(db, player):
+    """MySQL 8 rounds a DATETIME to the nearest second, so `utcnow()` written at `.6` came
+    back as the following second — half a second in the future. Anything queued as "due now"
+    was then not yet due. The type truncates on the way in so that cannot happen."""
+    from api.app.db.connection import get_session
+    from api.app.db.models import Player, utcnow
+
+    now = utcnow().replace(microsecond=900_000)
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        row.last_seen_at = now
+        session.commit()
+
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        assert row.last_seen_at <= now, "запись не может оказаться в будущем"
+        assert row.last_seen_at == now.replace(microsecond=0)

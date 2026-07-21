@@ -62,6 +62,15 @@ class UtcDateTime(TypeDecorator):
     Every `datetime` crossing this boundary is timezone-aware. The previous schema used
     a bare `DateTime`, so the domain layer was littered with `value.replace(tzinfo=utc)`
     and each new call site was a chance to forget.
+
+    Microseconds are dropped on the way in, deliberately. A `DATETIME` holds no fraction,
+    and MySQL 8 *rounds* to the nearest second rather than truncating — so a value written
+    at `.6` came back `.0` of the following second, half a second in the future. A
+    notification queued as available now was then not yet due, and the worker skipped it.
+    Truncating here means what Python holds and what the row holds are the same instant on
+    every engine, and nothing can be stored ahead of when it happened. It also puts SQLite,
+    which would otherwise keep the fraction, in step with production. Nothing in the game
+    is scheduled to finer than a second.
     """
 
     impl = DateTime
@@ -72,7 +81,7 @@ class UtcDateTime(TypeDecorator):
             return None
         if value.tzinfo is None:
             raise ValueError("naive datetime reached the database; use utcnow()")
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.astimezone(timezone.utc).replace(tzinfo=None, microsecond=0)
 
     def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
         if value is None:
