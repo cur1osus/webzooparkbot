@@ -69,6 +69,7 @@ from api.app.zoopark.catalog import (
     COCKTAIL_LENGTH,
     EXPEDITION_SQUAD_MAX,
     EXPEDITION_SQUAD_MIN,
+    SAFE_CODE_LENGTH,
 )
 from api.app.zoopark import core as core_service
 from api.app.zoopark import development as development_service
@@ -597,7 +598,12 @@ def _cocktail_guess(tg_id: int, fruits: list[str], **_):
                     "подсказок нет — это чистая лотерея, а попыток в день всего несколько; не трать "
                     "их вслепую, дождись, пока на доске появятся чужие догадки. Ответа на свою "
                     "попытку сразу не будет — подсказка придёт вместе со всеми после закрытия окна.",
-      {"code": {"type": "string", "description": "4 цифры, например 0473"}},
+      # Read from the constant, never written out. The safe moved to six digits and this
+      # still said four, so the rival was told to spend a scarce daily attempt on a code
+      # that could not possibly be right.
+      {"code": {"type": "string",
+                "description": f"{SAFE_CODE_LENGTH} цифр, например {'0473529'[:SAFE_CODE_LENGTH]}",
+                "minLength": SAFE_CODE_LENGTH, "maxLength": SAFE_CODE_LENGTH}},
       ["code"],
       # Only shown while the safe is open and a guess remains. Closed, it cannot be used at
       # all; the rival used to spend a round finding that out.

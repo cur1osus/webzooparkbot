@@ -582,3 +582,14 @@ def test_mcp_tool_schemas_are_json_serialisable():
     from api.bots import mcp_server
 
     json.dumps(mcp_server._tool_list(), ensure_ascii=False)
+
+
+def test_the_safe_tool_asks_for_as_many_digits_as_the_safe_has():
+    """The safe moved from four digits to six and the tool description did not, so the rival
+    was told to spend one of its few daily attempts on a code that could not be right."""
+    from api.app.zoopark.catalog import SAFE_CODE_LENGTH
+
+    code = tools.REGISTRY["safe_guess"].properties["code"]
+    assert code["minLength"] == SAFE_CODE_LENGTH
+    assert code["maxLength"] == SAFE_CODE_LENGTH
+    assert str(SAFE_CODE_LENGTH) in code["description"]
