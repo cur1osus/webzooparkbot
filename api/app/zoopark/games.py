@@ -688,12 +688,15 @@ def cocktail_state(tg_id: int) -> dict:
 
         now = utcnow()
         day, _ = _cocktail_period(now)
-        day = session.scalars(select(CocktailDay).where(CocktailDay.day == day)).first()
+        # A separate name: `day` is the date the period falls on, and the row keyed by it is
+        # a different thing. Writing the row back over the date made `winner_player_id` look
+        # like an attribute of `date`.
+        cocktail_day = session.scalars(select(CocktailDay).where(CocktailDay.day == day)).first()
         round_ = session.get(CocktailRound, player.id)
         current_round = round_ if round_ is not None and round_.expires_at > now else None
         history = _cocktail_history(current_round) if current_round else []
         solved = bool(current_round and current_round.solved_at is not None)
-        winner_id = day.winner_player_id if day else None
+        winner_id = cocktail_day.winner_player_id if cocktail_day else None
         winner = session.get(Player, winner_id) if winner_id else None
         return {
             "ok": True,

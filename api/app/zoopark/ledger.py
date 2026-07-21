@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -39,6 +39,7 @@ Reason = Literal[
     "bank_buy_usd",
     "bank_fee",
     "pack_open",
+    "pack_open_batch",
     "pack_reward",
     "locality_buy",
     "locality_upgrade",
@@ -63,6 +64,7 @@ Reason = Literal[
     "star_refund",
     "social_subscription_reward",
     "cosmetic_purchase",
+    "nickname_change",
     "development_upgrade",
     "admin_grant",
     "locality_reset_refund",
@@ -107,6 +109,18 @@ class InsufficientFunds(HTTPException):
         self.currency = currency
         self.needed = needed
         self.available = available
+
+
+def as_currency(value: str) -> Currency:
+    """Narrow a currency string read back out of a row.
+
+    The column is a plain `str`, so nothing but this stops a corrupt value from reaching
+    `_BALANCE_ATTR` and raising a `KeyError` several frames from the cause. A row holding
+    something outside `CURRENCIES` is a bug worth naming where it is found.
+    """
+    if value not in CURRENCIES:
+        raise ValueError(f"неизвестная валюта в базе: {value!r}")
+    return cast(Currency, value)
 
 
 def balance(player: Player, currency: Currency) -> int:

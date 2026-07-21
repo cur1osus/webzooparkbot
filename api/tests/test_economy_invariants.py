@@ -149,7 +149,7 @@ class TestDailyBonusRewards:
         register(8008, RegisterBody(nickname="locality-reward"))
         with get_session() as session:
             animal_player = session.query(Player).filter_by(telegram_id=7007).one()
-            animal_season = ensure_player_season(session, animal_player)
+            ensure_player_season(session, animal_player)  # called for the season it creates
             session.add(DailyBonus(
                 player_id=animal_player.id,
                 bonus_date=utcnow().date(),

@@ -255,12 +255,16 @@ def clan_list(tg_id: int) -> dict:
                 select(Player).where(Player.id.in_([clan.owner_id for clan in clans] or [0]))
             ).all()
         }
-        request_statuses = {
-            request.clan_id: request.status
-            for request in session.scalars(
-                select(ClanJoinRequest).where(ClanJoinRequest.player_id == me.id) if me else select(ClanJoinRequest).where(False)
-            ).all()
-        }
+        # Signed out, there is no request to look up — the branch used to ask the database
+        # for `WHERE false`, which is a query round trip to learn what the `if` already knew.
+        request_statuses: dict[int, str] = {}
+        if me:
+            request_statuses = {
+                request.clan_id: request.status
+                for request in session.scalars(
+                    select(ClanJoinRequest).where(ClanJoinRequest.player_id == me.id)
+                ).all()
+            }
 
         payload = []
         my_clan = None
@@ -669,9 +673,10 @@ def transfer_claim(tg_id: int, code: str) -> dict:
         transfer.claims_used += 1
         if transfer.claims_used >= transfer.max_claims:
             transfer.closed_at = utcnow()
-        ledger.grant(session, player, transfer.currency, amount, "transfer_claim", ref_table="transfers", ref_id=transfer.id)
+        currency = ledger.as_currency(transfer.currency)
+        ledger.grant(session, player, currency, amount, "transfer_claim", ref_table="transfers", ref_id=transfer.id)
 
-        new_balance = ledger.balance(player, transfer.currency)
+        new_balance = ledger.balance(player, currency)
         try:
             session.commit()
         except IntegrityError as exc:

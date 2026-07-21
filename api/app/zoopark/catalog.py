@@ -640,7 +640,7 @@ def expedition_minutes(habitat: Habitat, depth: int) -> int:
 def expedition_gene_weights(habitat: Habitat, depth: int) -> tuple[float, float, float]:
     shift = EXPEDITION_DEPTHS[depth]["quality_shift"]
     base = EXPEDITIONS[habitat]["gene_weights"]
-    blended = tuple(_lerp(b, t, shift) for b, t in zip(base, EXPEDITION_DEPTH_GENE_TARGET))
+    blended = tuple(_lerp(b, t, shift) for b, t in zip(base, EXPEDITION_DEPTH_GENE_TARGET, strict=True))
     return cast("tuple[float, float, float]", blended)
 
 
@@ -664,7 +664,7 @@ def expedition_wild_power_range(habitat: Habitat, depth: int) -> tuple[int, int,
     """
     weights = expedition_gene_weights(habitat, depth)
     scale = expedition_wild_scale(depth)
-    by_tier = dict(zip(GENE_TIERS, weights))
+    by_tier = dict(zip(GENE_TIERS, weights, strict=True))
     lowest = int(combat_power("low", "low", "low") * scale)
     highest = int(combat_power("high", "high", "high") * scale)
     mean = 0.0

@@ -405,7 +405,9 @@ def test_dreaming_distils_a_full_notebook_and_keeps_a_backup(tmp_path, monkeypat
     for i in range(dreaming.DREAM_AFTER_NOTES):
         memory_store.remember(2, f"баланс {i} руб, коплю на паки")
 
-    ask = lambda _payload: _reply('["экспедиция глубины 1 разгромила отряд", "паки за доллары"]')
+    def ask(_payload):
+        return _reply('["экспедиция глубины 1 разгромила отряд", "паки за доллары"]')
+
     result = dreaming.run_dream(2, ask=ask)
 
     assert result["dreamed"] is True
