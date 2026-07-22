@@ -5,12 +5,14 @@ Each test names the hole it exists to keep shut. Add to this file when you touch
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 
 from api.app.db.connection import get_session
 from api.app.db.models import Animal, DailyBonus, Item, ItemProperty, Locality, Player, utcnow
 from api.app.zoopark import bonuses as bonuses_module
-from api.app.zoopark import economy, forge, games, ledger
+from api.app.zoopark import economy, forge, ledger
 from api.app.zoopark.catalog import (
     BANK_FEE_PERCENT,
     BASE_INCOME_RUB_PER_MIN,
@@ -24,7 +26,6 @@ from api.app.zoopark.catalog import (
     RARITIES,
     RATE_MAX_RUB_PER_USD,
     RATE_MIN_RUB_PER_USD,
-    SOLO_WIN_CHANCE_PCT,
     SPECIES_ID_BY_CODE,
     SPECIES_RARITY_INCOME_MULT,
     expected_gene_income_mult,
@@ -218,14 +219,18 @@ class TestForgeCannotPrintMoney:
         assert item_sell_refund_usd(0, "forge", "usd") == round(FORGE_CREATE_BASE_USD * FORGE_SELL_REFUND_RATE)
 
 
-class TestSoloGameKeepsAHouseEdge:
-    def test_win_chance_is_below_even(self):
-        assert SOLO_WIN_CHANCE_PCT < 50
-
-    def test_no_item_property_touches_a_solo_game(self):
-        """A `duel_bonus` refund of 10% would invert the only ruble sink in the casino."""
+class TestRetiredGamesLeaveNothingBehind:
+    def test_no_item_property_points_at_a_removed_game(self):
+        """Duels and solo games are gone. A property still aimed at them would be sold to
+        players as a bonus and then silently do nothing."""
         for kind, spec in ITEM_PROPERTIES.items():
-            assert not spec["applies_to"].startswith("games.start_solo"), kind
+            assert not spec["applies_to"].startswith("games."), kind
+
+    def test_retired_reasons_are_still_spendable_history(self):
+        """The reasons stay in the Literal even though nothing grants them: `SUM(delta)` per
+        player must keep equalling the balance, and old rows carry these reasons."""
+        for reason in ("solo_stake", "solo_payout", "duel_stake", "duel_payout", "duel_refund"):
+            assert reason in get_args(ledger.Reason)
 
 
 class TestPacksArePriced:
@@ -440,18 +445,6 @@ class TestEveryItemPropertyIsApplied:
         with get_session() as session:
             bonuses = bonuses_module.load(session, pid)
         assert pack_price_usd_for_tier("rare", bonuses.pack_discount_multiplier()) < before
-
-    def test_duel_properties_reach_the_roll(self, db, player):
-        _activate(player, "duel_moves", 3)
-        _activate(player, "duel_bonus", 5)
-        pid = _player_id(player)
-        with get_session() as session:
-            active = bonuses_module.load(session, pid)
-        assert active.total("duel_moves") == 3
-        assert active.total("duel_bonus") == 5
-        with get_session() as session:
-            scores = {games._roll_score(session, pid) for _ in range(50)}
-        assert min(scores) >= 8 + 5  # eight dice, each at least one, plus the flat bonus
 
     def test_bonus_rerolls_are_spendable(self, db, player):
         from api.app.zoopark.status import daily_bonus, reroll_daily_bonus

@@ -9,17 +9,6 @@ class DonateInvoiceBody(BaseModel):
     stars: int = Field(ge=1, le=100_000)
 
 
-class DuelCreateBody(BaseModel):
-    kind: str
-    stake: int = Field(ge=1)
-    currency: Literal["rub", "usd"] = "rub"
-
-
-class SoloStartBody(BaseModel):
-    kind: str
-    stake_pct: Literal[5, 10, 15] = 5
-
-
 class CocktailGuessBody(BaseModel):
     fruits: list[str] = Field(min_length=1, max_length=8)
 

@@ -149,7 +149,7 @@ def test_read_only_set_covers_no_mutating_tool():
     money during what is supposed to be a look-but-don't-touch pass."""
     mutating = {
         "open_pack", "buy_locality", "upgrade_locality", "breed", "release_animal",
-        "start_expedition", "create_duel", "join_duel", "create_transfer", "forge_create",
+        "start_expedition", "create_transfer", "forge_create",
         "exchange_to_usd", "clan_create", "merchant_buy", "cure_all_animals", "safe_guess",
     }
     assert not (mutating & agent._READ_ONLY)

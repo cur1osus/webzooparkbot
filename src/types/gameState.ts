@@ -19,8 +19,6 @@ export type PropertyKind =
   | 'discount_packs'
   | 'discount_locality'
   | 'discount_bank'
-  | 'duel_moves'
-  | 'duel_bonus'
   | 'bonus_rerolls'
   | 'expedition_power';
 

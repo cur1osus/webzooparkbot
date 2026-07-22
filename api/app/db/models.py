@@ -46,7 +46,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from api.app.zoopark.catalog import (
     BONUS_KINDS,
     CURRENCIES,
-    GAME_KINDS,
     GENE_TIERS,
     HABITATS,
     ITEM_ORIGINS,
@@ -717,81 +716,6 @@ class ClanJoinRequest(Base):
 # ─── Games ────────────────────────────────────────────────────────────────────
 
 
-class Duel(Base):
-    __tablename__ = "duels"
-    __table_args__ = (
-        CheckConstraint(_one_of("kind", GAME_KINDS), name="ck_duels_kind"),
-        CheckConstraint(_one_of("status", ("open", "finished", "cancelled")), name="ck_duels_status"),
-        CheckConstraint("stake_rub > 0", name="ck_duels_stake"),
-        CheckConstraint("currency IN ('rub', 'usd')", name="ck_duels_currency"),
-        Index("ix_duels_status_created", "status", "created_at"),
-        Index("ix_duels_creator", "creator_id"),
-        MYSQL,
-    )
-
-    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    # Amount staked, in `currency`. The column keeps its legacy `stake_rub` name — before duels
-    # could be wagered in dollars every stake was in rubles — but it holds the stake in whatever
-    # `currency` the lobby was created with. Read the pair together; never assume rubles.
-    stake_rub: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="rub", server_default="rub")
-    creator_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
-    creator_joined: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    opponent_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
-    third_player_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
-    winner_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
-    creator_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    opponent_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    third_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
-    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
-    resolved_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
-
-
-class SoloStats(Base):
-    """A cache over `ledger`, kept because the profile screen reads it on every load."""
-
-    __tablename__ = "solo_stats"
-    __table_args__ = (MYSQL,)
-
-    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), primary_key=True)
-    games_played: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    wins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    losses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    won_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    lost_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-
-
-class SoloMatch(Base):
-    """Authoritative result kept until the client has displayed the whole match.
-
-    The stake and outcome are settled when the match starts. Keeping the result here
-    prevents a page refresh or leaving the game screen from creating a second match.
-    """
-
-    __tablename__ = "solo_matches"
-    __table_args__ = (
-        UniqueConstraint("player_id", name="uq_solo_matches_player"),
-        CheckConstraint(_one_of("kind", GAME_KINDS), name="ck_solo_matches_kind"),
-        CheckConstraint("stake_rub > 0", name="ck_solo_matches_stake"),
-        MYSQL,
-    )
-
-    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
-    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)
-    stake_rub: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    won: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    rub_delta: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    player_score: Mapped[int] = mapped_column(Integer, nullable=False)
-    ai_score: Mapped[int] = mapped_column(Integer, nullable=False)
-    history: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
-    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
-
-
 class CocktailRound(Base):
     """`expires_at` is stored rather than derived from `started_at + 24h`: solving the
     puzzle should reset the round at the next 10:00 Moscow time, not 24 hours after it began."""
@@ -809,7 +733,8 @@ class CocktailRound(Base):
 
 
 class CocktailDay(Base):
-    """One shared daily recipe and its single PawCoins winner."""
+    """One shared daily recipe. `winner_player_id` is whoever cracked it first — a title and
+    a double reward, not the only payout: every solver is paid (see `CocktailSolve`)."""
 
     __tablename__ = "cocktail_days"
     __table_args__ = (MYSQL,)
@@ -819,6 +744,31 @@ class CocktailDay(Base):
     winner_player_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("players.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class CocktailSolve(Base):
+    """One row per player per solved day.
+
+    `CocktailRound` cannot answer "did this player already get paid today" — it is a single
+    row per player that gets rewritten when the day rolls over. This table is the record
+    that survives the reset, so the unique key on (player_id, day) is what makes the payout
+    idempotent, and it is also what the arena achievement counts.
+    """
+
+    __tablename__ = "cocktail_solves"
+    __table_args__ = (
+        UniqueConstraint("player_id", "day", name="uq_cocktail_solves_player_day"),
+        Index("ix_cocktail_solves_day", "day"),
+        MYSQL,
+    )
+
+    id: Mapped[int] = mapped_column(BigPK, primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    was_first: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reward_paw: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)
 
 
 class SafeRound(Base):

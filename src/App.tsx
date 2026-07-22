@@ -23,12 +23,6 @@ import type { MaintenancePollStatus } from '@/types';
 const HIDDEN_RELOAD_MS = 30_000;
 const TRANSFER_HANDLED_STORAGE_KEY = 'zoopark_transfer_claims_v1';
 
-function getInviteGameId(): number | null {
-  const startParam = getTelegramStartParam();
-  const match = startParam?.match(/^mpgame_(\d+)$/);
-  return match ? Number(match[1]) : null;
-}
-
 function getTransferCode(): string | null {
   const startParam = getTelegramStartParam();
   const match = startParam?.match(/^transfer_([A-Za-z0-9_-]+)$/);
@@ -133,7 +127,6 @@ export default function App() {
   const displayState = useLiveGameState(state);
   const [tab, setTab] = useHashTab();
   const [tabResetSignal, setTabResetSignal] = useState(0);
-  const [inviteGameId] = useState<number | null>(() => getInviteGameId());
   const [transferCode] = useState<string | null>(() => getTransferCode());
   const transferClaimStartedRef = useRef<string | null>(null);
   const [transferNotice, setTransferNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
@@ -163,10 +156,6 @@ export default function App() {
     root.classList.add(`app-theme-${appTheme}`);
     setAppThemeChrome(appTheme);
   }, [appTheme]);
-
-  useEffect(() => {
-    if (inviteGameId) setTab('games');
-  }, [inviteGameId, setTab]);
 
   // A giveaway deep link carries `transfer_<code>`. Claim it after the player is
   // loaded; for a brand-new recipient this naturally runs after registration.
@@ -417,7 +406,7 @@ export default function App() {
                 <LabPage gs={displayState} onRefresh={reloadFromServer} />
               )}
               {tab === 'games' && (
-                <GamesPage gs={displayState} onRefresh={reloadFromServer} initialTab={inviteGameId ? 'multi' : undefined} inviteGameId={inviteGameId ?? undefined} />
+                <GamesPage onRefresh={reloadFromServer} />
               )}
               {tab === 'more' && (
                 <MorePage gs={displayState} onRefresh={reloadFromServer} />

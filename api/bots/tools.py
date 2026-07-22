@@ -46,7 +46,7 @@ from api.app.schemas.forge import (
     ForgeSetBody,
     ForgeSetIdBody,
 )
-from api.app.schemas.games import CocktailGuessBody, DuelCreateBody, SafeGuessBody, SoloStartBody
+from api.app.schemas.games import CocktailGuessBody, SafeGuessBody
 from api.app.schemas.progression import (
     AssignLocalityBody,
     AssignMatchingLocalityBody,
@@ -257,22 +257,6 @@ def _clan_details(tg_id: int, **_):
 @tool("clan_members", "Состав своего клана и заявки на вступление, если ты владелец.")
 def _clan_members(tg_id: int, **_):
     return social_service.clan_members(tg_id)
-
-
-@tool("list_duels", "Открытые дуэли, к которым можно присоединиться.")
-def _list_duels(tg_id: int, **_):
-    return games_service.open_duels(tg_id)
-
-
-@tool("get_duel", "Одна дуэль подробно: ставка, участники, результат.",
-      {"duel_id": {"type": "integer"}}, ["duel_id"])
-def _get_duel(tg_id: int, duel_id: int, **_):
-    return games_service.get_duel(duel_id, tg_id)
-
-
-@tool("solo_stats", "Своя статистика по одиночным играм: сыграно, выиграно, баланс.")
-def _solo_stats(tg_id: int, **_):
-    return games_service.solo_stats(tg_id)
 
 
 @tool("cocktail_state", "Состояние головоломки с коктейлем: попытки, подсказки, разгадан ли.")
@@ -566,38 +550,6 @@ def _clan_spec(tg_id: int, specialization: str, **_):
 
 
 # ── Игры ──────────────────────────────────────────────────────────────────────
-
-
-@tool("create_duel", "Создать дуэль со ставкой в рублях. Ставка списывается сразу, победитель забирает банк.",
-      {"kind": {"type": "string", "description": "вид игры из list_duels"},
-       "stake_rub": {"type": "integer", "minimum": 1}},
-      ["kind", "stake_rub"])
-def _create_duel(tg_id: int, kind: str, stake_rub: int, **_):
-    return games_service.create_duel(tg_id, DuelCreateBody(kind=kind, stake=stake_rub, currency="rub"))
-
-
-@tool("join_duel", "Войти в чужую открытую дуэль.", {"duel_id": {"type": "integer"}}, ["duel_id"])
-def _join_duel(tg_id: int, duel_id: int, **_):
-    return games_service.join_duel(tg_id, duel_id)
-
-
-@tool("resolve_duel", "Разыграть дуэль, когда собрались участники.",
-      {"duel_id": {"type": "integer"}}, ["duel_id"])
-def _resolve_duel(tg_id: int, duel_id: int, **_):
-    return games_service.resolve_duel(tg_id, duel_id)
-
-
-@tool("cancel_duel", "Отменить свою дуэль и вернуть ставку.",
-      {"duel_id": {"type": "integer"}}, ["duel_id"])
-def _cancel_duel(tg_id: int, duel_id: int, **_):
-    return games_service.cancel_duel(tg_id, duel_id)
-
-
-@tool("start_solo_game", "Сыграть одиночную игру против заведения, поставив процент от баланса.",
-      {"kind": {"type": "string"}, "stake_pct": {"type": "integer", "enum": [5, 10, 15]}},
-      ["kind"])
-def _start_solo(tg_id: int, kind: str, stake_pct: int = 5, **_):
-    return games_service.start_solo_game(tg_id, SoloStartBody(kind=kind, stake_pct=cast(Any, stake_pct)))
 
 
 @tool("cocktail_guess",

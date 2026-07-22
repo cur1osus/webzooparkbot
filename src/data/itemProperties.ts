@@ -11,8 +11,6 @@ export const PROPERTY_ICON: Record<PropertyKind, string> = {
   discount_packs: '📉',
   discount_locality: '🌍',
   discount_bank: '🔄',
-  duel_moves: '🎲',
-  duel_bonus: '⚡️',
   bonus_rerolls: '🎁',
   expedition_power: '🧭',
 };
@@ -24,8 +22,6 @@ export const PROPERTY_SHORT: Record<PropertyKind, string> = {
   discount_packs: 'Скидка на паки',
   discount_locality: 'Местности',
   discount_bank: 'Курс банка',
-  duel_moves: 'Броски в дуэли',
-  duel_bonus: 'Счёт в дуэли',
   bonus_rerolls: 'Перебросы',
   expedition_power: 'Сила в экспедиции',
 };

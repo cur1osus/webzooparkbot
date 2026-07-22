@@ -114,7 +114,7 @@ _READ_ONLY = {
     if name.startswith(("get_", "list_", "read_")) or name in {"packs_info", "merchant_animals",
                                                                 "forge_items", "forge_sets",
                                                                 "clan_list", "clan_details",
-                                                                "clan_members", "solo_stats",
+                                                                "clan_members",
                                                                 "cocktail_state", "my_transfers",
                                                                 "safe_state"}
 }

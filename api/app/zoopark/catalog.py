@@ -991,8 +991,6 @@ PropertyKind = Literal[
     "discount_packs",
     "discount_locality",
     "discount_bank",
-    "duel_moves",
-    "duel_bonus",
     "bonus_rerolls",
     "expedition_power",
 ]
@@ -1081,30 +1079,6 @@ ITEM_PROPERTIES: dict[PropertyKind, PropertyDef] = {
         },
         "applies_to": "economy.effective_rate",
     },
-    "duel_moves": {
-        "label": "Доп. броски в дуэли",
-        "unit": "flat",
-        "per_species": False,
-        "cap": None,
-        "weight": 10,
-        "ranges": {
-            "common": (1, 1), "rare": (1, 2), "epic": (1, 3),
-            "mythical": (1, 4), "legendary": (1, 5),
-        },
-        "applies_to": "games.join_duel",
-    },
-    "duel_bonus": {
-        "label": "Бонус к счёту в дуэли",
-        "unit": "flat",
-        "per_species": False,
-        "cap": None,
-        "weight": 10,
-        "ranges": {
-            "common": (1, 2), "rare": (2, 4), "epic": (3, 6),
-            "mythical": (4, 8), "legendary": (5, 10),
-        },
-        "applies_to": "games.join_duel",
-    },
     "bonus_rerolls": {
         "label": "Перебросы бонуса",
         "unit": "flat",
@@ -1136,30 +1110,6 @@ ITEM_PROPERTIES: dict[PropertyKind, PropertyDef] = {
 
 PROPERTY_KINDS: tuple[PropertyKind, ...] = tuple(ITEM_PROPERTIES)
 
-# ─── Duels and solo games ─────────────────────────────────────────────────────
-#
-# `duel_moves` and `duel_bonus` apply only to player-versus-player duels, where the pot
-# is zero-sum. They deliberately never touch solo games: the 4% house edge there is the
-# only thing draining rubles out of the casino, and a 10% bet refund would invert it.
-
-GAME_KINDS = ("basketball", "darts", "bowling", "dice", "football")
-# Upper safety bounds on a single duel stake — the real limit is the player's balance, checked
-# at spend time. These only guard against an overflowing pot (stake × 3 players). Dollars are
-# ~100× denser than rubles, so the dollar cap is set 100× lower to keep the pot in the same range.
-MAX_STAKE_RUB = 10_000_000_000
-MAX_STAKE_USD = 100_000_000
-MAX_STAKE_BY_CURRENCY: dict[str, int] = {"rub": MAX_STAKE_RUB, "usd": MAX_STAKE_USD}
-SOLO_STAKE_PCTS = (5, 10, 15)
-DUEL_BASE_MOVES = 5
-DUEL_MAX_PLAYERS = 3
-DUEL_DURATION_MINUTES = 10
-DUEL_REWARD_DISTRIBUTION = (70, 20, 10)
-DUEL_DICE_SIDES = 6
-
-SOLO_MATCH_MIN_ROUNDS = 2
-SOLO_MATCH_MAX_ROUNDS = 7
-SOLO_WIN_CHANCE_PCT = 48
-
 # ─── Cocktail ─────────────────────────────────────────────────────────────────
 
 # Must stay in sync with the fruit palette rendered by the client (CocktailTab.tsx):
@@ -1168,7 +1118,17 @@ SOLO_WIN_CHANCE_PCT = 48
 COCKTAIL_FRUITS = ("🍓", "🫐", "🍏", "🍐", "🍇", "🍒")
 COCKTAIL_LENGTH = 4
 COCKTAIL_BASE_ATTEMPTS = 10
-COCKTAIL_REWARD_PAW = 150
+# Halved from 150 when the prize stopped being winner-take-all. With the multiplier below,
+# whoever gets there first still takes home exactly the 150 the single winner used to, so
+# the change costs the fastest players nothing and only adds a floor under everyone else.
+COCKTAIL_REWARD_PAW = 75
+# Everyone who cracks the recipe is paid, not just the first one in. While the prize was
+# winner-take-all the two fastest players took it five days running and the rest stopped
+# playing — the discouragement effect from contest theory, where a contestant who cannot
+# realistically win stops spending effort at all. The reward is minted, not split out of a
+# shared pot, so paying every solver takes nothing away from anybody and leaves no pot to
+# collude over. Speed is still worth something, but only this much.
+COCKTAIL_FIRST_SOLVER_MULTIPLIER = 2
 
 # ─── Bank safe ────────────────────────────────────────────────────────────────
 

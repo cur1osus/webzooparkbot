@@ -14,6 +14,10 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
   const [result, setResult] = useState<{ won: boolean; message: string } | null>(null);
   const [history, setHistory] = useState<CocktailHistoryEntry[]>([]);
   const [winnerNickname, setWinnerNickname] = useState<string | null>(null);
+  const [solvedByMe, setSolvedByMe] = useState(false);
+  const [wasFirst, setWasFirst] = useState(false);
+  const [solvedToday, setSolvedToday] = useState(0);
+  const [rewardPaw, setRewardPaw] = useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -23,13 +27,11 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         setAttemptsLeft(state.attempts_left);
         setHistory(state.history);
         setWinnerNickname(state.winner_nickname);
+        setSolvedToday(state.solved_today ?? 0);
+        setWasFirst(state.was_first);
         if (state.solved) {
-          setResult({
-            won: true,
-            message: state.rewarded
-              ? 'Рецепт угадан. Награда: 150 🐾'
-              : 'Рецепт угадан, но 150 🐾 уже достались первому победителю.',
-          });
+          setSolvedByMe(true);
+          setResult({ won: true, message: 'Рецепт угадан.' });
         } else if (state.attempts_left === 0) {
           setResult({ won: false, message: 'Попытки закончились. Завтра будет новый рецепт.' });
         }
@@ -40,12 +42,13 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
     return () => { mounted = false; };
   }, []);
 
-  const gameFinished = attemptsLeft <= 0 || Boolean(result?.won);
+  const gameFinished = attemptsLeft <= 0 || solvedByMe;
 
-  // Once somebody has solved the shared recipe, the round is over for everyone.
-  // Keep the result as a dedicated page-sized state so there is no tempting,
-  // misleading guess board left underneath it.
-  if (winnerNickname) {
+  // Only the player's own solve ends their round. Somebody else getting there first used to
+  // replace this whole screen with a "round over" card, which is why four players out of five
+  // stopped after one day: the board was taken away from them while they still had attempts
+  // left. Everyone who cracks the recipe is paid, so everyone gets to keep playing for it.
+  if (solvedByMe) {
     return (
       <section
         className="min-h-[calc(100dvh-var(--app-bottom-offset))] flex flex-col items-center justify-start px-6 pt-4 pb-10 text-center"
@@ -60,18 +63,24 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
             boxShadow: '0 18px 50px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)',
           }}
         >
-          <div className="text-[72px] leading-none" aria-hidden>{result?.won ? '🏆' : '🥤'}</div>
+          <div className="text-[72px] leading-none" aria-hidden>{wasFirst ? '🏆' : '🥤'}</div>
           <p className="m-0 mt-5 text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: 'var(--c-gold)' }}>
-            Коктейль дня завершён
+            Рецепт разгадан
           </p>
           <h2 className="m-0 mt-2 text-[30px] leading-tight font-black">
-            {result?.won ? 'Ты первый!' : 'Рецепт уже разгадан'}
+            {wasFirst ? 'Ты первый!' : 'Готово'}
           </h2>
           <p className="m-0 mt-3 text-[14px] leading-relaxed text-tg-hint">
-            {result?.won
-              ? `Ты угадал рецепт и получил ${result.message.match(/\d+/)?.[0] ?? 150} 🐾.`
-              : `${winnerNickname} первым угадал рецепт и забрал награду.`}
+            {wasFirst
+              ? `Ты угадал рецепт первым — двойная награда, ${rewardPaw ?? 150} 🐾.`
+              : `Ты угадал рецепт и получил ${rewardPaw ?? 75} 🐾.` +
+                (winnerNickname ? ` Первым сегодня был ${winnerNickname}.` : '')}
           </p>
+          {solvedToday > 1 && (
+            <p className="m-0 mt-2 text-[12px] text-tg-hint">
+              Сегодня рецепт разгадали: {solvedToday}
+            </p>
+          )}
           <div className="mt-6 rounded-2xl px-4 py-3 text-[12px] font-bold" style={{ background: 'rgba(var(--c-gold-rgb),0.10)', color: 'var(--c-gold)' }}>
             Новый рецепт появится завтра в 10:00 по Москве.
           </div>
@@ -109,14 +118,13 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
       setAttemptsLeft(response.attempts_left);
       setHistory((current) => [...current, { fruits: slots as string[], clues: response.clues }]);
       setWinnerNickname(response.winner_nickname ?? null);
+      setSolvedToday(response.solved_today ?? 0);
 
       if (response.won) {
-        setResult({
-          won: true,
-          message: response.reward_paw
-            ? `Рецепт угадан. Награда: ${response.reward_paw} 🐾`
-            : 'Рецепт угадан, но 150 🐾 уже достались первому победителю.',
-        });
+        setSolvedByMe(true);
+        setWasFirst(Boolean(response.was_first));
+        setRewardPaw(response.reward_paw ?? null);
+        setResult({ won: true, message: `Рецепт угадан. Награда: ${response.reward_paw ?? 75} 🐾` });
         onRefresh();
       } else if (response.attempts_left === 0) {
         setResult({ won: false, message: 'Попытки закончились. Завтра будет новый рецепт.' });
@@ -147,7 +155,7 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
           <div className="text-[48px] mb-2">🥤</div>
           <p className="m-0 mb-1 text-[18px] font-extrabold">Коктейль дня</p>
           <p className="m-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            Угадай секретный рецепт из 4 фруктов — получи <span style={{ color: 'var(--c-gold)', fontWeight: 700 }}>150 🐾</span>
+            Угадай секретный рецепт из 4 фруктов — получи <span style={{ color: 'var(--c-gold)', fontWeight: 700 }}>75 🐾</span>, а если будешь первым — 150 🐾
           </p>
           <p className="m-0 mt-2 text-[12px] font-semibold" style={{ color: 'var(--c-teal)' }}>
             Новый коктейль каждый день в 10:00 по Москве
@@ -269,9 +277,10 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
           className="rounded-2xl p-4"
           style={{ background: 'rgba(var(--c-gold-rgb),0.1)', border: '1px solid rgba(var(--c-gold-rgb),0.35)' }}
         >
-          <p className="m-0 font-bold text-base">🏆 Победитель коктейля</p>
+          <p className="m-0 font-bold text-base">🏆 Первым был {winnerNickname}</p>
           <p className="mt-1 mb-0 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            {winnerNickname} первым угадал рецепт и получил 150 🐾
+            Награда достаётся каждому, кто разгадает рецепт — твои 75 🐾 никуда не делись.
+            {solvedToday > 1 ? ` Сегодня уже разгадали: ${solvedToday}.` : ''}
           </p>
         </div>
       )}

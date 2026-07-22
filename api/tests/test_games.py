@@ -1,165 +1,22 @@
-"""Multiplayer lobby, timer, prize-pool and cocktail rules."""
+"""Cocktail rules: the daily reset, and who gets paid for solving it."""
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
+
+import pytest
+from fastapi import HTTPException
 
 from api.app.db.connection import get_session
-from api.app.db.models import CocktailDay, Player, utcnow
+from api.app.db.models import CocktailDay, CocktailRound, CocktailSolve, Player
 from api.app.schemas.core import RegisterBody
-from api.app.schemas.games import CocktailGuessBody, DuelCreateBody, SoloStartBody
-from api.app.zoopark import games, ledger
+from api.app.schemas.games import CocktailGuessBody
+from api.app.zoopark import games
 from api.app.zoopark.core import register
 
 
 def _register_players(*telegram_ids: int) -> None:
     for index, telegram_id in enumerate(telegram_ids, start=1):
         register(telegram_id, RegisterBody(nickname=f"player-{index}"))
-
-
-def _grant_rub(telegram_id: int, amount: int) -> None:
-    with get_session() as session:
-        player = session.query(Player).filter_by(telegram_id=telegram_id).one()
-        ledger.grant(session, player, "rub", amount, "daily_bonus")
-        session.commit()
-
-
-def test_creator_can_join_and_three_players_get_70_20_10(db):
-    _register_players(1001, 1002, 1003)
-    for telegram_id in (1001, 1002, 1003):
-        _grant_rub(telegram_id, 10)
-
-    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=10))
-    game_id = created["game"]["id"]
-    assert created["new_rub"] == 10
-    assert created["game"]["participant_count"] == 0
-    assert created["game"]["max_players"] == 3
-    assert created["game"]["stake"] == 10
-    assert created["game"]["currency"] == "rub"
-
-    owner_joined = games.join_duel(1001, game_id)
-    assert owner_joined["game"]["viewer_joined"] is True
-    assert owner_joined["game"]["participant_count"] == 1
-    assert owner_joined["game"]["status"] == "open"
-
-    games.join_duel(1002, game_id)
-    finished = games.join_duel(1003, game_id)
-
-    assert finished["game"]["status"] == "finished"
-    assert finished["game"]["participant_count"] == 3
-    assert sorted(participant["reward"] for participant in finished["game"]["participants"]) == [3, 6, 21]
-
-    with get_session() as session:
-        balances = [session.query(Player).filter_by(telegram_id=tg_id).one().balance_rub for tg_id in (1001, 1002, 1003)]
-        assert sum(balances) == 30
-
-
-def test_expired_two_player_lobby_uses_70_30_and_timer_resolves(db):
-    _register_players(1001, 1002)
-    for telegram_id in (1001, 1002):
-        _grant_rub(telegram_id, 10)
-
-    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=10))
-    game_id = created["game"]["id"]
-    games.join_duel(1001, game_id)
-    games.join_duel(1002, game_id)
-
-    with get_session() as session:
-        duel = session.get(games.Duel, game_id)
-        assert duel is not None
-        assert duel.expires_at is not None
-        assert duel.expires_at > duel.created_at
-        duel.expires_at = utcnow() - timedelta(seconds=1)
-        session.commit()
-
-    resolved = games.resolve_duel(1001, game_id)
-    assert resolved["game"]["status"] == "finished"
-    assert sorted(participant["reward"] for participant in resolved["game"]["participants"]) == [6, 14]
-
-
-def _grant_usd(telegram_id: int, amount: int) -> None:
-    with get_session() as session:
-        player = session.query(Player).filter_by(telegram_id=telegram_id).one()
-        ledger.grant(session, player, "usd", amount, "daily_bonus")
-        session.commit()
-
-
-def test_dollar_duel_charges_and_pays_out_in_dollars(db):
-    _register_players(1001, 1002)
-    for telegram_id in (1001, 1002):
-        _grant_usd(telegram_id, 100)
-
-    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=100, currency="usd"))
-    game_id = created["game"]["id"]
-    assert created["game"]["currency"] == "usd"
-    assert created["game"]["stake"] == 100
-
-    games.join_duel(1001, game_id)
-    games.join_duel(1002, game_id)
-
-    with get_session() as session:
-        duel = session.get(games.Duel, game_id)
-        assert duel is not None
-        duel.expires_at = utcnow() - timedelta(seconds=1)
-        session.commit()
-
-    resolved = games.resolve_duel(1001, game_id)
-    assert resolved["game"]["status"] == "finished"
-
-    with get_session() as session:
-        players = [session.query(Player).filter_by(telegram_id=tg).one() for tg in (1001, 1002)]
-        # Zero-sum in dollars: nothing is created or burned, so the table's dollars are exactly
-        # what they held before (100 granted + $1 registration bonus each), and no rubles moved.
-        assert sum(p.balance_usd for p in players) == 202
-        assert all(p.balance_rub == 0 for p in players)
-
-
-def test_dollar_duel_needs_dollars_not_rubles(db):
-    _register_players(1001, 1002)
-    _grant_rub(1001, 1_000_000)  # rich in rubles, but the stake is in dollars
-
-    created = games.create_duel(1001, DuelCreateBody(kind="dice", stake=100, currency="usd"))
-    game_id = created["game"]["id"]
-    try:
-        games.join_duel(1001, game_id)
-        assert False, "joining a dollar duel without dollars must fail"
-    except Exception as error:  # noqa: BLE001 - InsufficientFunds is an HTTPException
-        assert "Недостаточно" in str(getattr(error, "detail", error))
-
-
-def test_solo_stake_is_calculated_from_locked_balance_percentage(db):
-    register(1001, RegisterBody(nickname="solo-player"))
-    _grant_rub(1001, 1000)
-
-    result = games.start_solo_game(1001, SoloStartBody(kind="dice", stake_pct=15))
-
-    assert result["stake_rub"] == 150
-    assert abs(result["rub_delta"]) == 150
-    with get_session() as session:
-        balance = session.query(Player).filter_by(telegram_id=1001).one().balance_rub
-        assert balance == 1000 + result["rub_delta"]
-
-
-def test_solo_match_is_resumed_without_charging_twice(db):
-    register(1001, RegisterBody(nickname="solo-player"))
-    _grant_rub(1001, 1000)
-
-    first = games.start_solo_game(1001, SoloStartBody(kind="basketball", stake_pct=15))
-    resumed = games.start_solo_game(1001, SoloStartBody(kind="dice", stake_pct=5))
-
-    assert first["resumed"] is False
-    assert resumed["resumed"] is True
-    assert resumed["kind"] == "basketball"
-    assert resumed["history"] == first["history"]
-    assert resumed["rub_delta"] == first["rub_delta"]
-    assert resumed["new_rub"] == first["new_rub"]
-
-    with get_session() as session:
-        balance = session.query(Player).filter_by(telegram_id=1001).one().balance_rub
-        assert balance == 1000 + first["rub_delta"]
-
-    games.finish_solo_game(1001)
-    next_game = games.start_solo_game(1001, SoloStartBody(kind="dice", stake_pct=5))
-    assert next_game["resumed"] is False
 
 
 def test_cocktail_resets_at_10_moscow():
@@ -174,7 +31,13 @@ def test_cocktail_resets_at_10_moscow():
     assert next_reset == datetime(2026, 7, 21, 7, tzinfo=timezone.utc)
 
 
-def test_cocktail_history_persists_and_reward_goes_to_first_winner(db):
+def test_cocktail_history_persists_and_every_solver_is_paid(db):
+    """The first solver is paid double; everyone after is still paid.
+
+    While the prize was winner-take-all the same two players took it five days running and
+    the rest stopped playing, which is exactly what contest theory predicts of a contest a
+    weaker entrant cannot win.
+    """
     _register_players(1001, 1002)
 
     wrong = ["🍓", "🍓", "🍓", "🍓"]
@@ -193,11 +56,46 @@ def test_cocktail_history_persists_and_reward_goes_to_first_winner(db):
 
     assert winner["won"] is True
     assert winner["reward_paw"] == 150
+    assert winner["was_first"] is True
     assert second["won"] is True
-    assert "reward_paw" not in second
+    assert second["reward_paw"] == 75
+    assert second["was_first"] is False
+    assert second["solved_today"] == 2
     assert second["winner_nickname"] == "player-1"
-    assert games.cocktail_state(1002)["winner_nickname"] == "player-1"
+
+    later = games.cocktail_state(1002)
+    assert later["winner_nickname"] == "player-1"
+    assert later["rewarded"] is True
+    assert later["was_first"] is False
 
     with get_session() as session:
         balances = [session.query(Player).filter_by(telegram_id=tg_id).one().balance_paw for tg_id in (1001, 1002)]
-        assert balances == [150, 0]
+        assert balances == [150, 75]
+
+
+def test_cocktail_pays_once_even_if_the_round_row_is_reset(db):
+    """`solved_at` guards the common path, but the round row is rewritten when the day rolls
+    over. The unique key on (player_id, day) is what actually makes the payout idempotent."""
+    _register_players(1001)
+
+    games.cocktail_guess(1001, CocktailGuessBody(fruits=["🍓", "🍓", "🍓", "🍓"]))
+    with get_session() as session:
+        daily = session.query(CocktailDay).one()
+        secret = json.loads(daily.secret)
+
+    games.cocktail_guess(1001, CocktailGuessBody(fruits=secret))
+
+    # Wipe the round as the next reset would, leaving the solve record standing.
+    with get_session() as session:
+        round_ = session.get(CocktailRound, session.query(Player).filter_by(telegram_id=1001).one().id)
+        round_.solved_at = None
+        round_.attempts = 0
+        round_.history = "[]"
+        session.commit()
+
+    with pytest.raises(HTTPException):
+        games.cocktail_guess(1001, CocktailGuessBody(fruits=secret))
+
+    with get_session() as session:
+        assert session.query(Player).filter_by(telegram_id=1001).one().balance_paw == 150
+        assert session.query(CocktailSolve).count() == 1

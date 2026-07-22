@@ -51,6 +51,9 @@ Reason = Literal[
     "forge_merge",
     "forge_sell",
     "clan_create",
+    # Duels and solo games were removed on 2026-07-22, but their reasons stay: `SUM(delta)`
+    # over every row a player has must still equal their balance, and dropping a reason the
+    # history is written in would make that unreadable. Nothing grants them any more.
     "duel_stake",
     "duel_payout",
     "duel_refund",
