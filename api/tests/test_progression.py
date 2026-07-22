@@ -399,15 +399,29 @@ class TestExpeditionLifecycle:
         assert public_profile["animals_count"] < len(squad) + len(state["animals"])
 
     def test_locality_upgrade_reduces_upkeep(self, db, player, grant):
+        """One animal from the free pack used to be the whole zoo here, and upkeep is a
+        percentage of income truncated to an integer — so a low enough roll made it 0, and a
+        discount off nothing is nothing. The test failed as `assert 0 < 0` on about one run in
+        eight, which reads like a broken discount rather than a zoo too small to have a bill.
+
+        A batch of paid packs puts income far above that floor, and the precondition is now
+        asserted rather than assumed: if upkeep is ever zero here again, that is what the
+        failure says."""
         from api.app.zoopark.core import me
         from api.app.schemas.progression import AssignLocalityBody, UpgradeLocalityBody
 
+        grant(player, "rub", 200_000)
+        grant(player, "usd", 5_000)
         progression.open_pack(player)
-        grant(player, "rub", 20_000)
+        progression.open_pack(player, "rare", quantity=10)
         locality_id = progression.list_localities(player)["localities"][0]["id"]
-        animal_id = progression.list_available_animals(player)["animals"][0]["id"]
-        progression.assign_locality(player, AssignLocalityBody(animal_id=animal_id, locality_id=locality_id))
+        for animal in progression.list_available_animals(player)["animals"]:
+            progression.assign_locality(
+                player, AssignLocalityBody(animal_id=animal["id"], locality_id=locality_id)
+            )
+
         before = me(player)
+        assert before["upkeep_rub_per_min"] > 0, "зоопарк должен быть достаточно большим, чтобы платить"
         result = progression.upgrade_locality(player, UpgradeLocalityBody(locality_id=locality_id))
         after = me(player)
 
