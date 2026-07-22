@@ -311,8 +311,10 @@ def cocktail_guess(tg_id: int, body: CocktailGuessBody) -> dict:
             )
             try:
                 session.flush()
-            except IntegrityError:
-                raise HTTPException(400, "Коктейль уже разгадан, приходи завтра")
+            except IntegrityError as err:
+                # The unique index did the deciding, not this check — two tabs racing the same
+                # last guess land here, and only one of them gets the reward.
+                raise HTTPException(400, "Коктейль уже разгадан, приходи завтра") from err
             ledger.grant(session, player, "paw", reward, "cocktail_reward")
             result["reward_paw"] = reward
             result["was_first"] = is_first
