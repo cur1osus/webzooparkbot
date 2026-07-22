@@ -8,7 +8,7 @@ from random import SystemRandom
 from typing import cast
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -591,13 +591,19 @@ def assign_locality(tg_id: int, body: AssignLocalityBody) -> dict:
 
 
 def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> dict:
-    """Bring every animal of this locality's habitat into it — homeless or merely misplaced.
+    """Bring every animal home to its own habitat — homeless or merely misplaced.
 
     It used to move only animals with no locality at all, which left the worse case
     untouched: an animal standing in someone else's habitat earns two thirds of what it
     would here, and there was no way to fix a group of them except one call each. A rival
     with nine such animals, and a matching locality already bought and empty, worked
     through them a couple per turn.
+
+    With no `locality_id` it now sweeps every locality the player owns, because naming one
+    at a time is its own way to lose animals. A rival with four homeless forest animals and
+    a forest locality standing open called this for antarctica and for mountains, decided it
+    was done, and wrote down that there was nowhere left to put anything — the four earned
+    nothing for three turns. Doing all of them is one action with nothing to forget.
 
     Nothing is taken away by this. An animal is only ever moved *into* its own habitat, and
     outside it there is no upside to be preserved — the multiplier is the only thing a
@@ -609,38 +615,52 @@ def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> di
             raise HTTPException(404, "Нет игрока")
         season = ensure_player_season(session, player)
 
-        locality = session.scalars(
-            select(Locality)
-            .where(
-                Locality.id == body.locality_id,
-                Locality.player_id == player.id,
-                Locality.season_id == season.id,
-            )
-        ).first()
-        if locality is None:
+        wanted = select(Locality).where(
+            Locality.player_id == player.id,
+            Locality.season_id == season.id,
+        )
+        if body.locality_id is not None:
+            wanted = wanted.where(Locality.id == body.locality_id)
+        localities = session.scalars(wanted).all()
+        if body.locality_id is not None and not localities:
             raise HTTPException(404, "Местность не найдена")
 
-        animals = session.scalars(
+        # One row per habitat, so an animal has exactly one place it belongs.
+        home = {locality.habitat: locality for locality in localities}
+
+        candidates = session.scalars(
             select(Animal)
             .where(
                 Animal.player_id == player.id,
                 Animal.season_id == season.id,
-                # Anywhere but here: no locality at all, or the wrong one. `!=` alone would
-                # drop the homeless, since NULL compares to nothing.
-                or_(Animal.locality_id.is_(None), Animal.locality_id != locality.id),
-                Animal.habitat == locality.habitat,
+                Animal.habitat.in_(home),
+                # Deliberately no filter on `locality_id` here. Which locality counts as home
+                # differs per animal, so "not already home" is not a condition SQL can state
+                # once for the whole sweep — and the obvious attempt, excluding everything
+                # already in *some* owned locality, silently drops the misplaced animals this
+                # exists to rescue. The comparison is made per row below; the extra rows are
+                # this player's own animals of these habitats, and there are hundreds at most.
                 alive_clause(),
                 Animal.id.not_in(on_expedition_subquery()),
             )
             .with_for_update()
         ).all()
-        for animal in animals:
-            animal.locality_id = locality.id
+
+        by_habitat: dict[str, int] = {}
+        moved = 0
+        for animal in candidates:
+            destination = home[animal.habitat]
+            if animal.locality_id == destination.id:
+                continue
+            animal.locality_id = destination.id
+            by_habitat[animal.habitat] = by_habitat.get(animal.habitat, 0) + 1
+            moved += 1
 
         sync_player_income(session, player)
         result = {
             "ok": True,
-            "assigned_count": len(animals),
+            "assigned_count": moved,
+            "by_habitat": by_habitat,
             "income_rub_per_min": player.income_rub_per_min,
         }
         session.commit()

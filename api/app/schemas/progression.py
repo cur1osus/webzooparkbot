@@ -11,7 +11,10 @@ class AssignLocalityBody(BaseModel):
 
 
 class AssignMatchingLocalityBody(BaseModel):
-    locality_id: int = Field(gt=0)
+    # Omitted means every locality the player owns. The screen always names one — it is a
+    # button on a card — but a caller working from a list of what is misplaced wants the
+    # whole sweep, and naming them one at a time is how localities get skipped.
+    locality_id: int | None = Field(default=None, gt=0)
 
 
 class ReleaseAnimalBody(BaseModel):

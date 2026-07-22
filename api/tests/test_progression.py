@@ -696,3 +696,60 @@ class TestAssigningEveryMatchingAnimal:
 
         assert first["assigned_count"] > 0
         assert second["assigned_count"] == 0, "повтор не должен пересчитывать тех, кто уже дома"
+
+    def test_without_a_locality_it_sweeps_every_one_the_player_owns(self, db, player, grant):
+        """Naming one locality per call is how localities get skipped. A rival with four
+        homeless forest animals and an open forest locality called this for antarctica and
+        for mountains, concluded there was nowhere left to put anything, and left the four
+        earning nothing for three turns."""
+        from api.app.schemas.progression import AssignMatchingLocalityBody, BuyLocalityBody
+
+        grant(player, "rub", 20_000_000)
+        grant(player, "usd", 20_000)
+        progression.open_pack(player)                       # подарок — один в сутки
+        progression.open_pack(player, "rare", quantity=5)   # остальные за деньги
+        owned = {loc["habitat"]: loc["id"] for loc in progression.list_localities(player)["localities"]}
+        for habitat in ("desert", "fields", "forest", "antarctica", "mountains"):
+            if habitat not in owned:
+                owned[habitat] = progression.buy_locality(player, BuyLocalityBody(habitat=habitat))["id"]
+
+        homeless = [a for a in progression.list_available_animals(player)["animals"]
+                    if a["locality_id"] is None]
+        assert len({a["habitat"] for a in homeless}) > 1, "нужны звери разных сред, иначе тест ничего не ловит"
+
+        result = progression.assign_matching_locality(player, AssignMatchingLocalityBody())
+
+        assert result["assigned_count"] == len(homeless)
+        assert sum(result["by_habitat"].values()) == len(homeless)
+        after = progression.list_available_animals(player)["animals"]
+        assert all(a["locality_id"] == owned[a["habitat"]] for a in after)
+        assert all(a["habitat_bonus"] is True for a in after)
+
+    def test_the_sweep_rescues_an_animal_sitting_in_another_owned_locality(self, db, player, grant):
+        """The near-miss in writing this: filtering out everything already in *some* owned
+        locality reads as "not homeless" and is wrong — an animal in the wrong one of your
+        own localities is exactly the case worth fixing, and it earns two thirds until it is."""
+        from api.app.schemas.progression import (
+            AssignLocalityBody, AssignMatchingLocalityBody, BuyLocalityBody,
+        )
+
+        grant(player, "rub", 20_000_000)
+        progression.open_pack(player)
+        owned = {loc["habitat"]: loc["id"] for loc in progression.list_localities(player)["localities"]}
+        for habitat in ("desert", "fields", "forest", "antarctica", "mountains"):
+            if habitat not in owned:
+                owned[habitat] = progression.buy_locality(player, BuyLocalityBody(habitat=habitat))["id"]
+
+        animal = progression.list_available_animals(player)["animals"][0]
+        elsewhere = next(h for h in owned if h != animal["habitat"])
+        progression.assign_locality(
+            player, AssignLocalityBody(animal_id=animal["id"], locality_id=owned[elsewhere])
+        )
+
+        result = progression.assign_matching_locality(player, AssignMatchingLocalityBody())
+
+        moved = next(a for a in progression.list_available_animals(player)["animals"]
+                     if a["id"] == animal["id"])
+        assert moved["locality_id"] == owned[animal["habitat"]], "заблудившийся должен вернуться домой"
+        assert moved["habitat_bonus"] is True
+        assert result["by_habitat"].get(animal["habitat"], 0) >= 1
