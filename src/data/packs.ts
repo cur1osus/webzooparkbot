@@ -1,4 +1,4 @@
-import type { Animal, ExpeditionGrade, GeneTier, Habitat } from '@/types';
+import type { Animal, ExpeditionGrade, GeneTier, Habitat, PackTier } from '@/types';
 
 export type GeneKey = 'survival' | 'reproduction' | 'appearance' | 'size_trait';
 
@@ -49,6 +49,18 @@ export const SPECIES_RARITY_META: Record<Animal['species_rarity'], { label: stri
   epic: { label: 'Эпическое', color: '#C072D8' },
   legendary: { label: 'Легендарное', color: '#F3B53F' },
   mythic: { label: 'Мифическое', color: '#EC7F4A' },
+};
+
+// Тиры паков растут в этом порядке: редкий всегда открыт, каждый следующий открывается
+// покупкой предыдущего. Название и цвет живут здесь, потому что тир показывает и витрина
+// паков, и калькулятор окупаемости.
+export const PACK_TIER_ORDER: PackTier[] = ['rare', 'epic', 'legendary', 'mythic'];
+
+export const PACK_TIER_META: Record<PackTier, { name: string; color: string }> = {
+  rare: { name: 'Редкий', color: '#4A9EDD' },
+  epic: { name: 'Эпический', color: '#A855F7' },
+  legendary: { name: 'Легендарный', color: '#F59E0B' },
+  mythic: { name: 'Мифический', color: '#EF4444' },
 };
 
 export const GENE_META: Record<GeneKey, Record<GeneTier, { label: string; color: string }>> = {

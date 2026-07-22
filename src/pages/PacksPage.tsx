@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { fmt } from '@/utils/format';
 import type { Animal, GameState, GeneTier, PackInfo, PackOpenResult } from '@/types';
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
-import { SPECIES_RARITY_META, GENE_META, HABITAT_INFO, geneLabel, lifeLeft, type GeneKey } from '@/data/packs';
+import { SPECIES_RARITY_META, GENE_META, HABITAT_INFO, PACK_TIER_META, PACK_TIER_ORDER, geneLabel, lifeLeft, type GeneKey } from '@/data/packs';
 import { AnimalArt } from '@/components/AnimalArt';
 import { RARITY_RANK } from '@/lib/animalQuality';
 
@@ -21,8 +21,7 @@ const TIERS: Record<TierKey, {
   openVideo: string;
 }> = {
   rare: {
-    name: 'Редкий',
-    color: '#4A9EDD',
+    ...PACK_TIER_META.rare,
     glow: 'rgba(74,158,221,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(74,158,221,0.20) 0%, rgba(10,15,30,0.98) 72%)',
     border: 'rgba(74,158,221,0.45)',
@@ -30,8 +29,7 @@ const TIERS: Record<TierKey, {
     openVideo: '/packs/zoopark-rare.mp4',
   },
   epic: {
-    name: 'Эпический',
-    color: '#A855F7',
+    ...PACK_TIER_META.epic,
     glow: 'rgba(168,85,247,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(168,85,247,0.20) 0%, rgba(12,8,30,0.98) 72%)',
     border: 'rgba(168,85,247,0.45)',
@@ -39,8 +37,7 @@ const TIERS: Record<TierKey, {
     openVideo: '/packs/zoopark-epic.mp4',
   },
   legendary: {
-    name: 'Легендарный',
-    color: '#F59E0B',
+    ...PACK_TIER_META.legendary,
     glow: 'rgba(245,158,11,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(245,158,11,0.20) 0%, rgba(20,14,4,0.98) 72%)',
     border: 'rgba(245,158,11,0.45)',
@@ -48,8 +45,7 @@ const TIERS: Record<TierKey, {
     openVideo: '/packs/zoopark-legendary.mp4',
   },
   mythic: {
-    name: 'Мифический',
-    color: '#EF4444',
+    ...PACK_TIER_META.mythic,
     glow: 'rgba(239,68,68,0.55)',
     bg: 'radial-gradient(ellipse at 50% 34%, rgba(239,68,68,0.20) 0%, rgba(20,6,6,0.98) 72%)',
     border: 'rgba(239,68,68,0.45)',
@@ -58,7 +54,6 @@ const TIERS: Record<TierKey, {
   },
 };
 
-const TIER_ORDER: TierKey[] = ['rare', 'epic', 'legendary', 'mythic'];
 const BATCH_SIZES = [1, 5, 10, 50, 100] as const;
 const PACK_SKIP_INTRO_STORAGE_KEY = 'zoopark_pack_skip_intro_v1';
 
@@ -123,8 +118,8 @@ function PackTile({ tierKey, unlocked, price, onClick }: {
   onClick: () => void;
 }) {
   const info = TIERS[tierKey];
-  const idx = TIER_ORDER.indexOf(tierKey);
-  const lockReason = idx > 0 ? `Открой ${TIERS[TIER_ORDER[idx - 1]].name.toLowerCase()}` : '';
+  const idx = PACK_TIER_ORDER.indexOf(tierKey);
+  const lockReason = idx > 0 ? `Открой ${TIERS[PACK_TIER_ORDER[idx - 1]].name.toLowerCase()}` : '';
   return (
     <button
       onClick={onClick}
@@ -624,7 +619,7 @@ export function PacksPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => v
       <DailyGiftBanner available={info.gift_available} odds={info.gift_odds} onClick={() => setModal('gift')} />
 
       <div className="grid grid-cols-2 gap-3">
-        {TIER_ORDER.map(tk => {
+        {PACK_TIER_ORDER.map(tk => {
           const t = byTier(tk);
           return <PackTile key={tk} tierKey={tk} unlocked={t.unlocked} price={t.price} onClick={() => t.unlocked && setModal(tk)} />;
         })}

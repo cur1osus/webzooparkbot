@@ -2,11 +2,19 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { GameState } from '@/types';
 import { fmt } from '@/utils/format';
-import { SPECIES_RARITY_META } from '@/data/packs';
-import { AnimalArt } from '@/components/AnimalArt';
-import { apiGetBank } from '@/api';
+import { PACK_TIER_META, PACK_TIER_ORDER } from '@/data/packs';
+import { apiGetBank, apiGetPacksInfo } from '@/api';
 import { applyBankDiscount, bankDiscountPercent, rublesToUsd, usdToRubles } from '@/lib/bankMath';
-import { accumulate, biggestUpcomingLosses, buildForecast, timeToTarget } from '@/lib/incomeForecast';
+import {
+  accumulate,
+  averageLifespanMs,
+  buildForecast,
+  declineOver,
+  netGainFromAnimals,
+  timeToTarget,
+} from '@/lib/incomeForecast';
+import { bestValueTier, evaluatePack } from '@/lib/packValue';
+import { setHashPath } from '@/lib/hashRoute';
 
 type RateMode = 'current' | 'best' | 'average';
 
@@ -22,6 +30,12 @@ const HORIZONS: { label: string; ms: number }[] = [
   { label: 'Неделя',  ms: 7 * 24 * 60 * 60_000 },
 ];
 
+/** Горизонты просадки: за сутки видно срочное, за неделю — темп убыли. */
+const DECLINE_HORIZONS: { label: string; ms: number }[] = [
+  { label: 'За сутки',  ms: 24 * 60 * 60_000 },
+  { label: 'За неделю', ms: 7 * 24 * 60 * 60_000 },
+];
+
 function fmtDuration(ms: number): string {
   const minutes = Math.ceil(ms / 60_000);
   if (minutes < 60) return `${minutes} мин`;
@@ -33,6 +47,38 @@ function fmtDuration(ms: number): string {
   const days = Math.floor(hours / 24);
   const restHours = hours % 24;
   return restHours > 0 ? `${days} д ${restHours} ч` : `${days} д`;
+}
+
+function plural(count: number, one: string, few: string, many: string): string {
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = count % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
+/** Недельную норму приятнее читать как ежедневную привычку. */
+function perDay(perWeek: number): string {
+  if (perWeek >= 7) {
+    const daily = Math.round(perWeek / 7);
+    return `примерно ${daily} в день`;
+  }
+  return `по одному раз в ${Math.round(7 / perWeek)} ${plural(Math.round(7 / perWeek), 'день', 'дня', 'дней')}`;
+}
+
+/**
+ * Во сколько раз пак отобьётся. У зрелого зоопарка кратность уходит в тысячи — там
+ * дробная часть только мешает, а у пограничных паков она и решает.
+ */
+function fmtMultiple(multiple: number): string {
+  return multiple >= 10 ? fmt(Math.round(multiple)) : multiple.toFixed(1).replace('.', ',');
+}
+
+/** Среднее число животных в паке дробное: «1,5» честнее округления до двух. */
+function fmtAnimals(count: number): string {
+  const text = Number.isInteger(count) ? String(count) : count.toFixed(1).replace('.', ',');
+  return `${text} ${plural(Math.ceil(count), 'животное', 'животных', 'животных')}`;
 }
 
 export function CalculatorPage({ gs }: { gs: GameState }) {
@@ -55,8 +101,24 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Витрина паков нужна только для окупаемости — цены и состав наград. Ключ свой:
+  // страница паков живёт на своём состоянии и этот кэш не трогает.
+  const { data: packs = null } = useQuery({
+    queryKey: ['packs', 'info'],
+    queryFn: apiGetPacksInfo,
+    staleTime: 60_000,
+  });
+
   const forecast = useMemo(() => buildForecast(gs, now), [gs, now]);
-  const losses = useMemo(() => biggestUpcomingLosses(gs, now), [gs, now]);
+  const declines = useMemo(
+    () => DECLINE_HORIZONS.map(h => ({ ...h, ...declineOver(forecast, h.ms) })),
+    [forecast],
+  );
+  const weekly = declines[declines.length - 1];
+  const lifespanMs = useMemo(() => averageLifespanMs(gs), [gs]);
+  // Считаем по прогнозу, а не по серверному счётчику: тот собран в момент запроса, а
+  // здесь животные «умирают» ещё и по ходу открытой страницы.
+  const aliveNow = forecast.segments[0]?.animalCount ?? 0;
 
   const net = forecast.segments[0]?.netPerMin ?? 0;
 
@@ -91,6 +153,32 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
   const rate = rates[rateMode];
   const feePercent = bank?.fee_percent ?? 0;
   const toUsd = (rub: number) => rublesToUsd(rub, rate, feePercent);
+
+  // Паки продаются за доллары, а доход капает рублями, поэтому окупаемость считается
+  // только когда известен курс — и по тому же курсу, что выбран выше.
+  const packValues = useMemo(() => {
+    if (!packs || rate <= 0 || aliveNow <= 0) return [];
+    const ctx = {
+      netGainFor: (animals: number) => netGainFromAnimals(forecast, animals),
+      usdToRub: (usd: number) => usdToRubles(usd, rate, feePercent),
+      lifespanMs,
+    };
+    const byTier = new Map(packs.tiers.map(t => [t.tier, t]));
+    return PACK_TIER_ORDER
+      .map(tier => byTier.get(tier))
+      .filter(t => t !== undefined)
+      .map(t => evaluatePack(t, ctx));
+  }, [packs, forecast, aliveNow, rate, feePercent, lifespanMs]);
+  const bestTier = useMemo(() => bestValueTier(packValues), [packValues]);
+
+  // Связка двух блоков: сколько паков лучшего тира закрывают недельную убыль. Цена
+  // взята нынешняя — каждая покупка её поднимает, поэтому это нижняя граница.
+  const plan = useMemo(() => {
+    const best = packValues.find(p => p.tier === bestTier);
+    if (!best || weekly.replacements <= 0) return null;
+    const packs = Math.ceil(weekly.replacements / best.animals);
+    return { tier: best.tier, packs, usd: packs * best.priceUsd };
+  }, [packValues, bestTier, weekly]);
   const goalValue = Number(goal.replace(/\s/g, ''));
   const goalReady = goal.trim() !== '' && Number.isFinite(goalValue) && goalValue > 0;
 
@@ -259,31 +347,116 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
         )}
       </div>
 
-      {losses.length > 0 && (
+      {aliveNow > 0 && (
         <div className="card">
-          <p className="m-0 text-[13px] font-extrabold">Что просядет первым</p>
+          <p className="m-0 text-[13px] font-extrabold">Доход тает</p>
           <p className="m-0 mt-1 text-[11px] text-tg-hint leading-[1.4]">
-            Самые доходные животные и сколько им осталось.
+            Сколько темпа унесут смерти животных, если никого не заводить.
           </p>
           <div className="mt-3 flex flex-col gap-2">
-            {losses.map(a => {
-              const leftMs = new Date(a.dies_at).getTime() - now;
-              const rarityColor = SPECIES_RARITY_META[a.species_rarity].color;
-              return (
-                <div key={a.id} className="flex items-center gap-[10px] rounded-xl px-3 py-2"
-                     style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)' }}>
-                  <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0 overflow-hidden"
-                        style={{ background: `${rarityColor}18`, border: `1px solid ${rarityColor}35` }}>
-                    <AnimalArt animal={a} size={32} />
+            {declines.map(d => (
+              <div key={d.label} className="flex items-center justify-between gap-2 rounded-xl px-3 py-[10px]"
+                   style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)' }}>
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-bold text-tg-hint">{d.label}</span>
+                  <span className="block text-[11px] text-tg-hint">
+                    {d.deaths > 0 ? `умрут ${d.deaths} из ${aliveNow}` : 'никто не умрёт'}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="m-0 text-[12.5px] font-bold truncate">{a.name}</p>
-                    <p className="m-0 text-[11px] text-tg-hint truncate">−₽{fmt(a.income)}/мин через {fmtDuration(leftMs)}</p>
+                </span>
+                <span className="text-right shrink-0">
+                  <span className="block text-[14px] font-extrabold tabular-nums"
+                        style={{ color: d.lostNet > 0 ? 'var(--c-red-soft)' : 'var(--c-green)' }}>
+                    {d.lostNet > 0 ? `−₽${fmt(d.lostNet)}` : 'без потерь'}
+                    {d.lostNet > 0 && <span className="text-[11px] font-bold">/мин</span>}
+                  </span>
+                  {d.lostNet > 0 && (
+                    <span className="block text-[11px] font-bold tabular-nums text-tg-hint">
+                      −{d.percent}% · останется ₽{fmt(d.netThen)}/мин
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="m-0 mt-2 text-[11px] leading-[1.45]"
+             style={{ color: weekly.replacements > 0 ? 'var(--c-gold)' : 'var(--c-green)' }}>
+            {weekly.replacements > 0
+              ? `Чтобы удержать темп, за неделю нужно ${weekly.replacements} ${plural(weekly.replacements, 'новое животное', 'новых животных', 'новых животных')} — это ${perDay(weekly.replacements)}.`
+              : 'За неделю зоопарк ничего не теряет — можно копить, а не докупать.'}
+          </p>
+        </div>
+      )}
+
+      {packValues.length > 0 && (
+        <div className="card">
+          <p className="m-0 text-[13px] font-extrabold">Что выгоднее купить</p>
+          <p className="m-0 mt-1 text-[11px] text-tg-hint leading-[1.4]">
+            Окупаемость паков по среднему животному твоего зоопарка.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            {packValues.map(p => {
+              const meta = PACK_TIER_META[p.tier];
+              const profitable = p.multiple !== null && p.multiple > 1;
+              return (
+                <div key={p.tier} className="rounded-xl px-3 py-[10px]"
+                     style={{
+                       background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
+                       border: `1px solid ${p.tier === bestTier ? `${meta.color}55` : 'transparent'}`,
+                       opacity: p.unlocked ? 1 : 0.6,
+                     }}>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate text-[12.5px] font-extrabold" style={{ color: meta.color }}>
+                      {meta.name}
+                      {p.tier === bestTier && (
+                        <span className="ml-[6px] text-[10px] font-bold" style={{ color: 'var(--c-gold)' }}>выгоднее всех</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[12.5px] font-extrabold tabular-nums" style={{ color: 'var(--c-gold)' }}>
+                      ${fmt(p.priceUsd)}
+                      <span className="ml-1 text-[11px] font-bold text-tg-hint">≈ ₽{fmt(usdToRubles(p.priceUsd, rate, feePercent))}</span>
+                    </span>
                   </div>
+                  <p className="m-0 mt-[3px] text-[11px] text-tg-hint leading-[1.45]">
+                    ~{fmtAnimals(p.animals)} · +₽{fmt(p.netGainPerMin)}/мин
+                    {p.paybackMs !== null && ` · окупится за ${fmtDuration(p.paybackMs)}`}
+                  </p>
+                  <p className="m-0 text-[11px] font-bold leading-[1.45]"
+                     style={{ color: profitable ? 'var(--c-green)' : 'var(--c-amber)' }}>
+                    {p.multiple === null
+                      ? 'Награда покрывает цену — берёшь животных даром'
+                      : profitable
+                        ? `За жизнь принесут ₽${fmt(p.lifetimeRub)} — это ×${fmtMultiple(p.multiple)} от цены`
+                        : `За жизнь принесут ₽${fmt(p.lifetimeRub)} — меньше, чем стоит пак`}
+                  </p>
+                  {!p.unlocked && (
+                    <p className="m-0 mt-[2px] text-[10.5px] text-tg-hint">Тир закрыт — сначала купи предыдущий</p>
+                  )}
                 </div>
               );
             })}
           </div>
+          {plan && (
+            <p className="m-0 mt-2 text-[11px] font-bold leading-[1.45]" style={{ color: 'var(--c-gold)' }}>
+              Недельную убыль закроют ~{plan.packs} {plural(plan.packs, 'пак', 'пака', 'паков')} «
+              {PACK_TIER_META[plan.tier].name.toLowerCase()}» — ${fmt(plan.usd)} по нынешней цене.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setHashPath('/shop')}
+            className="mt-3 w-full min-h-11 rounded-xl text-[13px] font-extrabold cursor-pointer transition-colors"
+            style={{
+              background: 'color-mix(in srgb, var(--c-gold) 18%, transparent)',
+              color: 'var(--c-gold)',
+              border: '1px solid color-mix(in srgb, var(--c-gold) 40%, transparent)',
+            }}
+          >
+            Открыть паки
+          </button>
+          <p className="m-0 mt-2 text-[10.5px] text-tg-hint leading-[1.4]">
+            Считаем по среднему животному зоопарка ({fmtDuration(lifespanMs)} жизни) и цене пака за вычетом
+            денег из награды. Каждая покупка поднимает цену следующего пака — числа пересчитаются.
+          </p>
         </div>
       )}
 
