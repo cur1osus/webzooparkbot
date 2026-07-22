@@ -16,6 +16,7 @@ export const ACHIEVEMENT_TGS: Record<string, string> = {
   endgame_geneticist: '/nft_IonGem-2553.tgs',
   endgame_explorer: '/nft_VictoryMedal-10059.tgs',
   endgame_empire: '/nft_MoneyPot-1.tgs',
+  perfect_fifty: '/nft_DiamondRing-5.tgs',
 };
 
 export function profileAchievementValue(id: string): string {

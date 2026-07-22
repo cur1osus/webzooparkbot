@@ -49,6 +49,12 @@ ACHIEVEMENTS: tuple[AchievementDefinition, ...] = (
     AchievementDefinition("endgame_geneticist", "Мастер наследия", "Стань мастером наследия: 25 успешных скрещиваний", 25),
     AchievementDefinition("endgame_explorer", "Повелитель экспедиций", "Одержи 12 побед в экспедициях", 12),
     AchievementDefinition("endgame_empire", "Империя зоопарков", "Развивай инфраструктуру до 15 уровней суммарно", 15),
+    AchievementDefinition(
+        "perfect_fifty",
+        "Полсотни шедевров",
+        "Заведи за всё время 50 животных, у которых все четыре гена высшего уровня",
+        50,
+    ),
 )
 
 
@@ -97,6 +103,18 @@ def list_achievements(session: Session, player: Player) -> list[dict]:
     cocktails_solved = int(
         session.scalar(select(func.count(CocktailSolve.id)).where(CocktailSolve.player_id == player_id)) or 0
     )
+    perfect_animals = int(
+        session.scalar(
+            select(func.count(Animal.id)).where(
+                Animal.player_id == player_id,
+                Animal.gene_survival == "high",
+                Animal.gene_reproduction == "high",
+                Animal.gene_appearance == "high",
+                Animal.gene_size == "high",
+            )
+        )
+        or 0
+    )
 
     values = {
         "first_beast": animal_count,
@@ -114,6 +132,7 @@ def list_achievements(session: Session, player: Player) -> list[dict]:
         "endgame_geneticist": successful_breedings,
         "endgame_explorer": expedition_victories,
         "endgame_empire": locality_levels,
+        "perfect_fifty": perfect_animals,
     }
 
     return [

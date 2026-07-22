@@ -37,7 +37,7 @@ def test_public_profile_contains_only_public_progress(player):
     profile = social.public_profile(player, player)
 
     assert profile["rank"] == 1
-    assert profile["achievements_total"] == 15
+    assert profile["achievements_total"] == 16
     assert profile["species"] == []
     assert "rub" not in profile
     assert "usd" not in profile

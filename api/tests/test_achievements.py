@@ -1,7 +1,11 @@
 """The medals tab is backed by server-derived, lifetime progress."""
 
 import base64
+from datetime import datetime, timezone
 
+from api.app.db.connection import get_session
+from api.app.db.models import Animal, Player
+from api.app.zoopark.season import active_season
 from api.app.zoopark.core import me
 from api.app.zoopark.core import set_profile_avatar
 from api.app.schemas.core import ProfileAvatarBody
@@ -17,7 +21,7 @@ import pytest
 def test_profile_contains_all_achievements(db, player):
     state = me(player)
 
-    assert len(state["achievements"]) == 15
+    assert len(state["achievements"]) == 16
     assert [item["id"] for item in state["achievements"]] == [
         "first_beast",
         "growing_zoo",
@@ -34,11 +38,41 @@ def test_profile_contains_all_achievements(db, player):
         "endgame_geneticist",
         "endgame_explorer",
         "endgame_empire",
+        "perfect_fifty",
     ]
     assert state["achievements"][0]["value"] == 0
     # Registration grants the first locality, so the third achievement step is already
     # visible without requiring the player to open another screen first.
     assert state["achievements"][7]["value"] == 1
+
+
+def test_perfect_genes_medal_survives_the_death_of_the_animal(db, player):
+    """The medal is awarded once: an animal that already counted keeps counting."""
+
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        season = active_season(session)
+        session.add(
+            Animal(
+                player_id=row.id,
+                season_id=season.id,
+                species_id=1,
+                habitat="forest",
+                origin="pack",
+                gene_survival="high",
+                gene_reproduction="high",
+                gene_appearance="high",
+                gene_size="high",
+                dies_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+                removed_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+                removal_reason="released",
+            )
+        )
+        session.commit()
+
+    medal = next(item for item in me(player)["achievements"] if item["id"] == "perfect_fifty")
+    assert medal["value"] == 1
+    assert medal["target"] == 50
 
 
 def test_only_unlocked_achievement_can_become_profile_avatar(db, player):
