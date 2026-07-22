@@ -49,12 +49,35 @@ REQUEST_TIMEOUT = 240
 ATTEMPTS = 3
 MAX_TOKENS = 6000
 
-# ₽ per token on RouterAI, GET /api/v1/models, 2026-07-19. Cached input is ~5x cheaper,
-# and the tool schemas are a stable ~6k-token prefix, so nearly all of it caches after the
-# first round of a turn.
-PRICE_PROMPT_RUB = 9.1726479e-06
-PRICE_CACHED_RUB = 1.83452958e-06
-PRICE_COMPLETION_RUB = 1.83452958e-05
+# ₽ per token on RouterAI, GET /api/v1/models, 2026-07-22 — (fresh input, output) per model.
+# A turn resends its whole history every round, so input dominates: a measured turn is 278k
+# in against 9k out. Which is also why the cache matters more than the sticker price — three
+# quarters of that input is a repeat, and a model the router does not cache for costs roughly
+# double its row here.
+#
+# The router publishes no rate for cached input; the fifth below is the ratio measured against
+# deepseek-v4-flash's own invoices and assumed to carry. It is an assumption, and a new engine
+# is worth re-checking against a real bill before its costs are compared to anyone else's.
+CACHED_SHARE = 0.2
+PRICES_RUB: dict[str, tuple[float, float]] = {
+    "deepseek/deepseek-v4-flash": (9.1726479e-06, 1.83452958e-05),
+    "z-ai/glm-4.7-flash": (6.1084319e-06, 4.0722879e-05),
+}
+
+
+def _prices(model: str) -> tuple[float, float]:
+    """Rates for `model`, or the incumbent's if it is one we have not priced yet.
+
+    Guessing is the wrong failure here — an unpriced engine would silently be billed at
+    DeepSeek's rates and then reported as cheaper or dearer than it is, which is exactly the
+    comparison this column was added to make. So it says so, loudly, once per turn.
+    """
+    known = PRICES_RUB.get(model)
+    if known is None:
+        logger.warning("нет цены для модели %s — считаю по %s, цифры сравнивать нельзя",
+                       model, BOT_PLANNER_MODEL)
+        return PRICES_RUB[BOT_PLANNER_MODEL] if BOT_PLANNER_MODEL in PRICES_RUB else (0.0, 0.0)
+    return known
 
 
 SYSTEM_PROMPT = """Ты — игрок в браузерной игре про зоопарк, соперник живых людей. Ты не ассистент и не помощник: у тебя свой зоопарк, свои деньги и своя манера играть. Никто не даёт тебе заданий — ты сам решаешь, что делать.
@@ -88,6 +111,7 @@ class TurnResult:
     tool_calls: list[dict] = field(default_factory=list)
     summary: str = ""
     stopped_because: str = ""
+    model: str = BOT_PLANNER_MODEL
     prompt_tokens: int = 0
     cached_tokens: int = 0
     completion_tokens: int = 0
@@ -95,11 +119,12 @@ class TurnResult:
 
     @property
     def cost_micro_rub(self) -> int:
+        prompt_rub, completion_rub = _prices(self.model)
         fresh = max(self.prompt_tokens - self.cached_tokens, 0)
         rub = (
-            fresh * PRICE_PROMPT_RUB
-            + self.cached_tokens * PRICE_CACHED_RUB
-            + self.completion_tokens * PRICE_COMPLETION_RUB
+            fresh * prompt_rub
+            + self.cached_tokens * prompt_rub * CACHED_SHARE
+            + self.completion_tokens * completion_rub
         )
         return round(rub * 1_000_000)
 
@@ -162,7 +187,7 @@ def _opening_message(character: Character, tg_id: int, player_id: int, nickname:
 
 
 def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
-             *, dry_run: bool = False) -> TurnResult:
+             *, dry_run: bool = False, model: str | None = None) -> TurnResult:
     """Play one turn. Never raises: a broken turn must not take down the runner.
 
     Under `dry_run` the model plays for real and its reasoning is genuine, but any tool that
@@ -171,7 +196,7 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
     which does mean it will try to work around it; read a dry run for intent, not for the
     sequence it would have played uninterrupted.
     """
-    result = TurnResult()
+    result = TurnResult(model=model or BOT_PLANNER_MODEL)
 
     if not ROUTERAI_API_KEY:
         result.stopped_because = "нет ROUTERAI_API_KEY"
@@ -227,7 +252,7 @@ def run_turn(character: Character, tg_id: int, player_id: int, nickname: str,
             })
 
         data = _ask({
-            "model": BOT_PLANNER_MODEL,
+            "model": result.model,
             "messages": messages,
             "tools": round_schemas,
             "tool_choice": tool_choice,

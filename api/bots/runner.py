@@ -89,11 +89,12 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
         tg_id = int(player.telegram_id)
         nickname = player.nickname
         turn_every = profile.turn_every_minutes
+        model = profile.model
         session.commit()
 
     # No session is open from here on: the model call takes minutes, and every tool the
     # model reaches for opens its own.
-    result = agent.run_turn(character, tg_id, player_id, nickname, dry_run=dry_run)
+    result = agent.run_turn(character, tg_id, player_id, nickname, dry_run=dry_run, model=model)
 
     if dry_run:
         _print_turn(nickname, character, result)
@@ -122,6 +123,7 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
             session.add(BotPlan(
                 player_id=player_id,
                 character=character.key,
+                model=result.model,
                 rounds=result.rounds,
                 tool_calls=_journal(result.tool_calls),
                 summary=result.summary,
@@ -140,7 +142,7 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
     # turn is already recorded and the schedule already moved, so a dream that fails or hangs
     # costs nothing but its own model call — it never blocks or re-runs the turn.
     try:
-        dreaming.run_dream(player_id)
+        dreaming.run_dream(player_id, model=model)
     except Exception:
         logger.exception("bot %s: сон упал", nickname)
     return True
@@ -175,7 +177,7 @@ def _journal(tool_calls: list[dict]) -> str:
 
 
 def _print_turn(nickname: str, character, result: agent.TurnResult) -> None:
-    print(f"\n  {nickname} [{character.key}]")
+    print(f"\n  {nickname} [{character.key}] на {result.model}")
     print(f"  кругов: {result.rounds}, вызовов: {len(result.tool_calls)}, "
           f"остановился: {result.stopped_because}")
     for call in result.tool_calls:

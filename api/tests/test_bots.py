@@ -729,3 +729,83 @@ def test_a_shutdown_hands_back_a_rival_whose_turn_has_not_started(db, monkeypatc
 
     assert runner.tick() == 1, "без остановки ход идёт как обычно"
     assert turns_taken == [player_id]
+
+
+# ── one engine per rival ──────────────────────────────────────────────────────
+
+
+def test_a_rival_plays_on_its_own_engine_and_the_journal_remembers_which(db, monkeypatch):
+    """The model used to be one deployment-wide setting, so two engines could only be compared
+    by switching it and waiting — and by then the zoo had moved. Per-rival is what makes the
+    comparison an experiment; the column on the journal is what makes it readable afterwards."""
+    from sqlalchemy import select
+
+    from api.app.db.connection import get_session
+    from api.app.db.models import BotPlan, BotProfile, Player, utcnow
+    from api.app.schemas.core import RegisterBody
+    from api.app.zoopark.core import register
+    from api.bots import dreaming
+
+    register(-1002, RegisterBody(nickname="Бьорн"))
+    with get_session() as session:
+        player = session.scalar(select(Player).where(Player.telegram_id == -1002))
+        player.is_bot = True
+        player_id = player.id
+        session.add(BotProfile(
+            player_id=player_id, character="gambler", enabled=True, turn_every_minutes=45,
+            wake_hour_utc=0, sleep_hour_utc=0, biography="", created_at=utcnow(),
+            model="z-ai/glm-4.7-flash",
+        ))
+        session.commit()
+
+    asked = []
+
+    def fake_turn(_character, _tg, _pid, _nick, *, dry_run=False, model=None):
+        asked.append(model)
+        return agent.TurnResult(rounds=3, model=model or "")
+
+    monkeypatch.setattr(runner.agent, "run_turn", fake_turn)
+    monkeypatch.setattr(dreaming, "run_dream", lambda pid, **kw: asked.append(kw.get("model")))
+
+    assert runner._process(player_id, utcnow(), dry_run=False) is True
+    assert asked == ["z-ai/glm-4.7-flash", "z-ai/glm-4.7-flash"], "и ход, и сон — на движке бота"
+
+    with get_session() as session:
+        plan = session.scalars(select(BotPlan).where(BotPlan.player_id == player_id)).one()
+        assert plan.model == "z-ai/glm-4.7-flash"
+
+
+def test_an_unset_engine_falls_back_to_the_deployment_default(db):
+    """NULL has to keep meaning "whatever this deployment runs", or the column would be a
+    migration that quietly stops every rival that does not have one filled in."""
+    result = agent.TurnResult()
+    assert result.model == agent.BOT_PLANNER_MODEL
+
+
+def test_a_turn_is_costed_at_its_own_engines_prices():
+    """The prices were three module constants, so a turn on a second engine would have been
+    billed at the first one's rates — and the cost comparison, which is half the reason for
+    running two engines at all, would have come out identical by construction."""
+    tokens = dict(prompt_tokens=100_000, cached_tokens=75_000, completion_tokens=9_000)
+    deepseek = agent.TurnResult(model="deepseek/deepseek-v4-flash", **tokens)
+    glm = agent.TurnResult(model="z-ai/glm-4.7-flash", **tokens)
+
+    assert deepseek.cost_micro_rub != glm.cost_micro_rub
+    for result in (deepseek, glm):
+        prompt_rub, completion_rub = agent.PRICES_RUB[result.model]
+        expected = (
+            25_000 * prompt_rub
+            + 75_000 * prompt_rub * agent.CACHED_SHARE
+            + 9_000 * completion_rub
+        )
+        assert result.cost_micro_rub == round(expected * 1_000_000)
+
+
+def test_an_unpriced_engine_says_so_instead_of_billing_at_someone_elses_rates(caplog):
+    """Silently costing an unknown model at DeepSeek's rates would produce a number that looks
+    like a measurement and is not one."""
+    with caplog.at_level("WARNING"):
+        cost = agent.TurnResult(model="кто/это", prompt_tokens=1000).cost_micro_rub
+
+    assert cost > 0, "ход всё равно должен получить какую-то цену"
+    assert "нет цены для модели" in caplog.text

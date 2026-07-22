@@ -81,14 +81,20 @@ def _extract(data: dict) -> list[str]:
     return lessons[:DREAM_TARGET_NOTES]
 
 
-def run_dream(player_id: int, *, ask=agent._ask, force: bool = False) -> dict:
-    """Consolidate one rival's notebook if it has grown enough. Never raises."""
+def run_dream(player_id: int, *, ask=agent._ask, force: bool = False,
+              model: str | None = None) -> dict:
+    """Consolidate one rival's notebook if it has grown enough. Never raises.
+
+    Dreams on the rival's own engine, not the deployment default: the notebook is what the
+    next turn reasons from, so a rival compared on one model must not have had its memory
+    rewritten by another.
+    """
     notes = memory_store.load(player_id)
     if not force and len(notes) < DREAM_AFTER_NOTES:
         return {"ok": True, "dreamed": False, "заметок": len(notes)}
 
     data = ask({
-        "model": BOT_PLANNER_MODEL,
+        "model": model or BOT_PLANNER_MODEL,
         "messages": [
             {"role": "system", "content": _SYSTEM},
             {"role": "user", "content": _prompt(notes)},

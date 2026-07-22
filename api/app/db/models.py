@@ -1104,6 +1104,12 @@ class BotProfile(Base):
     wake_hour_utc: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=6, server_default="6")
     sleep_hour_utc: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=22, server_default="22")
 
+    # Which model plays this rival. NULL means the deployment-wide `BOT_PLANNER_MODEL`, so
+    # nothing has to be filled in to keep the current behaviour. It is per-rival rather than
+    # global because that is the only way to ask the question it exists for: two bots, two
+    # engines, the same game, and a comparison that is not confounded by the week between them.
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # What the bot remembers lives in its own JSON notebook, written by the model through
     # the `remember` tool — not here. This column stays only as a place for an operator note.
     biography: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -1136,6 +1142,10 @@ class BotPlan(Base):
         BigInteger, ForeignKey("players.id", ondelete="CASCADE"), nullable=False
     )
     character: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Which engine actually played this turn. Without it a model swap is unmeasurable after
+    # the fact: the rows before and after look identical, and the only record of which is
+    # which is whatever the operator remembers about when they changed the setting.
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="", server_default="")
 
     # Round trips to the model. A turn's cost is this number — not the tool count, since the
     # tools are local calls and the model routinely batches ten of them into one round.
