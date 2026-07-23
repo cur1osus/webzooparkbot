@@ -846,3 +846,11 @@ def test_the_prompt_points_the_rival_at_cosmetics():
     text = agent.SYSTEM_PROMPT.lower()
     assert "paw" in text or "лапк" in text
     assert "my_achievements" in agent.SYSTEM_PROMPT
+
+
+def test_the_prompt_does_not_offer_retired_games():
+    """Duels and solo matches were removed on 2026-07-22; the prompt kept listing them as ways
+    to make money, sending the rival after tools that no longer exist."""
+    text = agent.SYSTEM_PROMPT.lower()
+    assert "дуэл" not in text
+    assert "соло" not in text
