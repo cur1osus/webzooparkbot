@@ -637,8 +637,15 @@ def _buy_wallpaper(tg_id: int, wallpaper: str, **_):
     return core_service.buy_profile_wallpaper(tg_id, wallpaper)
 
 
+@tool("my_achievements", "Твои достижения — какие открыты (completed), какие ещё в процессе. "
+                         "Открытое можно поставить аватаром через set_profile_avatar.")
+def _my_achievements(tg_id: int, **_):
+    return core_service.my_achievements(tg_id)
+
+
 @tool("set_profile_avatar", "Поставить в профиль открытое достижение как аватар. "
-                            "Без аватара показывается случайное животное.",
+                            "Без аватара показывается случайное животное. "
+                            "Список своих открытых достижений — в my_achievements.",
       {"achievement_id": {"type": "string", "description": "id открытого достижения"}},
       ["achievement_id"])
 def _set_avatar(tg_id: int, achievement_id: str, **_):

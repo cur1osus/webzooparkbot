@@ -203,6 +203,21 @@ def update_nickname(tg_id: int, body: NicknameUpdateBody) -> dict:
         }
 
 
+def my_achievements(tg_id: int) -> dict:
+    """The player's own medals, complete and in-progress alike.
+
+    `set_profile_avatar` needs the id of an *unlocked* achievement, and the only other place a
+    rival could see its own ids is `public_profile` on itself — a roundabout call it never
+    makes. This gives it the list directly, with `completed` so it can pick one it actually
+    has.
+    """
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Пользователь не найден")
+        return {"achievements": achievements_module.list_achievements(session, player)}
+
+
 def set_theme(tg_id: int, body: ThemeBody) -> dict:
     if body.theme not in GAME_THEMES:
         raise HTTPException(400, "Неизвестная тема оформления")

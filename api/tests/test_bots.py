@@ -831,3 +831,18 @@ def test_the_prompt_states_the_real_safe_code_length():
     assert "__SAFE_LEN__" not in agent.SYSTEM_PROMPT, "плейсхолдер должен быть подставлен"
     assert f"код из {SAFE_CODE_LENGTH} цифр" in agent.SYSTEM_PROMPT
     assert "код из четырёх цифр" not in agent.SYSTEM_PROMPT, "старое зашитое число не должно вернуться"
+
+
+def test_a_rival_can_list_its_own_achievements_to_pick_an_avatar():
+    """`set_profile_avatar` needs the id of an unlocked achievement, and until now the only
+    way a rival could see its own ids was `get_player_profile` aimed at itself — a call it
+    never made. The tool exists so the discovery is direct."""
+    assert "my_achievements" in tools.REGISTRY
+
+
+def test_the_prompt_points_the_rival_at_cosmetics():
+    """Paw coins had no prompted sink, so they piled up unused while the profile stayed on
+    every default. The prompt now names the appearance options and the paw currency."""
+    text = agent.SYSTEM_PROMPT.lower()
+    assert "paw" in text or "лапк" in text
+    assert "my_achievements" in agent.SYSTEM_PROMPT
