@@ -11,10 +11,10 @@ from api.app.core.config import SOCIAL_REWARD_CHAT_ID
 from api.app.core.notification_worker import NotificationWorker
 from api.app.core.telegram import TelegramApiError
 from api.app.db.connection import get_session
-from api.app.db.models import Animal, NotificationOutbox, Player
+from api.app.db.models import Animal, Expedition, Locality, NotificationOutbox, Player
 from api.app.routes import telegram_webhook as webhook
 from api.app.zoopark import income as income_module
-from api.app.zoopark.notifications import enqueue_unclaimed_daily_bonuses
+from api.app.zoopark.notifications import enqueue_due_expedition_notifications, enqueue_unclaimed_daily_bonuses
 from api.app.zoopark.season import active_season
 from api.app.zoopark.status import daily_bonus
 
@@ -51,7 +51,7 @@ def test_natural_death_settles_old_rate_and_enqueues_once(db, player, monkeypatc
 
     with get_session() as session:
         row = session.query(Player).filter_by(telegram_id=player).one()
-        income_module.sync_player_income(session, row)
+        income_module.sync_active_player_income(session)
         outbox = session.query(NotificationOutbox).all()
         # Registration grants the starter 1,000 ₽; the dead animal contributes exactly
         # the ten minutes before its death, not the ten minutes after it.
@@ -59,6 +59,41 @@ def test_natural_death_settles_old_rate_and_enqueues_once(db, player, monkeypatc
         assert len(outbox) == 1
         assert "Кролик" in outbox[0].payload_json
         session.commit()
+
+
+def test_due_expedition_is_announced_before_foreground_resolution(db, player, monkeypatch):
+    now = datetime(2026, 7, 23, 10, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr("api.app.zoopark.notifications.utcnow", lambda: now)
+
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        season = active_season(session)
+        locality = session.query(Locality).filter_by(player_id=row.id, season_id=season.id).one()
+        session.add(
+            Expedition(
+                player_id=row.id,
+                season_id=season.id,
+                locality_id=locality.id,
+                depth=1,
+                started_at=now - timedelta(minutes=10),
+                ends_at=now - timedelta(seconds=1),
+            )
+        )
+        session.commit()
+
+    with get_session() as session:
+        assert enqueue_due_expedition_notifications(session) == 1
+        session.commit()
+
+    with get_session() as session:
+        rows = session.query(NotificationOutbox).filter_by(kind="expedition_finished").all()
+        assert len(rows) == 1
+        assert "завершилась." in rows[0].payload_json
+
+        # A foreground finish later uses the same business event id and cannot enqueue a
+        # second message after the worker already announced readiness.
+        assert enqueue_due_expedition_notifications(session) == 1
+        assert session.query(NotificationOutbox).filter_by(kind="expedition_finished").count() == 1
 
 
 def test_daily_bonus_is_durable_and_worker_retries_then_sends(db, player, monkeypatch):

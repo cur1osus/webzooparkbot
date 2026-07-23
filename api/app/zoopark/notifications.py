@@ -117,15 +117,49 @@ def enqueue_disease_outbreak(session: Session, player: Player, *, count: int, at
     )
 
 
-def enqueue_expedition_finished(session: Session, player: Player, expedition: Expedition, result: dict) -> None:
-    outcome = "победой" if result.get("outcome") == "victory" else "поражением"
+def enqueue_expedition_finished(
+    session: Session,
+    player: Player,
+    expedition: Expedition,
+    result: dict | None = None,
+) -> None:
+    outcome = "победой" if result and result.get("outcome") == "victory" else "поражением"
+    text = (
+        f"🧭 Экспедиция завершилась {outcome}. Открой зоопарк, чтобы посмотреть результат."
+        if result is not None
+        else "🧭 Экспедиция завершилась. Открой зоопарк, чтобы посмотреть результат."
+    )
     enqueue(
         session,
         player_id=player.id,
         kind=KIND_EXPEDITION_FINISHED,
         dedupe_key=f"expedition-finished:{expedition.id}",
-        text=f"🧭 Экспедиция завершилась {outcome}. Открой зоопарк, чтобы посмотреть результат.",
+        text=text,
     )
+
+
+def enqueue_due_expedition_notifications(session: Session, *, limit: int = 500) -> int:
+    """Notify players as soon as an unresolved expedition reaches its end time.
+
+    Resolving the fight remains an explicit POST action, so the worker only announces that
+    the result is ready. If the player opens the app first, the foreground resolution uses
+    the same dedupe key and no duplicate Telegram message is created.
+    """
+    now = utcnow()
+    rows = session.execute(
+        select(Expedition, Player)
+        .join(Player, Player.id == Expedition.player_id)
+        .where(
+            Player.status == "active",
+            Expedition.resolved_at.is_(None),
+            Expedition.ends_at <= now,
+        )
+        .order_by(Expedition.ends_at.asc(), Expedition.id.asc())
+        .limit(limit)
+    ).all()
+    for expedition, player in rows:
+        enqueue_expedition_finished(session, player, expedition)
+    return len(rows)
 
 
 def enqueue_daily_bonus_ready(session: Session, player: Player, bonus_date: date) -> None:

@@ -390,6 +390,26 @@ def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None
     return income, upkeep
 
 
+def sync_active_player_income(session: Session) -> int:
+    """Advance passive events for every active player during a worker scan.
+
+    The web request path used to be the only caller of ``sync_player_income``. That made
+    disease rolls and natural-death notifications wait until the player opened the app.
+    The notification worker calls this periodically so the same authoritative transition
+    happens while the player is offline. The row lock keeps it from racing a foreground
+    mutation; notification dedupe keys make a concurrent worker safe as well.
+    """
+    players = session.scalars(
+        select(Player)
+        .where(Player.status == "active")
+        .order_by(Player.id.asc())
+        .with_for_update()
+    ).all()
+    for player in players:
+        sync_player_income(session, player)
+    return len(players)
+
+
 def count_alive_animals(session: Session, player_id: int, season_id: int | None = None) -> int:
     stmt = select(Animal.id).where(Animal.player_id == player_id, alive_clause())
     if season_id is not None:

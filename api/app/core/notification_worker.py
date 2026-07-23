@@ -13,11 +13,13 @@ from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import NotificationOutbox, Player, utcnow
 from api.app.zoopark.notifications import (
+    enqueue_due_expedition_notifications,
     enqueue_natural_death_notifications,
     enqueue_safe_cracked,
     enqueue_safe_opened,
     enqueue_unclaimed_daily_bonuses,
 )
+from api.app.zoopark.income import sync_active_player_income
 from api.app.zoopark.safe import resolve_due_days
 
 logger = logging.getLogger(__name__)
@@ -43,9 +45,28 @@ class NotificationWorker:
 
     def _run(self) -> None:
         next_bonus_scan = 0.0
+        next_player_scan = 0.0
+        next_expedition_scan = 0.0
         elapsed = 0.0
         while not self._stop.is_set():
             try:
+                if elapsed >= next_expedition_scan:
+                    with get_session() as session:
+                        enqueue_due_expedition_notifications(session)
+                        session.commit()
+                    # Keep this close to the five-second worker tick: expedition end times
+                    # are user-visible deadlines, unlike the once-a-day maintenance scans.
+                    next_expedition_scan = elapsed + self.poll_seconds
+
+                if elapsed >= next_player_scan:
+                    with get_session() as session:
+                        sync_active_player_income(session)
+                        session.commit()
+                    # Disease rolls and natural deaths are passive events. Syncing once a
+                    # minute is enough precision while avoiding an income ledger write every
+                    # five seconds for every player.
+                    next_player_scan = elapsed + 60.0
+
                 if elapsed >= next_bonus_scan:
                     with get_session() as session:
                         enqueue_unclaimed_daily_bonuses(session)
