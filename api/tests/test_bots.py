@@ -820,3 +820,14 @@ def test_the_exchange_tool_tells_the_model_low_rate_means_more_dollars():
     text = entry.description.lower()
     assert "чем ниже курс, тем больше долларов" in text
     assert "подожди" not in text or "высок" in text, "ждать надо при высоком курсе, не при низком"
+
+
+def test_the_prompt_states_the_real_safe_code_length():
+    """The system prompt hardcoded "код из четырёх цифр" while `SAFE_CODE_LENGTH` was 6, so a
+    rival was told to guess a length the safe would reject. It is sourced from the constant
+    now — this fails if anyone restates it, or if the placeholder stops being substituted."""
+    from api.app.zoopark.catalog import SAFE_CODE_LENGTH
+
+    assert "__SAFE_LEN__" not in agent.SYSTEM_PROMPT, "плейсхолдер должен быть подставлен"
+    assert f"код из {SAFE_CODE_LENGTH} цифр" in agent.SYSTEM_PROMPT
+    assert "код из четырёх цифр" not in agent.SYSTEM_PROMPT, "старое зашитое число не должно вернуться"
