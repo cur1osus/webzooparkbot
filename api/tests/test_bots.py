@@ -809,3 +809,14 @@ def test_an_unpriced_engine_says_so_instead_of_billing_at_someone_elses_rates(ca
 
     assert cost > 0, "ход всё равно должен получить какую-то цену"
     assert "нет цены для модели" in caplog.text
+
+
+def test_the_exchange_tool_tells_the_model_low_rate_means_more_dollars():
+    """The description used to say the opposite — "не сливай по дну", wait when the rate is
+    low — and a rival believed it, waited at rate 60 and converted at 93, losing a third of
+    its dollars every time. The rate is rubles-per-dollar and the conversion is `budget //
+    rate`, so lower is strictly better; the guidance must not drift back."""
+    entry = tools.REGISTRY["exchange_to_usd"]
+    text = entry.description.lower()
+    assert "чем ниже курс, тем больше долларов" in text
+    assert "подожди" not in text or "высок" in text, "ждать надо при высоком курсе, не при низком"
