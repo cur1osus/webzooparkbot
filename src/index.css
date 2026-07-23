@@ -63,7 +63,9 @@
   --safe-left: calc(var(--tg-content-safe-area-inset-left, 0px) + var(--tg-safe-area-inset-left, 0px));
   --safe-right: calc(var(--tg-content-safe-area-inset-right, 0px) + var(--tg-safe-area-inset-right, 0px));
   --app-tabbar-base-height: 120px;
-  --app-bottom-offset: calc(var(--app-tabbar-base-height) + var(--safe-bottom));
+  /* Fallback until TabBar measures its real outer height, including safe-area. */
+  --app-tabbar-height: var(--app-tabbar-base-height);
+  --app-bottom-offset: var(--app-tabbar-height);
 
   /* Game accent palette — retuned to the dusk-lodge world, semantics preserved.
      Every hue is warmed and slightly desaturated so accents feel lit by the

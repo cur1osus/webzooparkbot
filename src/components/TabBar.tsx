@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react';
+
 export type RootTab = 'zoo' | 'shop' | 'lab' | 'games' | 'more' | 'bank' | 'bonus' | 'calc' | 'merchant' | 'top';
 
 const PRIMARY_TABS: { id: RootTab; emoji: string; label: string }[] = [
@@ -23,8 +25,31 @@ export function TabBar({
   active: RootTab;
   onChange: (tab: RootTab) => void;
 }) {
+  const navRef = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+
+    const syncTabBarHeight = () => {
+      document.documentElement.style.setProperty(
+        '--app-tabbar-height',
+        `${nav.getBoundingClientRect().height}px`,
+      );
+    };
+
+    syncTabBarHeight();
+    const observer = new ResizeObserver(syncTabBarHeight);
+    observer.observe(nav);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--app-tabbar-height');
+    };
+  }, []);
+
   return (
     <nav
+      ref={navRef}
       className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] backdrop-blur-xl z-[100]"
       style={{
         paddingBottom: 'var(--safe-bottom)',
