@@ -292,7 +292,7 @@ export function ItemSelectPage({ items, selectedIds, onSelect, onApply, onBack }
       {previewItem && (
         <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={() => setPreviewItem(null)} role="presentation">
           <section
-            className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4"
+            className="sheet-panel forge-item-preview-sheet w-full max-w-[480px] rounded-t-3xl p-4"
             onClick={event => event.stopPropagation()}
             role="dialog"
             aria-modal="true"

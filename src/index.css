@@ -1822,6 +1822,14 @@ button:disabled {
   animation: sheet-up 0.32s var(--spring-smooth) both;
 }
 
+/* The forge property preview is opened from a page that still has the app
+ * navigation visible. Keep the sheet above both navigation rows instead of
+ * letting its last property share the same space as the bottom bar. */
+.forge-item-preview-sheet {
+  margin-bottom: var(--app-bottom-offset);
+  padding-bottom: 16px;
+}
+
 @keyframes sheet-up {
   from { transform: translateY(100%); }
   to   { transform: none; }
