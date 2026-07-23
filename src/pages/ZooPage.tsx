@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type SetStateAction } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type SetStateAction } from 'react';
 import { fmt, fmtMin, fmtBalance } from '@/utils/format';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
@@ -85,6 +85,13 @@ const GENE_TIER_COLORS: Record<GeneTier, string> = {
   high: '#55c936',
 };
 
+// The overview grid lists every animal a player owns. A large zoo (thousands of animals)
+// would otherwise mount thousands of DOM cards at once, making the page slow to open and
+// laggy to scroll. Reveal the list in chunks as the player nears the end, so the page opens
+// instantly and stays smooth no matter the collection size.
+const ANIMAL_GRID_INITIAL = 60;
+const ANIMAL_GRID_STEP = 60;
+
 // Each mode returns a fully-ordered comparator; ties fall back to income so the list never
 // reshuffles arbitrarily between renders.
 function compareAnimals(mode: AnimalSort, favoriteOverrides: Map<number, boolean> = new Map()): (a: Animal, b: Animal) => number {
@@ -124,6 +131,60 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
   const sortedAnimals = useMemo(
     () => [...gs.animals].sort(compareAnimals(animalSort, favoriteOverrides)),
     [gs.animals, animalSort, favoriteOverrides],
+  );
+
+  // Windowed reveal of the animal grid — see ANIMAL_GRID_INITIAL for the reasoning.
+  const [visibleAnimalCount, setVisibleAnimalCount] = useState(ANIMAL_GRID_INITIAL);
+  const animalSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // Changing the sort presents a fresh ordering the player wants to read from the top,
+  // so collapse back to the first chunk. A background refresh keeps the current window.
+  useEffect(() => {
+    setVisibleAnimalCount(ANIMAL_GRID_INITIAL);
+  }, [animalSort]);
+
+  const visibleAnimals = useMemo(
+    () => sortedAnimals.slice(0, visibleAnimalCount),
+    [sortedAnimals, visibleAnimalCount],
+  );
+
+  const hasMoreAnimals = visibleAnimalCount < sortedAnimals.length;
+
+  // Grow the window as the sentinel near the end of the list scrolls into view. The
+  // scroll container is the page shell, so observe against it rather than the viewport.
+  useEffect(() => {
+    const sentinel = animalSentinelRef.current;
+    if (!sentinel || !hasMoreAnimals) return;
+    const root = sentinel.closest('.page-scroll-area') as HTMLElement | null;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          setVisibleAnimalCount(count => Math.min(count + ANIMAL_GRID_STEP, sortedAnimals.length));
+        }
+      },
+      { root, rootMargin: '600px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreAnimals, sortedAnimals.length, tab, subPage]);
+
+  // Build the grid element only when the visible slice or favourite marks actually change.
+  // The live-balance ticker replaces `gs` every second; without this the whole list would
+  // reconcile on every tick even though nothing about the cards changed.
+  const animalGrid = useMemo(
+    () => (
+      <div className="grid grid-cols-2 gap-2">
+        {visibleAnimals.map(a => (
+          <AnimalCard
+            key={a.id}
+            animal={a}
+            isFavorite={favoriteOverrides.get(a.id) ?? a.is_favorite}
+            onSelect={setSelectedAnimal}
+          />
+        ))}
+      </div>
+    ),
+    [visibleAnimals, favoriteOverrides],
   );
 
   async function toggleFavorite(animal: Animal) {
@@ -430,52 +491,8 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
                   })}
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-2">
-                {sortedAnimals.map(a => {
-                  const life = lifeLeft(a.dies_at);
-                  const rarityColor = SPECIES_RARITY_META[a.species_rarity].color;
-                  const isFavorite = favoriteOverrides.get(a.id) ?? a.is_favorite;
-                  return (
-                    <div
-                      key={a.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedAnimal(a)}
-                      onKeyDown={event => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          setSelectedAnimal(a);
-                        }
-                      }}
-                      className="card card-pressable text-left border-none w-full"
-                      style={{
-                        padding: '10px 12px',
-                        border: isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
-                        boxShadow: isFavorite ? '0 0 14px rgba(243, 181, 63, 0.3)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
-                      }}
-                    >
-                      <div className="flex items-center gap-[8px]">
-                        <span className="relative shrink-0 w-[38px] h-[38px] flex items-center justify-center">
-                          <AnimalArt animal={a} size={38} />
-                          {a.is_sick && <span className="absolute -top-1 -right-1 text-[11px]">🤒</span>}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="m-0 text-[13px] font-bold truncate">{a.name}</p>
-                          <p className="m-0 text-[11px] text-tg-hint truncate">{a.species_name} · ₽{fmt(a.income)}/мин</p>
-                        </div>
-                      </div>
-                      <div className="mt-[6px] flex min-w-0 items-center justify-between gap-2">
-                        {life ? (
-                          <p className="m-0 min-w-0 truncate text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>
-                            ⏳ {life.label}
-                          </p>
-                        ) : <span />}
-                        <GeneDots animal={a} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              {animalGrid}
+              {hasMoreAnimals && <div ref={animalSentinelRef} aria-hidden className="h-px w-full" />}
             </div>
           )}
         </div>
@@ -536,6 +553,60 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
     </div>
   );
 }
+
+// Memoised so the per-second live-balance re-render of ZooPage never re-renders a card whose
+// data is unchanged. `onSelect` is the stable `setSelectedAnimal` setter and `isFavorite` is a
+// resolved boolean, so the props stay referentially stable across ticks.
+const AnimalCard = memo(function AnimalCard({
+  animal,
+  isFavorite,
+  onSelect,
+}: {
+  animal: Animal;
+  isFavorite: boolean;
+  onSelect: (animal: Animal) => void;
+}) {
+  const life = lifeLeft(animal.dies_at);
+  const rarityColor = SPECIES_RARITY_META[animal.species_rarity].color;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(animal)}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect(animal);
+        }
+      }}
+      className="card card-pressable text-left border-none w-full"
+      style={{
+        padding: '10px 12px',
+        border: isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
+        boxShadow: isFavorite ? '0 0 14px rgba(243, 181, 63, 0.3)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
+      }}
+    >
+      <div className="flex items-center gap-[8px]">
+        <span className="relative shrink-0 w-[38px] h-[38px] flex items-center justify-center">
+          <AnimalArt animal={animal} size={38} />
+          {animal.is_sick && <span className="absolute -top-1 -right-1 text-[11px]">🤒</span>}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="m-0 text-[13px] font-bold truncate">{animal.name}</p>
+          <p className="m-0 text-[11px] text-tg-hint truncate">{animal.species_name} · ₽{fmt(animal.income)}/мин</p>
+        </div>
+      </div>
+      <div className="mt-[6px] flex min-w-0 items-center justify-between gap-2">
+        {life ? (
+          <p className="m-0 min-w-0 truncate text-[10.5px] font-bold tabular-nums" style={{ color: life.color }}>
+            ⏳ {life.label}
+          </p>
+        ) : <span />}
+        <GeneDots animal={animal} />
+      </div>
+    </div>
+  );
+});
 
 function GeneDots({ animal }: { animal: Animal }) {
   return (
