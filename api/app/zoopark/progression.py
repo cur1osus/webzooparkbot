@@ -85,7 +85,7 @@ from api.app.zoopark.income import (
 )
 from api.app.zoopark.forge import roll_expedition_item
 from api.app.zoopark.notifications import enqueue_animal_death, enqueue_expedition_finished
-from api.app.zoopark.profile import animal_payload, get_player, item_payload
+from api.app.zoopark.profile import animal_payload, get_player, item_payload, locality_animal_payload
 from api.app.zoopark.season import ensure_player_season
 
 random = SystemRandom()
@@ -459,11 +459,11 @@ def list_localities(tg_id: int) -> dict:
                     "upkeep_discount_percent": locality_upkeep_discount(loc.level),
                     "next_upkeep_discount_percent": locality_upkeep_discount(loc.level + 1) if locality_upgrade_cost_rub(loc.level) is not None else None,
                     "upgrade_cost_rub": locality_upgrade_cost_rub(loc.level),
-                    "animals": [animal_payload(a, loc.habitat, bonuses) for a in buckets[loc.id]],
+                    "animals": [locality_animal_payload(a, loc.habitat, bonuses) for a in buckets[loc.id]],
                 }
                 for loc in localities
             ],
-            "unassigned": [animal_payload(a, None, bonuses) for a in buckets[None]],
+            "unassigned": [locality_animal_payload(a, None, bonuses) for a in buckets[None]],
             "next_price": locality_price_rub(owned, bonuses.locality_discount_multiplier()) if owned < MAX_LOCALITIES else None,
             "habitats_taken": [loc.habitat for loc in localities],
             "max_localities": MAX_LOCALITIES,

@@ -228,6 +228,30 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
     }
 
 
+def locality_animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses) -> dict:
+    """A stripped-down animal for the localities screen.
+
+    `/api/localities` returns every alive animal — thousands, for a large zoo — and the
+    localities and development tabs only ever read a handful of fields off each one. The
+    full `animal_payload` embeds a six-row `income_breakdown`, a `cure_cost_usd`, genes,
+    dates and parentage; building and shipping all of that per animal is what made the tab
+    slow to open. This keeps only what those two screens render, so the payload and the
+    per-animal work both shrink by roughly half.
+    """
+    species = SPECIES_BY_ID[animal.species_id]
+    matches = bool(locality_habitat) and locality_habitat == animal.habitat
+    return {
+        "id": animal.id,
+        "name": animal.name or species["name"],
+        "species_code": species["code"],
+        "species_name": species["name"],
+        "species_emoji": species["emoji"],
+        "habitat": animal.habitat,
+        "income": animal_income(animal, locality_habitat, bonuses),
+        "habitat_bonus": matches,
+    }
+
+
 def get_clan(session: Session, player_id: int) -> dict | None:
     membership = session.scalars(select(ClanMember).where(ClanMember.player_id == player_id)).first()
     if membership is None:

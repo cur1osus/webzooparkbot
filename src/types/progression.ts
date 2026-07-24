@@ -98,6 +98,20 @@ export interface PackOpenResult {
   animal: Animal;
 }
 
+/** The trimmed animal `/api/localities` ships. The localities and development tabs only
+ *  read these fields, and a large zoo returns thousands of animals — so the endpoint omits
+ *  the genes, dates, income breakdown and cure cost the full {@link Animal} carries. */
+export interface LocalityAnimal {
+  id: number;
+  name: string;
+  species_code: string;
+  species_name: string;
+  species_emoji: string;
+  habitat: Habitat;
+  income: number;
+  habitat_bonus: boolean;
+}
+
 export interface Locality {
   id: number;
   habitat: Habitat;
@@ -105,12 +119,12 @@ export interface Locality {
   upkeep_discount_percent: number;
   next_upkeep_discount_percent: number | null;
   upgrade_cost_rub: number | null;
-  animals: Animal[];
+  animals: LocalityAnimal[];
 }
 
 export interface LocalitiesInfo {
   localities: Locality[];
-  unassigned: Animal[];
+  unassigned: LocalityAnimal[];
   next_price: number | null;
   habitats_taken: Habitat[];
   max_localities: number;

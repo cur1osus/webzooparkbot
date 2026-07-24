@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { Animal, GameState, Habitat, Locality, LocalitiesInfo } from '@/types';
+import type { GameState, Habitat, Locality, LocalityAnimal, LocalitiesInfo } from '@/types';
 import { apiGetLocalities, apiBuyLocality, apiAssignLocality, apiAssignMatchingLocality } from '@/api';
 import { fmt } from '@/utils/format';
 import { AnimalArt } from '@/components/AnimalArt';
@@ -15,9 +15,117 @@ const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string
 
 const ALL_HABITATS: Habitat[] = ['desert', 'mountains', 'forest', 'fields', 'antarctica'];
 
+// A locality can hold well over a thousand animals. Mount them all at once and expanding a
+// card — or just rendering the homeless pool — freezes the tab for seconds. So a long list
+// is revealed a page at a time as the sentinel scrolls into view, exactly like the zoo grid.
+const LIST_INITIAL = 40;
+const LIST_STEP = 40;
+
+function WindowedList<T>({ items, render }: { items: T[]; render: (item: T) => ReactNode }) {
+  const [count, setCount] = useState(LIST_INITIAL);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => { setCount(LIST_INITIAL); }, [items]);
+
+  const hasMore = count < items.length;
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !hasMore) return;
+    const root = sentinel.closest('.page-scroll-area') as HTMLElement | null;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          setCount(c => Math.min(c + LIST_STEP, items.length));
+        }
+      },
+      { root, rootMargin: '600px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, items.length]);
+
+  return (
+    <>
+      {items.slice(0, count).map(render)}
+      {hasMore && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
+    </>
+  );
+}
+
+// ─── Optimistic regrouping ────────────────────────────────────────────────────
+// Assigning happens server-side, but the response doesn't carry the regrouped animals, so
+// the tab used to re-download the whole (huge) localities payload — and `/api/me` on top —
+// before anything moved on screen, which is the couple-second wait on "Распределить сразу".
+// The move is deterministic and we already hold every animal client-side, so we mirror it
+// locally for an instant update and reconcile with the server's exact numbers in the
+// background. The habitat multiplier the server applies is ×1.5 (see HABITAT_MATCH_BONUS).
+const BONUS_MULT = 1.5;
+const withBonus = (income: number) => Math.round(income * BONUS_MULT);
+const withoutBonus = (income: number) => Math.round(income / BONUS_MULT);
+
+/** Every animal whose habitat matches the locality, pulled home from the pool and from any
+ *  other locality it was misplaced in — the same set `matchingCountFor` counts. */
+function regroupMatching(info: LocalitiesInfo, localityId: number): LocalitiesInfo {
+  const target = info.localities.find(l => l.id === localityId);
+  if (!target) return info;
+  const moves: LocalityAnimal[] = [];
+  const takeMatching = (animal: LocalityAnimal): boolean => {
+    if (animal.habitat !== target.habitat) return true;
+    moves.push(animal);
+    return false;
+  };
+
+  const unassigned = info.unassigned.filter(takeMatching);
+  const localities = info.localities.map(loc => {
+    if (loc.id === localityId) return loc;
+    const kept = loc.animals.filter(takeMatching);
+    return kept.length === loc.animals.length ? loc : { ...loc, animals: kept };
+  });
+  // Every mover was standing outside its habitat, so it earns the ×1.5 bonus now.
+  const homed = moves.map(a => (a.habitat_bonus ? a : { ...a, habitat_bonus: true, income: withBonus(a.income) }));
+  return {
+    ...info,
+    unassigned,
+    localities: localities.map(loc =>
+      loc.id === localityId ? { ...loc, animals: [...loc.animals, ...homed] } : loc,
+    ),
+  };
+}
+
+/** Move one animal from the homeless pool into a locality. */
+function regroupAssign(info: LocalitiesInfo, animalId: number, localityId: number): LocalitiesInfo {
+  const animal = info.unassigned.find(a => a.id === animalId);
+  const target = info.localities.find(l => l.id === localityId);
+  if (!animal || !target) return info;
+  const matched = animal.habitat === target.habitat;
+  const moved = matched ? { ...animal, habitat_bonus: true, income: withBonus(animal.income) } : animal;
+  return {
+    ...info,
+    unassigned: info.unassigned.filter(a => a.id !== animalId),
+    localities: info.localities.map(loc =>
+      loc.id === localityId ? { ...loc, animals: [...loc.animals, moved] } : loc,
+    ),
+  };
+}
+
+/** Pull one animal out of whichever locality holds it, back into the homeless pool. */
+function regroupUnassign(info: LocalitiesInfo, animalId: number): LocalitiesInfo {
+  let removed: LocalityAnimal | undefined;
+  const localities = info.localities.map(loc => {
+    if (removed || !loc.animals.some(a => a.id === animalId)) return loc;
+    removed = loc.animals.find(a => a.id === animalId);
+    return { ...loc, animals: loc.animals.filter(a => a.id !== animalId) };
+  });
+  if (!removed) return info;
+  const back = removed.habitat_bonus
+    ? { ...removed, habitat_bonus: false, income: withoutBonus(removed.income) }
+    : removed;
+  return { ...info, localities, unassigned: [...info.unassigned, back] };
+}
+
 // ─── Animal chip inside a locality card ───────────────────────────────────────
 
-function AnimalChip({ animal, onRemove }: { animal: Animal; onRemove: () => void }) {
+function AnimalChip({ animal, onRemove }: { animal: LocalityAnimal; onRemove: () => void }) {
   const hab = HABITAT_INFO[animal.habitat];
   return (
     <div
@@ -68,7 +176,7 @@ function matchingCountFor(info: LocalitiesInfo, locality: Locality): number {
 
 function LocalityCard({ locality, unassigned, matchingCount, onAdd, onAssignMatching, assigningMatching, onRemove }: {
   locality: Locality;
-  unassigned: Animal[];
+  unassigned: LocalityAnimal[];
   onAdd: () => void;
   onAssignMatching: () => void;
   assigningMatching: boolean;
@@ -142,9 +250,10 @@ function LocalityCard({ locality, unassigned, matchingCount, onAdd, onAssignMatc
       {/* Animals */}
       {hasAnimals && !collapsed && (
         <div className="flex flex-col gap-[6px] px-4 py-3">
-          {locality.animals.map(a => (
-            <AnimalChip key={a.id} animal={a} onRemove={() => onRemove(a.id)} />
-          ))}
+          <WindowedList
+            items={locality.animals}
+            render={a => <AnimalChip key={a.id} animal={a} onRemove={() => onRemove(a.id)} />}
+          />
         </div>
       )}
 
@@ -173,7 +282,7 @@ function LocalityCard({ locality, unassigned, matchingCount, onAdd, onAssignMatc
 // ─── Animal picker bottom sheet ────────────────────────────────────────────────
 
 function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
-  animals: Animal[];
+  animals: LocalityAnimal[];
   localityHabitat: Habitat;
   onPick: (id: number) => void;
   onClose: () => void;
@@ -255,6 +364,10 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   const [assigningTo, setAssigning] = useState<{ localityId: number; habitat: Habitat } | null>(null);
   const [assigningMatchingId, setAssigningMatchingId] = useState<number | null>(null);
 
+  // Bumped by every optimistic mutation. A background reconcile only writes its result if no
+  // newer mutation has landed since it started, so a slow refetch can't clobber fresher state.
+  const mutationSeq = useRef(0);
+
   const load = async () => {
     try {
       setInfo(await apiGetLocalities());
@@ -266,6 +379,16 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   };
 
   useEffect(() => { void load(); }, []);
+
+  /** Pull the server's exact numbers in after an optimistic move, unless superseded. */
+  const reconcile = async (seq: number) => {
+    try {
+      const fresh = await apiGetLocalities();
+      if (seq === mutationSeq.current) setInfo(fresh);
+    } catch {
+      // Keep the optimistic state; the next load will correct it.
+    }
+  };
 
   const handleBuy = async () => {
     if (!selHabitat || buying) return;
@@ -285,33 +408,44 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
 
   const handleAssign = async (animalId: number, localityId: number) => {
     setAssigning(null);
+    const seq = ++mutationSeq.current;
+    setInfo(prev => (prev ? regroupAssign(prev, animalId, localityId) : prev));
     try {
       await apiAssignLocality(animalId, localityId);
-      await load();
+      onRefresh();
+      void reconcile(seq);
     } catch (e) {
       setError((e as Error).message);
+      await load();
     }
   };
 
   const handleUnassign = async (animalId: number) => {
+    const seq = ++mutationSeq.current;
+    setInfo(prev => (prev ? regroupUnassign(prev, animalId) : prev));
     try {
       await apiAssignLocality(animalId, null);
-      await load();
+      onRefresh();
+      void reconcile(seq);
     } catch (e) {
       setError((e as Error).message);
+      await load();
     }
   };
 
   const handleAssignMatching = async (localityId: number) => {
     if (assigningMatchingId !== null) return;
-    setAssigningMatchingId(localityId);
     setError(null);
+    const seq = ++mutationSeq.current;
+    setInfo(prev => (prev ? regroupMatching(prev, localityId) : prev));
+    setAssigningMatchingId(localityId);
     try {
       await apiAssignMatchingLocality(localityId);
-      await load();
       onRefresh();
+      void reconcile(seq);
     } catch (e) {
       setError((e as Error).message);
+      await load();
     } finally {
       setAssigningMatchingId(null);
     }
@@ -376,19 +510,22 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
                 className="rounded-2xl p-3 flex flex-col gap-[6px]"
                 style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)' }}
               >
-                {info.unassigned.map(a => {
-                  const hab = HABITAT_INFO[a.habitat];
-                  return (
-                    <div key={a.id} className="flex items-center gap-2 text-[12px]">
-                      <AnimalArt animal={a} size={24} className="shrink-0" />
-                      <span className="font-semibold truncate">{a.name}</span>
-                      <span className="text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>{a.species_name} {hab.emoji}</span>
-                      <span className="ml-auto font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                        ₽{fmt(a.income)}/мин
-                      </span>
-                    </div>
-                  );
-                })}
+                <WindowedList
+                  items={info.unassigned}
+                  render={a => {
+                    const hab = HABITAT_INFO[a.habitat];
+                    return (
+                      <div key={a.id} className="flex items-center gap-2 text-[12px]">
+                        <AnimalArt animal={a} size={24} className="shrink-0" />
+                        <span className="font-semibold truncate">{a.name}</span>
+                        <span className="text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>{a.species_name} {hab.emoji}</span>
+                        <span className="ml-auto font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
+                          ₽{fmt(a.income)}/мин
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
               </div>
             </div>
           )}
