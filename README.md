@@ -123,8 +123,9 @@ Payments only land if the bot's webhook points at `/api/telegram/webhook` with t
 ### Notifications
 
 Expedition completion, animal death and daily-bonus readiness are delivered through the
-durable `notification_outbox`. The game mutation and its notification event commit
-together; a background worker sends due rows with exponential retry. Delivery is
+durable `notification_outbox`. Natural deaths are grouped into one daily digest per
+player, with a count and a few example names, so a large zoo cannot flood Telegram.
+The game mutation and its notification event commit together; a background worker sends due rows with exponential retry. Delivery is
 at-least-once, so a process crash immediately after Telegram accepts a message can cause
 one duplicate, while a temporary Bot API failure cannot lose the event or roll back game
 state.

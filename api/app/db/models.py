@@ -937,6 +937,8 @@ class NotificationOutbox(Base):
     The game transaction inserts a row and the worker sends it later. `dedupe_key` is
     the business event id, so retries and repeated reads cannot enqueue the same event
     twice; a crash after Telegram accepted a message can still produce one duplicate.
+    Natural animal deaths use one daily digest key per player, rather than one outbox row
+    per dead animal.
 
     A row addresses either one player or one group chat, never both: personal events go to
     the player, while anything the whole game shares — the daily safe — is one message in

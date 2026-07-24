@@ -61,6 +61,96 @@ def test_natural_death_settles_old_rate_and_enqueues_once(db, player, monkeypatc
         session.commit()
 
 
+def test_natural_deaths_are_grouped_into_one_daily_digest(db, player, monkeypatch):
+    start = datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)
+    death = start + timedelta(minutes=10)
+    now = start + timedelta(minutes=20)
+    monkeypatch.setattr(income_module, "utcnow", lambda: now)
+
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        season = active_season(session)
+        row.income_synced_at = start
+        for index in range(10):
+            session.add(
+                Animal(
+                    player_id=row.id,
+                    season_id=season.id,
+                    species_id=1,
+                    name=f"Кролик {index}",
+                    habitat="forest",
+                    origin="pack",
+                    gene_survival="low",
+                    gene_reproduction="low",
+                    gene_appearance="low",
+                    gene_size="low",
+                    acquired_at=start,
+                    dies_at=death,
+                )
+            )
+        session.commit()
+
+    with get_session() as session:
+        income_module.sync_active_player_income(session)
+        session.commit()
+
+    with get_session() as session:
+        rows = session.query(NotificationOutbox).filter_by(kind="animal_death").all()
+        assert len(rows) == 1
+        assert "Погибло животных: 10" in rows[0].payload_json
+        assert "Кролик 0" in rows[0].payload_json
+        assert "ещё 7" in rows[0].payload_json
+
+        # The fallback scan sees the same dead animals, but the daily dedupe key prevents a
+        # second message after the foreground/worker income sync already handled them.
+        from api.app.zoopark.notifications import enqueue_natural_death_notifications
+
+        assert enqueue_natural_death_notifications(session) == 10
+        session.commit()
+        assert session.query(NotificationOutbox).filter_by(kind="animal_death").count() == 1
+
+
+def test_legacy_pending_natural_death_is_compacted_before_delivery(db, player):
+    from api.app.zoopark.notifications import (
+        compact_pending_natural_death_notifications,
+        enqueue_animal_death,
+    )
+
+    when = datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)
+    with get_session() as session:
+        row = session.query(Player).filter_by(telegram_id=player).one()
+        season = active_season(session)
+        animal = Animal(
+            player_id=row.id,
+            season_id=season.id,
+            species_id=1,
+            name="Старый кролик",
+            habitat="forest",
+            origin="pack",
+            gene_survival="low",
+            gene_reproduction="low",
+            gene_appearance="low",
+            gene_size="low",
+            acquired_at=when - timedelta(days=1),
+            dies_at=when,
+        )
+        session.add(animal)
+        session.flush()
+        enqueue_animal_death(session, row, animal, reason="естественная смерть")
+        session.commit()
+
+    with get_session() as session:
+        assert compact_pending_natural_death_notifications(session) == 1
+        session.commit()
+
+    with get_session() as session:
+        rows = session.query(NotificationOutbox).order_by(NotificationOutbox.id).all()
+        assert len(rows) == 2
+        assert rows[0].failed_at is not None
+        assert rows[1].failed_at is None
+        assert "Старый кролик" in rows[1].payload_json
+
+
 def test_due_expedition_is_announced_before_foreground_resolution(db, player, monkeypatch):
     now = datetime(2026, 7, 23, 10, 0, tzinfo=timezone.utc)
     monkeypatch.setattr("api.app.zoopark.notifications.utcnow", lambda: now)

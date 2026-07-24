@@ -49,7 +49,7 @@ from api.app.zoopark.catalog import (
     Rarity,
     gene_income_mult,
 )
-from api.app.zoopark.notifications import enqueue_animal_death, enqueue_disease_outbreak
+from api.app.zoopark.notifications import enqueue_animal_death_summaries, enqueue_disease_outbreak
 
 
 def alive_clause(now: datetime | None = None):
@@ -378,7 +378,7 @@ def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None
         # otherwise a second death would still be paid at the first animal's rate.
         if player.income_synced_at < animal.dies_at:
             player.income_synced_at = animal.dies_at
-        enqueue_animal_death(session, player, animal, reason="естественная смерть")
+    enqueue_animal_death_summaries(session, player, deaths, reason="естественная смерть")
 
     _accrue_until(session, player, now)
     # Roll for a passive outbreak before recomputing the rate, so newly sick animals are

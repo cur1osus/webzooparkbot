@@ -13,6 +13,7 @@ from api.app.core.telegram import TelegramApiError, call_bot_api
 from api.app.db.connection import get_session
 from api.app.db.models import NotificationOutbox, Player, utcnow
 from api.app.zoopark.notifications import (
+    compact_pending_natural_death_notifications,
     enqueue_due_expedition_notifications,
     enqueue_natural_death_notifications,
     enqueue_safe_cracked,
@@ -90,6 +91,7 @@ class NotificationWorker:
         now = utcnow()
         stale_before = now - timedelta(minutes=5)
         with get_session() as session:
+            compact_pending_natural_death_notifications(session)
             rows = session.execute(
                 # Outer join: a broadcast row addresses a chat and has no player at all.
                 select(NotificationOutbox, Player.telegram_id)
