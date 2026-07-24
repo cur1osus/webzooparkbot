@@ -71,6 +71,7 @@ def enqueue(
     dedupe_key: str,
     text: str,
     available_at: datetime | None = None,
+    disable_notification: bool = False,
 ) -> None:
     """Add one event unless its business id is already queued.
 
@@ -86,7 +87,10 @@ def enqueue(
                     player_id=player_id,
                     kind=kind,
                     dedupe_key=dedupe_key,
-                    payload_json=json.dumps({"text": text}, ensure_ascii=False),
+                    payload_json=json.dumps(
+                        {"text": text, "disable_notification": disable_notification},
+                        ensure_ascii=False,
+                    ),
                     available_at=available_at or utcnow(),
                 )
             )
@@ -104,6 +108,7 @@ def enqueue_animal_death(session: Session, player: Player, animal: Animal, *, re
         kind=KIND_ANIMAL_DEATH,
         dedupe_key=f"animal-death:{animal.id}",
         text=f"💀 {label} погибло. Причина: {reason}.",
+        disable_notification=True,
     )
 
 
@@ -151,6 +156,7 @@ def enqueue_animal_death_summary(
         kind=KIND_ANIMAL_DEATH,
         dedupe_key=f"animal-deaths:{player.id}:{period.isoformat()}",
         text=text,
+        disable_notification=True,
     )
 
 

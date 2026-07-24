@@ -130,6 +130,7 @@ class NotificationWorker:
                     {
                         "chat_id": telegram_id,
                         "text": payload["text"],
+                        "disable_notification": payload.get("disable_notification", False),
                         "disable_web_page_preview": True,
                     },
                 )

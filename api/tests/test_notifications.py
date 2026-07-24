@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from unittest.mock import patch
 
 import pytest
@@ -58,6 +59,7 @@ def test_natural_death_settles_old_rate_and_enqueues_once(db, player, monkeypatc
         assert row.balance_rub == 2000
         assert len(outbox) == 1
         assert "Кролик" in outbox[0].payload_json
+        assert json.loads(outbox[0].payload_json)["disable_notification"] is True
         session.commit()
 
 
@@ -149,6 +151,7 @@ def test_legacy_pending_natural_death_is_compacted_before_delivery(db, player):
         assert rows[0].failed_at is not None
         assert rows[1].failed_at is None
         assert "Старый кролик" in rows[1].payload_json
+        assert json.loads(rows[1].payload_json)["disable_notification"] is True
 
 
 def test_due_expedition_is_announced_before_foreground_resolution(db, player, monkeypatch):
