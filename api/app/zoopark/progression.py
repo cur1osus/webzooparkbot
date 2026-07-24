@@ -252,8 +252,11 @@ def list_available_animals(tg_id: int) -> dict:
         season = ensure_player_season(session, player)
         bonuses = bonuses_module.load(session, player.id)
         rows = alive_animals(session, player.id, season.id)
+        # Serialise before committing: commit expires the loaded animals, and re-reading them
+        # one row at a time during payload building costs seconds on a large zoo.
+        result = {"animals": [animal_payload(a, habitat, bonuses) for a, habitat in rows]}
         session.commit()
-        return {"animals": [animal_payload(a, habitat, bonuses) for a, habitat in rows]}
+        return result
 
 
 def packs_info(tg_id: int) -> dict:
@@ -441,7 +444,6 @@ def list_localities(tg_id: int) -> dict:
         ).all()
         bonuses = bonuses_module.load(session, player.id)
         animals = available_animals(session, player.id, season.id)
-        session.commit()
 
         by_id = {loc.id: loc for loc in localities}
         buckets: dict[int | None, list[Animal]] = {loc.id: [] for loc in localities}
@@ -450,7 +452,11 @@ def list_localities(tg_id: int) -> dict:
             buckets[animal.locality_id if animal.locality_id in by_id else None].append(animal)
 
         owned = len(localities)
-        return {
+        # Build the payload *before* committing. `session.commit()` expires every loaded ORM
+        # object, so touching an animal's fields afterwards re-SELECTs it one row at a time —
+        # thousands of round-trips, seconds of latency, for a large zoo. Reading the animals
+        # here keeps them within the transaction, then we commit the lazy season/locality grants.
+        result = {
             "localities": [
                 {
                     "id": loc.id,
@@ -468,6 +474,8 @@ def list_localities(tg_id: int) -> dict:
             "habitats_taken": [loc.habitat for loc in localities],
             "max_localities": MAX_LOCALITIES,
         }
+        session.commit()
+        return result
 
 
 def buy_locality(tg_id: int, body: BuyLocalityBody) -> dict:
@@ -1199,8 +1207,9 @@ def get_expeditions(tg_id: int) -> dict:
         busy_locality_ids = {e.locality_id for e in open_expeditions}
 
         squad_pool = available_animals(session, player.id, season.id)
-        session.commit()
-        return {
+        # Serialise before committing: commit expires the squad pool, and re-reading each animal
+        # during payload building turns into thousands of round-trips on a large zoo.
+        result = {
             "expeditions": payloads,
             # Kept until all deployed clients read the list.
             "active": payloads[0] if payloads else None,
@@ -1225,6 +1234,8 @@ def get_expeditions(tg_id: int) -> dict:
             "power_multiplier": round(squad_power_multiplier(bonuses, player.expedition_level), 2),
             "expedition_level": player.expedition_level,
         }
+        session.commit()
+        return result
 
 
 def has_collectible_expedition(tg_id: int) -> bool:
