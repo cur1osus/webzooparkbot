@@ -14,6 +14,11 @@ def list_animals(tg_id: TelegramId):
     return progression_service.list_available_animals(tg_id)
 
 
+@router.get("/api/breeding/animals")
+def list_breeding_animals(tg_id: TelegramId):
+    return progression_service.list_breeding_animals(tg_id)
+
+
 @router.get("/api/packs/info")
 def packs_info(tg_id: TelegramId):
     return progression_service.packs_info(tg_id)

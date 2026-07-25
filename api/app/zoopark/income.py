@@ -19,7 +19,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from math import trunc
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from api.app.db.models import Animal, Clan, ClanMember, Expedition, ExpeditionMember, Locality, Player, utcnow
@@ -446,6 +446,37 @@ def available_animals(session: Session, player_id: int, season_id: int) -> list[
                 alive_clause(),
                 Animal.id.not_in(on_expedition_subquery()),
             )
+            .order_by(Animal.acquired_at.desc())
+        ).all()
+    )
+
+
+def breeding_animals(session: Session, player_id: int, season_id: int, today) -> list[tuple[Animal, str | None]]:
+    """Ready animals from species that have at least two ready members.
+
+    Filtering pairable species in SQL avoids shipping the rest of a large zoo
+    to the lab. The grouped subquery also makes the old client-side pair
+    search unnecessary.
+    """
+    ready = (
+        Animal.player_id == player_id,
+        Animal.season_id == season_id,
+        alive_clause(),
+        Animal.id.not_in(on_expedition_subquery()),
+        or_(Animal.last_bred_on.is_(None), Animal.last_bred_on != today),
+    )
+    pairable_species = (
+        select(Animal.species_id)
+        .where(*ready)
+        .group_by(Animal.species_id)
+        .having(func.count(Animal.id) >= 2)
+        .scalar_subquery()
+    )
+    return list(
+        session.execute(
+            select(Animal, Locality.habitat)
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(*ready, Animal.species_id.in_(pairable_species))
             .order_by(Animal.acquired_at.desc())
         ).all()
     )

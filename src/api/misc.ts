@@ -3,6 +3,7 @@ import type {
   AssignMatchingLocalityResult,
   AssignLocalityResult,
   BreedResult,
+  BreedingAnimal,
   BuyLocalityResult,
   DevelopmentTrack,
   DonateInfo,
@@ -29,6 +30,8 @@ export const apiCreateDonateInvoice = (stars: number) =>
 
 /** Alive animals that are not away on an expedition — the breeding and squad pool. */
 export const apiGetAnimals = () => req<{ animals: Animal[] }>('/animals');
+/** Compact list of ready animals from species that already have a ready partner. */
+export const apiGetBreedingAnimals = () => req<{ animals: BreedingAnimal[] }>('/breeding/animals');
 
 export const apiGetPacksInfo = () => req<PackInfo>('/packs/info');
 /** `tier` omitted opens the free daily gift; a tier name buys that (unlocked) tier. */

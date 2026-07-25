@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from api.app.db.connection import get_session
-from api.app.db.models import Animal, Expedition, LedgerEntry, PackOpening, Player, utcnow
+from api.app.db.models import Animal, Expedition, LedgerEntry, PackOpening, Player, Species, utcnow
 from api.app.zoopark import progression, social
 from api.app.zoopark.catalog import (
     BREED_TIER_INDEX,
@@ -545,6 +545,57 @@ class TestDeathIsDerived:
 
 
 class TestBreeding:
+    def test_breeding_picker_returns_only_ready_pairable_animals_and_compact_fields(self, db, player):
+        first = progression.open_pack(player)["animals"][0]
+        with get_session() as session:
+            parent = session.get(Animal, first["id"])
+            assert parent is not None
+            progression.create_animal(
+                session,
+                player_id=parent.player_id,
+                season_id=parent.season_id,
+                origin="pack",
+                genes={
+                    "gene_survival": parent.gene_survival,
+                    "gene_reproduction": parent.gene_reproduction,
+                    "gene_appearance": parent.gene_appearance,
+                    "gene_size": parent.gene_size,
+                },
+                habitat=parent.habitat,
+                species_id=parent.species_id,
+            )
+            existing_species_ids = {
+                animal.species_id for animal in session.query(Animal).filter_by(player_id=parent.player_id).all()
+            }
+            singleton_species = session.query(Species).filter(~Species.id.in_(existing_species_ids)).first()
+            assert singleton_species is not None
+            singleton_code = singleton_species.code
+            progression.create_animal(
+                session,
+                player_id=parent.player_id,
+                season_id=parent.season_id,
+                origin="pack",
+                genes={
+                    "gene_survival": "low",
+                    "gene_reproduction": "low",
+                    "gene_appearance": "low",
+                    "gene_size": "low",
+                },
+                habitat=parent.habitat,
+                species_id=singleton_species.id,
+            )
+            session.commit()
+
+        result = progression.list_breeding_animals(player)
+        species_counts = {}
+        for animal in result["animals"]:
+            species_counts[animal["species_code"]] = species_counts.get(animal["species_code"], 0) + 1
+        assert species_counts and all(count >= 2 for count in species_counts.values())
+        assert singleton_code not in species_counts
+        assert all(animal["can_breed"] for animal in result["animals"])
+        assert "income_breakdown" not in result["animals"][0]
+        assert "dies_at" not in result["animals"][0]
+
     def test_a_parent_breeds_once_a_day(self, db, player, grant):
         from api.app.schemas.progression import BreedBody
 

@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { AnimalArt } from '@/components/AnimalArt';
 import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
 import { PageHeader } from '@/components/PageHeader';
-import type { Animal, BreedResult, GameState, GeneTier, InheritedGene } from '@/types';
-import { apiBreed, apiGetAnimals, apiSetAnimalFavorite } from '@/api';
+import type { Animal, BreedResult, BreedingAnimal, GameState, GeneTier, InheritedGene } from '@/types';
+import { apiBreed, apiGetBreedingAnimals, apiSetAnimalFavorite } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
 import { compareByQuality } from '@/lib/animalQuality';
@@ -14,7 +14,7 @@ const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
 // Mirrors BREED_COST_INCOME_HOURS: a breeding attempt costs this many hours of the two
 // parents' combined intrinsic income (their `base_income`), in rubles.
 const BREED_COST_INCOME_HOURS = 4;
-function breedCostRub(a: Animal, b: Animal): number {
+function breedCostRub(a: BreedingAnimal, b: BreedingAnimal): number {
   return Math.round(BREED_COST_INCOME_HOURS * 60 * (a.base_income + b.base_income));
 }
 const BREED_TIER_INDEX: Record<GeneTier, number> = { low: 0, medium: 1, high: 2 };
@@ -27,7 +27,7 @@ const PICKER_SORTS: Array<{ id: PickerSort; label: string }> = [
 ];
 const PICKER_SORT_IDS = PICKER_SORTS.map(option => option.id);
 
-function breedRate(a: Animal | null, b: Animal | null, geneticsLevel: number): number | null {
+function breedRate(a: BreedingAnimal | null, b: BreedingAnimal | null, geneticsLevel: number): number | null {
   if (!a || !b) return null;
   const baseRate = (30 + 15 * (BREED_TIER_INDEX[a.reproduction] + BREED_TIER_INDEX[b.reproduction])) / 100;
   const bonus = GENETICS_BONUS_BY_LEVEL[Math.min(Math.max(geneticsLevel, 0), 5)] ?? 0;
@@ -41,7 +41,7 @@ const GENE_STAT_ROWS: Array<{ key: keyof typeof GENE_META; short: string; label:
   { key: 'size_trait', short: 'Размер', label: 'Размер' },
 ];
 
-function GeneStats({ animal, compact = false }: { animal: Animal; compact?: boolean }) {
+function GeneStats({ animal, compact = false }: { animal: BreedingAnimal; compact?: boolean }) {
   return (
     <div className={`grid grid-cols-2 gap-x-2 gap-y-1 ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
       {GENE_STAT_ROWS.map(({ key, short }) => {
@@ -52,7 +52,7 @@ function GeneStats({ animal, compact = false }: { animal: Animal; compact?: bool
   );
 }
 
-function GeneComparison({ parentA, parentB }: { parentA: Animal; parentB: Animal }) {
+function GeneComparison({ parentA, parentB }: { parentA: BreedingAnimal; parentB: BreedingAnimal }) {
   return (
     <div className="rounded-2xl p-3" style={{ background: 'rgba(var(--c-purple-rgb),0.07)', border: '1px solid rgba(var(--c-purple-rgb),0.2)' }}>
       <p className="m-0 text-[12px] font-extrabold">Сравнение родителей</p>
@@ -153,7 +153,7 @@ function AnimalResultCard({ animal }: { animal: Animal }) {
 
 function ParentSlot({ label, animal, onClick }: {
   label: string;
-  animal: Animal | null;
+  animal: BreedingAnimal | null;
   onClick: () => void;
 }) {
   if (!animal) {
@@ -194,34 +194,37 @@ function ParentSlot({ label, animal, onClick }: {
 
 // ─── Animal picker overlay ────────────────────────────────────────────────────
 
+const PICKER_ROW_HEIGHT = 96;
+const PICKER_OVERSCAN = 8;
+
 function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteBusyId, onClose }: {
-  animals: Animal[];
+  animals: BreedingAnimal[];
   tgId: number;
   exclude: number | null;
   // When the other parent is already chosen, only its species can breed with it.
   mateSpeciesCode: string | null;
-  onPick: (a: Animal) => void;
-  onToggleFavorite: (animal: Animal) => void;
+  onPick: (a: BreedingAnimal) => void;
+  onToggleFavorite: (animal: BreedingAnimal) => void;
   favoriteBusyId: number | null;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useStoredChoice<PickerSort>('breed-picker-sort', tgId, PICKER_SORT_IDS, 'new');
+  const [scrollTop, setScrollTop] = useState(0);
   const available = useMemo(() => {
     const breedable = animals.filter(a => a.can_breed && a.id !== exclude);
     // The first slot should never offer a dead end: if the player has no other
     // ready animal of that species, choosing it can only lead to an error later.
     if (!mateSpeciesCode) {
-      return breedable.filter(animal => breedable.some(
-        partner => partner.id !== animal.id && partner.species_code === animal.species_code,
-      ));
+      const speciesCounts = new Map<string, number>();
+      for (const animal of breedable) {
+        speciesCounts.set(animal.species_code, (speciesCounts.get(animal.species_code) ?? 0) + 1);
+      }
+      return breedable.filter(animal => (speciesCounts.get(animal.species_code) ?? 0) > 1);
     }
     return breedable.filter(animal => animal.species_code === mateSpeciesCode);
   }, [animals, exclude, mateSpeciesCode]);
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    const matches = available.filter(a => !needle || `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle));
-    return [...matches].sort((a, b) => {
+  const sorted = useMemo(() => [...available].sort((a, b) => {
       const favoriteOrder = Number(b.is_favorite) - Number(a.is_favorite);
       if (favoriteOrder !== 0) return favoriteOrder;
       // Keep possible partners at the top after the first parent is chosen.
@@ -235,12 +238,23 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
       if (sort === 'quality') return compareByQuality(a, b);
       if (sort === 'reproduction') return BREED_TIER_INDEX[b.reproduction] - BREED_TIER_INDEX[a.reproduction] || b.income - a.income;
       return new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || b.income - a.income;
-    });
-  }, [available, mateSpeciesCode, query, sort]);
+    }), [available, mateSpeciesCode, sort]);
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return needle
+      ? sorted.filter(a => `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle))
+      : sorted;
+  }, [query, sorted]);
+  const effectiveScrollTop = Math.min(scrollTop, Math.max(0, filtered.length * PICKER_ROW_HEIGHT - 420));
+  const visibleStart = Math.max(0, Math.floor(effectiveScrollTop / PICKER_ROW_HEIGHT) - PICKER_OVERSCAN);
+  const visibleEnd = Math.min(
+    filtered.length,
+    Math.ceil((effectiveScrollTop + 420) / PICKER_ROW_HEIGHT) + PICKER_OVERSCAN,
+  );
 
   return createPortal(
     <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose}>
-      <div className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[75vh] overflow-y-auto"
+      <div className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[75vh] overflow-hidden"
            onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
           <div>
@@ -294,54 +308,60 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
           <p className="text-center py-6 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
             Ничего не найдено
           </p>
-        ) : filtered.map(a => {
-          const rarity = SPECIES_RARITY_META[a.species_rarity];
-          const incompatible = mateSpeciesCode !== null && a.species_code !== mateSpeciesCode;
-          return (
-            <div key={a.id}
-                    role="button"
-                    tabIndex={incompatible ? -1 : 0}
-                    onClick={() => { if (!incompatible) onPick(a); }}
-                    onKeyDown={event => {
-                      if (!incompatible && (event.key === 'Enter' || event.key === ' ')) {
-                        event.preventDefault();
-                        onPick(a);
-                      }
-                    }}
-                    className="relative flex items-center gap-3 px-3 pr-14 py-[10px] rounded-xl text-left w-full"
-                    style={{
-                      background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-                      border: a.is_favorite ? '1px solid #f3b53f' : '1px solid transparent',
-                      boxShadow: a.is_favorite ? '0 0 12px rgba(243, 181, 63, 0.22)' : 'none',
-                      cursor: incompatible ? 'not-allowed' : 'pointer',
-                      opacity: incompatible ? 0.4 : 1,
-                    }}>
-              <div className="w-11 h-11 rounded-xl grid place-items-center overflow-hidden shrink-0"
-                   style={{ background: `${rarity.color}18`, border: `1px solid ${rarity.color}35` }}>
-                <AnimalArt animal={a} size={40} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="m-0 text-[13px] font-bold truncate">
-                  {a.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {a.species_name}</span>
-                </p>
-                <div className="mt-1"><GeneStats animal={a} compact /></div>
-                <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {incompatible ? (
-                    <span style={{ color: 'var(--c-amber)' }}>Другой вид — нельзя скрестить</span>
-                  ) : (
-                    <>Доход: ₽{fmt(a.income)}/мин</>
-                  )}
-                </p>
-              </div>
-              <AnimalFavoriteButton
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-                isFavorite={a.is_favorite}
-                busy={favoriteBusyId === a.id}
-                onToggle={() => onToggleFavorite(a)}
-              />
+        ) : (
+          <div
+            className="min-h-0 overflow-y-auto overscroll-contain"
+            style={{ height: 'min(48vh, 420px)' }}
+            onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+          >
+            <div className="relative" style={{ height: filtered.length * PICKER_ROW_HEIGHT }}>
+              {filtered.slice(visibleStart, visibleEnd).map((a, offset) => {
+                const index = visibleStart + offset;
+                const rarity = SPECIES_RARITY_META[a.species_rarity];
+                return (
+                  <div key={a.id} className="absolute left-0 right-0" style={{ top: index * PICKER_ROW_HEIGHT, height: PICKER_ROW_HEIGHT, paddingBottom: 8 }}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onPick(a)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          onPick(a);
+                        }
+                      }}
+                      className="relative flex h-full items-center gap-3 px-3 pr-14 rounded-xl text-left w-full"
+                      style={{
+                        background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
+                        border: a.is_favorite ? '1px solid #f3b53f' : '1px solid transparent',
+                        boxShadow: a.is_favorite ? '0 0 12px rgba(243, 181, 63, 0.22)' : 'none',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div className="w-11 h-11 rounded-xl grid place-items-center overflow-hidden shrink-0"
+                           style={{ background: `${rarity.color}18`, border: `1px solid ${rarity.color}35` }}>
+                        <AnimalArt animal={a} size={40} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="m-0 text-[13px] font-bold truncate">
+                          {a.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {a.species_name}</span>
+                        </p>
+                        <div className="mt-1"><GeneStats animal={a} compact /></div>
+                        <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Доход: ₽{fmt(a.income)}/мин</p>
+                      </div>
+                      <AnimalFavoriteButton
+                        className="absolute right-2 top-1/2 -translate-y-1/2"
+                        isFavorite={a.is_favorite}
+                        busy={favoriteBusyId === a.id}
+                        onToggle={() => onToggleFavorite(a)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        )}
       </div>
     </div>,
     document.body,
@@ -351,10 +371,10 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [animals, setAnimals]   = useState<Animal[]>([]);
+  const [animals, setAnimals]   = useState<BreedingAnimal[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [parent1, setParent1]   = useState<Animal | null>(null);
-  const [parent2, setParent2]   = useState<Animal | null>(null);
+  const [parent1, setParent1]   = useState<BreedingAnimal | null>(null);
+  const [parent2, setParent2]   = useState<BreedingAnimal | null>(null);
   const [picking, setPicking]   = useState<1 | 2 | null>(null);
   const [breeding, setBreeding] = useState(false);
   const [result, setResult]     = useState<BreedResult | null>(null);
@@ -363,7 +383,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
   const load = async () => {
     try {
-      const { animals } = await apiGetAnimals();
+      const { animals } = await apiGetBreedingAnimals();
       setAnimals(animals);
     } catch {
       // ignore
@@ -374,7 +394,7 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
 
   useEffect(() => { void load(); }, []);
 
-  async function toggleFavorite(animal: Animal) {
+  async function toggleFavorite(animal: BreedingAnimal) {
     if (favoriteBusyId !== null) return;
     const next = !animal.is_favorite;
     setAnimals(previous => previous.map(item => item.id === animal.id ? { ...item, is_favorite: next } : item));
@@ -398,13 +418,16 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
     try {
       const res = await apiBreed(parent1.id, parent2.id);
       setResult(res);
-      // The breed response already carries the refreshed list. Avoid a second list request
-      // before the global state refresh, which made rapid breeding feel like a reload.
-      const fresh = res.animals ?? animals.map(animal => (
+      // The response contains the child, so patch the compact local picker state without
+      // downloading the entire ready-pair list again.
+      const fresh = animals.map(animal => (
         animal.id === parent1.id || animal.id === parent2.id
           ? { ...animal, can_breed: false }
           : animal
       ));
+      if (res.animal && !fresh.some(animal => animal.id === res.animal?.id)) {
+        fresh.push(res.animal);
+      }
       setAnimals(fresh);
       const p1 = fresh.find(a => a.id === parent1.id);
       const p2 = fresh.find(a => a.id === parent2.id);

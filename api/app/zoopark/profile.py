@@ -228,6 +228,34 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
     }
 
 
+def breeding_animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, today=None) -> dict:
+    """Small payload for the breeding picker.
+
+    The picker never reads health, parentage, cure costs or the income
+    breakdown. Omitting those fields matters for large zoos because this is a
+    list endpoint and every extra field is repeated for every candidate.
+    """
+    species = SPECIES_BY_ID[animal.species_id]
+    day = today or utcnow().date()
+    return {
+        "id": animal.id,
+        "name": animal.name or species["name"],
+        "is_favorite": bool(animal.is_favorite),
+        "species_code": species["code"],
+        "species_name": species["name"],
+        "species_emoji": species["emoji"],
+        "species_rarity": species["rarity"],
+        "survival": animal.gene_survival,
+        "reproduction": animal.gene_reproduction,
+        "appearance": animal.gene_appearance,
+        "size_trait": animal.gene_size,
+        "acquired_at": _iso(animal.acquired_at),
+        "can_breed": animal.last_bred_on is None or animal.last_bred_on != day,
+        "income": animal_income(animal, locality_habitat, bonuses),
+        "base_income": animal_base_income_rub_per_min(animal),
+    }
+
+
 def locality_animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses) -> dict:
     """A stripped-down animal for the localities screen.
 

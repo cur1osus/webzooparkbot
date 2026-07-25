@@ -1,5 +1,7 @@
 import type { Animal, GeneTier } from '@/types';
 
+type QualityAnimal = Pick<Animal, 'species_rarity' | 'survival' | 'reproduction' | 'appearance' | 'size_trait' | 'income'>;
+
 /**
  * «Качество» животного — редкость вида плюс уровень генов, одной осью.
  * Редкость главнее: внутри одной редкости животные упорядочены по сумме генов.
@@ -16,12 +18,12 @@ const GENE_TIER_INDEX: Record<GeneTier, number> = { low: 0, medium: 1, high: 2 }
 const GENE_KEYS = ['survival', 'reproduction', 'appearance', 'size_trait'] as const;
 
 /** Суммарный уровень генов, 0–8. */
-export function geneScore(animal: Animal): number {
+export function geneScore(animal: Pick<Animal, 'survival' | 'reproduction' | 'appearance' | 'size_trait'>): number {
   return GENE_KEYS.reduce((acc, key) => acc + GENE_TIER_INDEX[animal[key]], 0);
 }
 
 /** Лучшие первыми: сначала редкость, потом гены, потом доход как стабильный тай-брейк. */
-export function compareByQuality(a: Animal, b: Animal): number {
+export function compareByQuality(a: QualityAnimal, b: QualityAnimal): number {
   return RARITY_RANK[b.species_rarity] - RARITY_RANK[a.species_rarity]
     || geneScore(b) - geneScore(a)
     || b.income - a.income;

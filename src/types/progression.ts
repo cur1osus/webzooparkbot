@@ -53,6 +53,25 @@ export interface Animal {
   parent_b_id: number | null;
 }
 
+/** Fields needed by the breeding picker; the full animal payload is much larger. */
+export type BreedingAnimal = Pick<Animal,
+  | 'id'
+  | 'is_favorite'
+  | 'name'
+  | 'species_code'
+  | 'species_name'
+  | 'species_emoji'
+  | 'species_rarity'
+  | 'survival'
+  | 'reproduction'
+  | 'appearance'
+  | 'size_trait'
+  | 'acquired_at'
+  | 'can_breed'
+  | 'income'
+  | 'base_income'
+>;
+
 export interface PackTierInfo {
   tier: PackTier;
   price: number;

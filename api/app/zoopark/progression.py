@@ -80,12 +80,13 @@ from api.app.zoopark.income import (
     alive_clause,
     animal_base_income_rub_per_min,
     available_animals,
+    breeding_animals,
     on_expedition_subquery,
     sync_player_income,
 )
 from api.app.zoopark.forge import roll_expedition_item
 from api.app.zoopark.notifications import enqueue_animal_death, enqueue_expedition_finished
-from api.app.zoopark.profile import animal_payload, get_player, item_payload, locality_animal_payload
+from api.app.zoopark.profile import animal_payload, breeding_animal_payload, get_player, item_payload, locality_animal_payload
 from api.app.zoopark.season import ensure_player_season
 
 random = SystemRandom()
@@ -255,6 +256,23 @@ def list_available_animals(tg_id: int) -> dict:
         # Serialise before committing: commit expires the loaded animals, and re-reading them
         # one row at a time during payload building costs seconds on a large zoo.
         result = {"animals": [animal_payload(a, habitat, bonuses) for a, habitat in rows]}
+        session.commit()
+        return result
+
+
+def list_breeding_animals(tg_id: int) -> dict:
+    """Return only ready animals that can actually form a breeding pair."""
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        today = utcnow().date()
+        rows = breeding_animals(session, player.id, season.id, today)
+        result = {
+            "animals": [breeding_animal_payload(animal, habitat, bonuses, today) for animal, habitat in rows]
+        }
         session.commit()
         return result
 
@@ -864,13 +882,11 @@ def breed(tg_id: int, body: BreedBody) -> dict:
 
         bonuses = bonuses_module.load(session, player.id)
         sync_player_income(session, player, bonuses)
-        refreshed_animals = [animal_payload(animal, None, bonuses) for animal in available_animals(session, player.id, season.id)]
         result = {
             "ok": True,
             "success": succeeded,
             "rate": rate,
             "animal": animal_payload(child, None, bonuses) if child else None,
-            "animals": refreshed_animals,
             "inherited_genes": inherited_genes,
             "cost_rub": cost,
             "new_rub": ledger.balance(player, "rub"),
