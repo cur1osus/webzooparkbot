@@ -25,6 +25,7 @@ from api.app.schemas.forge import (
     ForgeSetBody,
     ForgeSetIdBody,
 )
+from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import (
     FORGE_CREATE_COUNTER_EPOCH,
@@ -52,7 +53,7 @@ from api.app.zoopark.catalog import (
     item_sell_refund_usd,
 )
 from api.app.zoopark.income import sync_player_income
-from api.app.zoopark.profile import get_player, item_payload, list_item_sets, list_items
+from api.app.zoopark.profile import active_bonus_summary, get_player, item_payload, list_item_sets, list_items
 
 random = SystemRandom()
 
@@ -181,6 +182,7 @@ def forge_create(tg_id: int, body: ForgeCreateBody) -> dict:
             **cost,
             "new_usd": ledger.balance(player, "usd"),
             "new_paw_coins": ledger.balance(player, "paw"),
+            "next_cost_usd": forge_create_cost_usd(creations + 1),
         }
         session.commit()
         return result
@@ -333,19 +335,34 @@ def forge_sell(tg_id: int, body: ForgeItemIdBody) -> dict:
         # PawCoins for a PawCoin-forged one. Upgrade levels always refund in dollars.
         earned_usd = item_sell_refund_usd(item.level, item.origin, item.create_currency)  # type: ignore[arg-type]
         earned_paw = item_sell_refund_paw(item.origin, item.create_currency)  # type: ignore[arg-type]
+        was_active = bool(item.is_active)
         session.delete(item)
         session.flush()
         if earned_usd:
             ledger.grant(session, player, "usd", earned_usd, "forge_sell")
         if earned_paw:
             ledger.grant(session, player, "paw", earned_paw, "forge_sell")
-        sync_player_income(session, player)
+        # An inactive item cannot affect income. Avoid scanning the whole zoo for a sale that
+        # only changes USD/PawCoins; active-item sales still settle and recompute the rate.
+        active_item_patch = {}
+        if was_active:
+            bonuses = bonuses_module.load(session, player.id)
+            income, upkeep = sync_player_income(session, player, bonuses)
+            active_item_patch = {
+                "income_rub_per_min": income,
+                "upkeep_rub_per_min": upkeep,
+                "income_synced_at": player.income_synced_at.isoformat(),
+                "active_item_bonuses": active_bonus_summary(bonuses),
+            }
         result = {
             "ok": True,
+            "removed_item_id": str(body.item_id),
+            "was_active": was_active,
             "earned_usd": earned_usd,
             "earned_paw": earned_paw,
             "new_usd": ledger.balance(player, "usd"),
             "new_paw_coins": ledger.balance(player, "paw"),
+            **active_item_patch,
         }
         session.commit()
         return result

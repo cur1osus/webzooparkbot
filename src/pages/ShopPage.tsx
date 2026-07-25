@@ -455,9 +455,11 @@ function StyleTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
 export function ShopPage({
   gs,
   onRefresh,
+  onPatchState,
 }: {
   gs: GameState;
   onRefresh: () => void;
+  onPatchState: (patch: Partial<GameState>) => void;
 }) {
   const [tab, setTab] = useState<ShopTab>('packs');
 
@@ -517,7 +519,7 @@ export function ShopPage({
       {tab === 'localities' && <LocalitiesPage gs={gs} onRefresh={onRefresh} />}
 
       {/* FORGE */}
-      {tab === 'forge' && <ForgeShopTab gs={gs} onRefresh={onRefresh} />}
+      {tab === 'forge' && <ForgeShopTab gs={gs} onRefresh={onRefresh} onPatchState={onPatchState} />}
 
       {/* COSMETICS */}
       {tab === 'cosmetics' && <StyleTab gs={gs} onRefresh={onRefresh} />}

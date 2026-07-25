@@ -394,12 +394,13 @@ export default function App() {
           <div key={`${tab}-${tabResetSignal}`} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
-                <ZooPage gs={displayState} onRefresh={reloadFromServer} onlinePresence={onlinePresence} />
+                <ZooPage gs={displayState} onRefresh={reloadFromServer} onPatchState={patchState} onlinePresence={onlinePresence} />
               )}
               {tab === 'shop' && (
                 <ShopPage
                   gs={displayState}
                   onRefresh={reloadFromServer}
+                  onPatchState={patchState}
                 />
               )}
               {tab === 'lab' && (

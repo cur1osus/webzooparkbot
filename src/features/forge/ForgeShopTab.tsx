@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/api';
 import { tmaConfirm } from '@/lib/tma';
 import type { ForgeItem, GameState } from '@/types';
@@ -53,7 +54,7 @@ function compareMergeProperties(parents: ForgeItem[], result: ForgeItem): Omit<M
   return { added, removed, retained };
 }
 
-export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void }) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [mergeFirst, setMergeFirst] = useState<string | null>(null);
@@ -78,7 +79,12 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
     setBusy(true);
     try {
       const r = await apiForgeCreate(currency);
-      onRefresh();
+      onPatchState({
+        items: [...allItems, r.item],
+        usd: r.new_usd,
+        paw_coins: r.new_paw_coins,
+        forge_create_cost_usd: r.next_cost_usd,
+      });
       setPendingItem(r.item);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Ошибка', false);
@@ -93,7 +99,17 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
     try {
       const r = await apiForgeSell(pendingItem.id);
       setPendingItem(null);
-      onRefresh();
+      onPatchState({
+        items: allItems.filter(item => item.id !== r.removed_item_id),
+        usd: r.new_usd,
+        paw_coins: r.new_paw_coins,
+        ...(r.income_rub_per_min !== undefined ? {
+          income_rub_per_min: r.income_rub_per_min,
+          upkeep_rub_per_min: r.upkeep_rub_per_min ?? gs.upkeep_rub_per_min,
+          income_synced_at: r.income_synced_at ?? gs.income_synced_at,
+          active_item_bonuses: r.active_item_bonuses ?? gs.active_item_bonuses,
+        } : {}),
+      });
       showToast(r.earned_paw > 0 ? `Продано за 🐾 ${fmt(r.earned_paw)}` : `Продано за $${fmt(r.earned_usd)}`);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Ошибка', false);
@@ -110,8 +126,6 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
     if (busy) return;
     const level = item.level;
     const cost = forgeUpgradeCostUsd(level);
-    const successPct = Math.max(0, 100 - 8 * level);
-    if (!(await tmaConfirm(`Стоимость: $${fmt(cost)}\nШанс успеха: ${successPct}%`, `Улучшить ${item.name}?`))) return;
     setBusy(true);
     try {
       const r = await apiForgeUpgrade(item.id);
@@ -170,35 +184,6 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
           }}
         >
           {toast.msg}
-        </div>
-      )}
-
-      {mergeResult && (
-        <div className="card flex flex-col gap-3" style={{ border: '1px solid rgba(var(--c-gold-rgb),0.4)', background: 'rgba(var(--c-gold-rgb),0.08)' }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.8px] text-tg-hint">Результат слияния</p>
-              <p className="m-0 mt-1 font-extrabold truncate">{mergeResult.newItem.icon} {mergeResult.newItem.name}</p>
-            </div>
-            <button type="button" onClick={() => setMergeResult(null)} className="w-8 h-8 rounded-xl border-none bg-[var(--surface-subtle)] text-tg-text">×</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {mergeResult.added.length > 0 && (
-              <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(var(--c-green-rgb),0.12)' }}>
-                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.6px]" style={{ color: 'var(--c-green)' }}>Добавились</p>
-                {mergeResult.added.map((label, index) => <p key={`added-${index}`} className="m-0 mt-1 text-[12px]">＋ {label}</p>)}
-              </div>
-            )}
-            {mergeResult.removed.length > 0 && (
-              <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(var(--c-red-rgb),0.10)' }}>
-                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.6px]" style={{ color: 'var(--c-red-soft)' }}>Исчезли или изменились</p>
-                {mergeResult.removed.map((label, index) => <p key={`removed-${index}`} className="m-0 mt-1 text-[12px]">− {label}</p>)}
-              </div>
-            )}
-            {mergeResult.added.length === 0 && mergeResult.removed.length === 0 && (
-              <p className="m-0 text-[12px] text-tg-hint">Набор бафов не изменился.</p>
-            )}
-          </div>
         </div>
       )}
 
@@ -338,15 +323,6 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
 
               <div className="flex gap-[6px] mt-[2px]">
                 <button
-                  onClick={() => handleUpgrade(item)}
-                  disabled={busy || level >= 12 || gs.usd < upgradeCost}
-                  className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
-                  style={{ background: 'rgba(var(--c-blue-rgb),0.15)', color: 'var(--c-blue)' }}
-                >
-                  {level >= 12 ? 'Макс уровень' : `Улучш. $${fmt(upgradeCost)} (${successPct}%)`}
-                </button>
-
-                <button
                   onClick={() => handleMergeSelect(item)}
                   disabled={busy || isLegendary}
                   className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
@@ -357,10 +333,64 @@ export function ForgeShopTab({ gs, onRefresh }: { gs: GameState; onRefresh: () =
                 >
                   {isLegendary ? 'Нельзя слить' : isSelected ? '✓ Выбран' : 'Слить'}
                 </button>
+
+                <button
+                  onClick={() => handleUpgrade(item)}
+                  disabled={busy || level >= 12 || gs.usd < upgradeCost}
+                  className="flex-1 py-[9px] rounded-[8px] border-none font-semibold text-[12px] disabled:opacity-40 cursor-pointer"
+                  style={{ background: 'rgba(var(--c-blue-rgb),0.15)', color: 'var(--c-blue)' }}
+                >
+                  {level >= 12 ? 'Макс уровень' : `Улучш. $${fmt(upgradeCost)} (${successPct}%)`}
+                </button>
               </div>
             </div>
           );
         })
+      )}
+
+      {mergeResult && createPortal(
+        <div
+          className="modal-backdrop fixed inset-0 z-[400] flex items-center justify-center p-4"
+          onClick={() => setMergeResult(null)}
+          role="presentation"
+        >
+          <section
+            className="sheet-panel w-full max-w-[480px] max-h-[90vh] overflow-y-auto rounded-3xl p-5 flex flex-col gap-4"
+            onClick={event => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Результат слияния предметов"
+            style={{ border: '1px solid rgba(var(--c-gold-rgb),0.45)', boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }}
+          >
+            <div className="text-center">
+              <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl text-[36px]" style={{ background: 'rgba(var(--c-gold-rgb),0.16)' }}>🧬</div>
+              <p className="m-0 mt-3 text-[11px] font-extrabold uppercase tracking-[1px] text-tg-hint">Слияние завершено</p>
+              <p className="m-0 mt-1 text-[20px] font-extrabold">{mergeResult.newItem.icon} {mergeResult.newItem.name}</p>
+              <p className="m-0 mt-1 text-[12px] text-tg-hint">Новый предмет собран из двух исходных.</p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <div className="rounded-2xl px-4 py-3" style={{ background: 'rgba(var(--c-red-rgb),0.10)', border: '1px solid rgba(var(--c-red-rgb),0.22)' }}>
+                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px]" style={{ color: 'var(--c-red-soft)' }}>Что пропало или изменилось</p>
+                {mergeResult.removed.length > 0 ? mergeResult.removed.map((label, index) => (
+                  <p key={`removed-${index}`} className="m-0 mt-2 text-[13px]">− {label}</p>
+                )) : <p className="m-0 mt-2 text-[12px] text-tg-hint">Ничего — свойства сохранились без изменений.</p>}
+              </div>
+
+              <div className="rounded-2xl px-4 py-3" style={{ background: 'rgba(var(--c-green-rgb),0.10)', border: '1px solid rgba(var(--c-green-rgb),0.22)' }}>
+                <p className="m-0 text-[11px] font-extrabold uppercase tracking-[0.7px]" style={{ color: 'var(--c-green)' }}>Что объединилось в новом предмете</p>
+                {mergeResult.added.length > 0 ? mergeResult.added.map((label, index) => (
+                  <p key={`added-${index}`} className="m-0 mt-2 text-[13px]">＋ {label}</p>
+                )) : <p className="m-0 mt-2 text-[12px] text-tg-hint">Новых свойств не добавилось.</p>}
+              </div>
+            </div>
+
+            <button type="button" onClick={() => setMergeResult(null)} className="w-full rounded-2xl border-none py-3 text-[14px] font-extrabold cursor-pointer" style={{ background: 'var(--c-gold)', color: '#241707' }}>
+              Понятно
+            </button>
+          </section>
+        </div>,
+        document.body,
       )}
     </div>
   );

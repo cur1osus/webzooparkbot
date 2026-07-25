@@ -114,7 +114,7 @@ function compareAnimals(mode: AnimalSort, favoriteOverrides: Map<number, boolean
   }
 }
 
-export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRefresh: () => void; onlinePresence: MaintenancePollStatus }) {
+export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void; onlinePresence: MaintenancePollStatus }) {
   const [tab, setTab] = useState<ZooTab>('overview');
   const [subPage, setSubPageState] = useState<SubPage>(() => getZooSubPageFromHash());
   const [busy, setBusy] = useState(false);
@@ -274,13 +274,13 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
     window.setTimeout(() => setMessage(null), 3000);
   }
 
-  async function runForgeAction(action: () => Promise<void>, fallback: string) {
+  async function runForgeAction(action: () => Promise<void>, fallback: string, refresh = true) {
     if (busy) return;
     setBusy(true);
     setMessage(null);
     try {
       await action();
-      onRefresh();
+      if (refresh) onRefresh();
     } catch (e) {
       showMessage(e instanceof Error ? e.message : fallback);
     } finally {
@@ -320,9 +320,20 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
       }, 'Ошибка активации предмета')}
       onSell={() => void runForgeAction(async () => {
         if (!(await tmaConfirm(`Продать «${item.name}» за $80k?`, 'Продать предмет?'))) return;
-        await apiForgeSell(item.id);
+        const result = await apiForgeSell(item.id);
+        onPatchState({
+          items: gs.items.filter(current => current.id !== result.removed_item_id),
+          usd: result.new_usd,
+          paw_coins: result.new_paw_coins,
+          ...(result.income_rub_per_min !== undefined ? {
+            income_rub_per_min: result.income_rub_per_min,
+            upkeep_rub_per_min: result.upkeep_rub_per_min ?? gs.upkeep_rub_per_min,
+            income_synced_at: result.income_synced_at ?? gs.income_synced_at,
+            active_item_bonuses: result.active_item_bonuses ?? gs.active_item_bonuses,
+          } : {}),
+        });
         setSubPage(null);
-      }, 'Ошибка продажи предмета')}
+      }, 'Ошибка продажи предмета', false)}
       onBack={() => setSubPage(null)} />;
   }
 
