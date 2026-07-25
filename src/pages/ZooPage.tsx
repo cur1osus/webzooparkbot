@@ -8,7 +8,7 @@ import type { Animal, GameState, GeneTier, MaintenancePollStatus } from '@/types
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
-import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiReleaseAnimal, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
+import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiReleaseAnimal, apiReleaseAnimals, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
 import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
@@ -120,6 +120,9 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<Set<number>>(new Set());
+  const [batchReleaseBusy, setBatchReleaseBusy] = useState(false);
   const [animalSort, setAnimalSort] = useStoredChoice<AnimalSort>('zoo-animal-sort', gs.tg_id, ANIMAL_SORT_IDS, 'new');
   const [favoriteOverrides, setFavoriteOverrides] = useState<Map<number, boolean>>(new Map());
   const [favoriteBusyId, setFavoriteBusyId] = useState<number | null>(null);
@@ -179,12 +182,20 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
             key={a.id}
             animal={a}
             isFavorite={favoriteOverrides.get(a.id) ?? a.is_favorite}
+            selectionMode={selectionMode}
+            isSelected={selectedAnimalIds.has(a.id)}
             onSelect={setSelectedAnimal}
+            onToggleSelect={animalId => setSelectedAnimalIds(previous => {
+              const next = new Set(previous);
+              if (next.has(animalId)) next.delete(animalId);
+              else next.add(animalId);
+              return next;
+            })}
           />
         ))}
       </div>
     ),
-    [visibleAnimals, favoriteOverrides],
+    [visibleAnimals, favoriteOverrides, selectionMode, selectedAnimalIds],
   );
 
   async function toggleFavorite(animal: Animal) {
@@ -205,6 +216,40 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
       showMessage(e instanceof Error ? e.message : 'Не удалось изменить избранное');
     } finally {
       setFavoriteBusyId(null);
+    }
+  }
+
+  function toggleSelectionMode() {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedAnimalIds(new Set());
+    } else {
+      setSelectionMode(true);
+    }
+  }
+
+  function selectAllAnimals() {
+    setSelectedAnimalIds(new Set(gs.animals.map(animal => animal.id)));
+  }
+
+  async function releaseSelectedAnimals() {
+    if (batchReleaseBusy || selectedAnimalIds.size === 0) return;
+    const ids = [...selectedAnimalIds];
+    const label = ids.length === 1 ? 'животное' : 'животных';
+    if (!(await tmaConfirm(`Отпустить ${ids.length} ${label}? Их нельзя будет вернуть.`, 'Массовый выпуск')))
+      return;
+    setBatchReleaseBusy(true);
+    setMessage(null);
+    try {
+      const result = await apiReleaseAnimals(ids);
+      setSelectionMode(false);
+      setSelectedAnimalIds(new Set());
+      showMessage(`Отпущено животных: ${result.released_count}`);
+      onRefresh();
+    } catch (e) {
+      showMessage(e instanceof Error ? e.message : 'Не удалось отпустить животных');
+    } finally {
+      setBatchReleaseBusy(false);
     }
   }
 
@@ -460,9 +505,46 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
 
           {gs.animals.length > 0 && (
             <div>
-              <p className="m-0 mb-2 text-[11px] font-extrabold text-tg-hint tracking-[1px] uppercase">
-                Мои животные · {gs.animals.length} · нажми для карточки
-              </p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="m-0 text-[11px] font-extrabold text-tg-hint tracking-[1px] uppercase">
+                  Мои животные · {gs.animals.length}{selectionMode ? '' : ' · нажми для карточки'}
+                </p>
+                <button
+                  type="button"
+                  onClick={toggleSelectionMode}
+                  className="shrink-0 rounded-xl border-none px-3 py-2 text-[11px] font-bold cursor-pointer"
+                  style={{
+                    background: selectionMode ? 'color-mix(in srgb, var(--c-gold) 18%, transparent)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)',
+                    color: selectionMode ? 'var(--c-gold)' : 'var(--tg-theme-hint-color)',
+                  }}
+                >
+                  {selectionMode ? 'Отмена' : 'Выбрать'}
+                </button>
+              </div>
+              {selectionMode && (
+                <div className="mb-2 flex items-center gap-2 rounded-2xl px-3 py-2" style={{ background: 'var(--surface-subtle)', border: '1px solid var(--card-border)' }}>
+                  <span className="min-w-0 flex-1 text-[11px] font-bold text-tg-hint">
+                    Выбрано: <span className="text-tg-text">{selectedAnimalIds.size}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={selectAllAnimals}
+                    className="shrink-0 rounded-xl border-none px-2 py-2 text-[10px] font-bold cursor-pointer"
+                    style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)', color: 'var(--tg-theme-hint-color)' }}
+                  >
+                    Все
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void releaseSelectedAnimals()}
+                    disabled={selectedAnimalIds.size === 0 || batchReleaseBusy}
+                    className="shrink-0 rounded-xl border-none px-3 py-2 text-[10px] font-bold cursor-pointer disabled:opacity-40"
+                    style={{ background: 'rgba(var(--c-red-rgb),0.14)', color: 'var(--c-red)' }}
+                  >
+                    {batchReleaseBusy ? '...' : 'Отпустить'}
+                  </button>
+                </div>
+              )}
               {gs.animals.length > 1 && (
                 <div className="grid grid-cols-4 gap-1 mb-2">
                   {ANIMAL_SORTS.map(s => {
@@ -560,33 +642,51 @@ export function ZooPage({ gs, onRefresh, onlinePresence }: { gs: GameState; onRe
 const AnimalCard = memo(function AnimalCard({
   animal,
   isFavorite,
+  selectionMode,
+  isSelected,
   onSelect,
+  onToggleSelect,
 }: {
   animal: Animal;
   isFavorite: boolean;
+  selectionMode: boolean;
+  isSelected: boolean;
   onSelect: (animal: Animal) => void;
+  onToggleSelect: (animalId: number) => void;
 }) {
   const life = lifeLeft(animal.dies_at);
   const rarityColor = SPECIES_RARITY_META[animal.species_rarity].color;
   return (
     <div
-      role="button"
+      role={selectionMode ? 'checkbox' : 'button'}
       tabIndex={0}
-      onClick={() => onSelect(animal)}
+      aria-checked={selectionMode ? isSelected : undefined}
+      onClick={() => selectionMode ? onToggleSelect(animal.id) : onSelect(animal)}
       onKeyDown={event => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          onSelect(animal);
+          if (selectionMode) onToggleSelect(animal.id);
+          else onSelect(animal);
         }
       }}
       className="card card-pressable text-left border-none w-full"
       style={{
+        position: 'relative',
         padding: '10px 12px',
-        border: isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
+        border: isSelected ? '1.5px solid var(--c-gold)' : isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
         boxShadow: isFavorite ? '0 0 14px rgba(243, 181, 63, 0.3)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
       }}
     >
-      <div className="flex items-center gap-[8px]">
+      {selectionMode && (
+        <span
+          className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full text-[13px] font-extrabold"
+          style={{ background: isSelected ? 'var(--c-gold)' : 'var(--surface-subtle-strong)', color: isSelected ? '#241707' : 'var(--tg-theme-hint-color)', border: '1px solid color-mix(in srgb, var(--c-gold) 45%, transparent)' }}
+          aria-hidden="true"
+        >
+          {isSelected ? '✓' : ''}
+        </span>
+      )}
+      <div className="flex items-center gap-[8px] pr-5">
         <span className="relative shrink-0 w-[38px] h-[38px] flex items-center justify-center">
           <AnimalArt animal={animal} size={38} />
           {animal.is_sick && <span className="absolute -top-1 -right-1 text-[11px]">🤒</span>}

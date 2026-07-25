@@ -184,6 +184,13 @@ export interface ReleaseAnimalResult {
   income_rub_per_min: number;
 }
 
+export interface ReleaseAnimalsResult {
+  ok: boolean;
+  released_count: number;
+  released_animal_ids: number[];
+  income_rub_per_min: number;
+}
+
 export interface BreedResult {
   ok: boolean;
   success: boolean;

@@ -12,6 +12,7 @@ import type {
   ExpeditionStartResponse,
   LocalitiesInfo,
   ReleaseAnimalResult,
+  ReleaseAnimalsResult,
   UpgradeLocalityResult,
   MerchantBuyResponse,
   MerchantResponse,
@@ -62,6 +63,11 @@ export const apiReleaseAnimal = (animal_id: number) =>
   req<ReleaseAnimalResult>('/animals/release', {
     method: 'POST',
     body: JSON.stringify({ animal_id }),
+  });
+export const apiReleaseAnimals = (animal_ids: number[]) =>
+  req<ReleaseAnimalsResult>('/animals/release-batch', {
+    method: 'POST',
+    body: JSON.stringify({ animal_ids }),
   });
 
 export const apiSetAnimalFavorite = (animal_id: number, is_favorite: boolean) =>

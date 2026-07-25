@@ -631,6 +631,7 @@ class TestBreeding:
         with pytest.raises(Exception, match="уже скрещивалось"):
             progression.breed(player, BreedBody(animal_id_1=parent_id, animal_id_2=mate_id))
 
+
     def test_breeding_charges_rubles_on_the_attempt(self, db, player, grant):
         from api.app.schemas.progression import BreedBody
         from api.app.zoopark import ledger
@@ -705,6 +706,52 @@ class TestBreeding:
 
 def test_tier_index_is_ordered():
     assert BREED_TIER_INDEX["low"] < BREED_TIER_INDEX["medium"] < BREED_TIER_INDEX["high"]
+
+
+class TestBatchRelease:
+    def _make_pair(self, player):
+        first = progression.open_pack(player)["animals"][0]
+        with get_session() as session:
+            parent = session.get(Animal, first["id"])
+            assert parent is not None
+            mate = progression.create_animal(
+                session,
+                player_id=parent.player_id,
+                season_id=parent.season_id,
+                origin="pack",
+                genes={
+                    "gene_survival": parent.gene_survival,
+                    "gene_reproduction": parent.gene_reproduction,
+                    "gene_appearance": parent.gene_appearance,
+                    "gene_size": parent.gene_size,
+                },
+                habitat=parent.habitat,
+                species_id=parent.species_id,
+            )
+            ids = [parent.id, mate.id]
+            session.commit()
+        return ids
+
+    def test_releases_selected_animals_in_one_batch(self, db, player):
+        from api.app.schemas.progression import ReleaseAnimalsBody
+
+        animal_ids = self._make_pair(player)
+        result = progression.release_animals(player, ReleaseAnimalsBody(animal_ids=animal_ids))
+
+        assert result["released_count"] == 2
+        assert set(result["released_animal_ids"]) == set(animal_ids)
+        with get_session() as session:
+            assert all(session.get(Animal, animal_id).removal_reason == "released" for animal_id in animal_ids)
+
+    def test_batch_release_is_atomic_when_one_animal_is_unavailable(self, db, player):
+        from api.app.schemas.progression import ReleaseAnimalsBody
+
+        animal_ids = self._make_pair(player)
+        with pytest.raises(Exception, match="недоступны"):
+            progression.release_animals(player, ReleaseAnimalsBody(animal_ids=[animal_ids[0], 999999999]))
+
+        with get_session() as session:
+            assert session.get(Animal, animal_ids[0]).removal_reason is None
 
 
 class TestAssigningEveryMatchingAnimal:

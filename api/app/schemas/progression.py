@@ -21,6 +21,10 @@ class ReleaseAnimalBody(BaseModel):
     animal_id: int = Field(gt=0)
 
 
+class ReleaseAnimalsBody(BaseModel):
+    animal_ids: list[int] = Field(min_length=1, max_length=5000)
+
+
 class FavoriteAnimalBody(BaseModel):
     animal_id: int = Field(gt=0)
     is_favorite: bool

@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from api.app.routes._auth import TelegramId
-from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, DismissExpeditionBody, FavoriteAnimalBody, FinishExpeditionBody, OpenPackBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, DismissExpeditionBody, FavoriteAnimalBody, FinishExpeditionBody, OpenPackBody, ReleaseAnimalBody, ReleaseAnimalsBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import progression as progression_service
 
 router = APIRouter(tags=["progression"])
@@ -57,6 +57,11 @@ def assign_matching_locality(body: AssignMatchingLocalityBody, tg_id: TelegramId
 @router.post("/api/animals/release")
 def release_animal(body: ReleaseAnimalBody, tg_id: TelegramId):
     return progression_service.release_animal(tg_id, body)
+
+
+@router.post("/api/animals/release-batch")
+def release_animals(body: ReleaseAnimalsBody, tg_id: TelegramId):
+    return progression_service.release_animals(tg_id, body)
 
 
 @router.post("/api/animals/favorite")

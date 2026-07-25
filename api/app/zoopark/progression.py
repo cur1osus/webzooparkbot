@@ -23,7 +23,7 @@ from api.app.db.models import (
     Player,
     utcnow,
 )
-from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, FavoriteAnimalBody, ReleaseAnimalBody, StartExpeditionBody, UpgradeLocalityBody
+from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, FavoriteAnimalBody, ReleaseAnimalBody, ReleaseAnimalsBody, StartExpeditionBody, UpgradeLocalityBody
 from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.bonuses import Bonuses
@@ -693,12 +693,13 @@ def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> di
         return result
 
 
-def release_animal(tg_id: int, body: ReleaseAnimalBody) -> dict:
-    """Permanently remove an animal from the zoo so the player can cull their population.
+def release_animals(tg_id: int, body: ReleaseAnimalsBody) -> dict:
+    """Permanently remove several animals in one atomic operation.
 
     This is a voluntary, irreversible removal — unlike a natural death or an expedition loss
     it enqueues no notification. An animal committed to an active expedition cannot be
-    released. Income is resynced so the freed animal stops paying immediately.
+    released. If even one requested animal is unavailable, nothing is removed. Income is
+    resynced once after the whole batch so the freed animals stop paying immediately.
     """
     with get_session() as session:
         player = get_player(session, tg_id, for_update=True)
@@ -706,27 +707,45 @@ def release_animal(tg_id: int, body: ReleaseAnimalBody) -> dict:
             raise HTTPException(404, "Нет игрока")
         season = ensure_player_season(session, player)
 
-        animal = session.scalars(
+        animal_ids = list(dict.fromkeys(body.animal_ids))
+        animals = session.scalars(
             select(Animal)
             .where(
-                Animal.id == body.animal_id,
+                Animal.id.in_(animal_ids),
                 Animal.player_id == player.id,
                 Animal.season_id == season.id,
                 alive_clause(),
                 Animal.id.not_in(on_expedition_subquery()),
             )
             .with_for_update()
-        ).first()
-        if not animal:
-            raise HTTPException(404, "Животное недоступно")
+        ).all()
+        if len(animals) != len(animal_ids):
+            raise HTTPException(404, "Одно или несколько животных недоступны")
 
-        animal.removed_at = utcnow()
-        animal.removal_reason = "released"
-        animal.sick_since = None
+        released_at = utcnow()
+        for animal in animals:
+            animal.removed_at = released_at
+            animal.removal_reason = "released"
+            animal.sick_since = None
         income, _ = sync_player_income(session, player)
-        result = {"ok": True, "animal_id": animal.id, "income_rub_per_min": income}
+        result = {
+            "ok": True,
+            "released_count": len(animals),
+            "released_animal_ids": [animal.id for animal in animals],
+            "income_rub_per_min": income,
+        }
         session.commit()
         return result
+
+
+def release_animal(tg_id: int, body: ReleaseAnimalBody) -> dict:
+    """Compatibility wrapper for the existing single-animal action."""
+    result = release_animals(tg_id, ReleaseAnimalsBody(animal_ids=[body.animal_id]))
+    return {
+        "ok": result["ok"],
+        "animal_id": result["released_animal_ids"][0],
+        "income_rub_per_min": result["income_rub_per_min"],
+    }
 
 
 def favorite_animal(tg_id: int, body: FavoriteAnimalBody) -> dict:
