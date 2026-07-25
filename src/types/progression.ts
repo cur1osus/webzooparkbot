@@ -301,13 +301,30 @@ export interface ExpeditionLocality {
   depths: ExpeditionDepthOption[];
 }
 
+/** Compact animal shape used by the squad picker; the full profile payload is unnecessary
+ * for this list and becomes very expensive for large zoos. */
+export type ExpeditionAnimal = Pick<Animal,
+  | 'id'
+  | 'name'
+  | 'species_code'
+  | 'species_name'
+  | 'species_emoji'
+  | 'survival'
+  | 'reproduction'
+  | 'appearance'
+  | 'size_trait'
+  | 'habitat'
+  | 'dies_at'
+  | 'income'
+>;
+
 export interface ExpeditionInfo {
   /** One raid per locality may be in flight, so this is a list. */
   expeditions: ActiveExpedition[];
   /** First expedition, retained for clients released before parallel raids. */
   active: ActiveExpedition | null;
   localities: ExpeditionLocality[];
-  available_animals: Animal[];
+  available_animals: ExpeditionAnimal[];
   expedition_minutes: Record<Habitat, number>;
   squad_min: number;
   squad_max: number;

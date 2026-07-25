@@ -271,6 +271,16 @@ class TestExpeditionLifecycle:
         """Three animals not already committed to a raid."""
         return [a["id"] for a in progression.get_expeditions(telegram_id)["available_animals"]][:size]
 
+    def test_expedition_picker_uses_compact_animal_payload(self, db, player, grant):
+        self._stock(player, grant, packs=1)
+        animal = progression.get_expeditions(player)["available_animals"][0]
+
+        assert {"id", "name", "species_code", "species_name", "species_emoji", "survival", "reproduction", "appearance", "size_trait", "habitat", "dies_at", "income"} <= set(animal)
+        assert "income_breakdown" not in animal
+        assert "cure_cost_usd" not in animal
+        assert "parent_a_id" not in animal
+        assert "is_sick" not in animal
+
     def test_only_one_expedition_per_locality(self, db, player, grant):
         squad = self._squad(player, grant)
         locality_id = progression.list_localities(player)["localities"][0]["id"]

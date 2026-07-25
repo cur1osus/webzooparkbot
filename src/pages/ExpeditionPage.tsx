@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   apiDismissExpedition,
   apiFinishExpedition,
@@ -21,6 +21,7 @@ import type {
   ActiveExpedition,
   ExpeditionDepthOption,
   ExpeditionInfo,
+  ExpeditionAnimal,
   ExpeditionLocality,
   ExpeditionResult,
   Habitat,
@@ -83,16 +84,16 @@ function WildAnimalSummary({ habitat, result }: { habitat: Habitat; result: Expe
   );
 }
 
-function ExpeditionAnimalCard({
+const ExpeditionAnimalCard = memo(function ExpeditionAnimalCard({
   animal,
   selected,
   disabled,
   onToggle,
 }: {
-  animal: Animal;
+  animal: ExpeditionAnimal;
   selected?: boolean;
   disabled?: boolean;
-  onToggle?: () => void;
+  onToggle?: (animalId: number) => void;
 }) {
   const habitat = HABITAT_INFO[animal.habitat];
   const power = expeditionPower(animal);
@@ -101,7 +102,7 @@ function ExpeditionAnimalCard({
   return (
     <button
       type="button"
-      onClick={onToggle}
+      onClick={onToggle ? () => onToggle(animal.id) : undefined}
       disabled={disabled || !onToggle}
       className="w-full rounded-2xl p-4 flex flex-col gap-3 text-left border-none"
       style={{
@@ -140,7 +141,7 @@ function ExpeditionAnimalCard({
       <GeneGrid animal={animal} />
     </button>
   );
-}
+});
 
 /**
  * The result of one fight. The old card only had "Победа" or "Провал" to show, because the
@@ -464,6 +465,8 @@ export function ExpeditionPage({
   const [selectedLocalityId, setSelectedLocalityId] = useState<number | null>(null);
   const [selectedDepth, setSelectedDepth] = useState(1);
   const [selectedAnimalIds, setSelectedAnimalIds] = useState<number[]>([]);
+  const [animalSearch, setAnimalSearch] = useState('');
+  const [visibleAnimalCount, setVisibleAnimalCount] = useState(60);
   const [nowMs, setNowMs] = useState(Date.now());
 
   const load = useCallback(async () => {
@@ -524,6 +527,16 @@ export function ExpeditionPage({
     [info?.available_animals],
   );
 
+  const selectedAnimalIdSet = useMemo(() => new Set(selectedAnimalIds), [selectedAnimalIds]);
+  const filteredAnimals = useMemo(() => {
+    const query = animalSearch.trim().toLocaleLowerCase();
+    if (!query) return availableAnimals;
+    return availableAnimals.filter(animal => (
+      `${animal.name} ${animal.species_name} ${HABITAT_INFO[animal.habitat].name}`.toLocaleLowerCase().includes(query)
+    ));
+  }, [animalSearch, availableAnimals]);
+  const visibleAnimals = filteredAnimals.slice(0, visibleAnimalCount);
+
   const selectedAnimals = useMemo(
     () => availableAnimals.filter(animal => selectedAnimalIds.includes(animal.id)),
     [availableAnimals, selectedAnimalIds],
@@ -547,13 +560,13 @@ export function ExpeditionPage({
     ? expeditionGeneUpgradeChance(selectedPower / depthOption.wild_power_avg)
     : 0;
 
-  const toggleAnimal = (animalId: number) => {
+  const toggleAnimal = useCallback((animalId: number) => {
     setSelectedAnimalIds(current => {
       if (current.includes(animalId)) return current.filter(id => id !== animalId);
       if (current.length >= squadMax) return current;
       return [...current, animalId];
     });
-  };
+  }, [squadMax]);
 
   const run = async (key: string, action: () => Promise<unknown>, fallback: string) => {
     setBusyAction(key);
@@ -737,15 +750,46 @@ export function ExpeditionPage({
                   </span>
                 </div>
 
+                <div className="mb-2 flex items-center gap-2">
+                  <input
+                    value={animalSearch}
+                    onChange={event => {
+                      setAnimalSearch(event.target.value);
+                      setVisibleAnimalCount(60);
+                    }}
+                    placeholder="Поиск по имени, виду или местности"
+                    className="text-input min-w-0 flex-1 text-[13px]"
+                    aria-label="Поиск животного для экспедиции"
+                  />
+                  {animalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => { setAnimalSearch(''); setVisibleAnimalCount(60); }}
+                      className="h-10 w-10 shrink-0 rounded-xl border-none text-[16px]"
+                      style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-hint-color)' }}
+                      aria-label="Очистить поиск"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <p className="m-0 mb-2 text-[11px] text-tg-hint">
+                  {animalSearch ? `Найдено ${filteredAnimals.length} из ${availableAnimals.length}` : `Свободно ${availableAnimals.length}. Сначала показаны самые сильные.`}
+                </p>
+
                 {availableAnimals.length === 0 ? (
                   <div className="card text-center py-8">
                     <p className="m-0 text-[36px] mb-2">🐾</p>
                     <p className="m-0 text-sm text-tg-hint">Нет свободных животных для экспедиции</p>
                   </div>
+                ) : filteredAnimals.length === 0 ? (
+                  <div className="card text-center py-8">
+                    <p className="m-0 text-sm text-tg-hint">По этому запросу животных не найдено</p>
+                  </div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {availableAnimals.map(animal => {
-                      const isSelected = selectedAnimalIds.includes(animal.id);
+                    {visibleAnimals.map(animal => {
+                      const isSelected = selectedAnimalIdSet.has(animal.id);
                       const disableToggle = !isSelected && selectedAnimalIds.length >= squadMax;
                       return (
                         <ExpeditionAnimalCard
@@ -753,10 +797,20 @@ export function ExpeditionPage({
                           animal={animal}
                           selected={isSelected}
                           disabled={disableToggle}
-                          onToggle={() => toggleAnimal(animal.id)}
+                          onToggle={toggleAnimal}
                         />
                       );
                     })}
+                    {visibleAnimalCount < filteredAnimals.length && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleAnimalCount(count => Math.min(count + 60, filteredAnimals.length))}
+                        className="w-full rounded-2xl border-none py-3 text-[13px] font-extrabold"
+                        style={{ background: 'var(--surface-subtle)', color: 'var(--c-blue)' }}
+                      >
+                        Показать ещё {Math.min(60, filteredAnimals.length - visibleAnimalCount)} из {filteredAnimals.length - visibleAnimalCount}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

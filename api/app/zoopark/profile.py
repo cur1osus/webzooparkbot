@@ -280,6 +280,31 @@ def locality_animal_payload(animal: Animal, locality_habitat: str | None, bonuse
     }
 
 
+def expedition_animal_payload(animal: Animal, bonuses: Bonuses) -> dict:
+    """The small animal shape needed by the expedition squad picker.
+
+    The picker only needs identity, genes, habitat, income and remaining life. Sending the
+    full profile payload for every free animal repeats the income breakdown, cure price,
+    parentage and other fields that the expedition screen never reads. At eleven thousand
+    animals that turns one screen into a multi-megabyte response and an equally large DOM.
+    """
+    species = SPECIES_BY_ID[animal.species_id]
+    return {
+        "id": animal.id,
+        "name": animal.name or species["name"],
+        "species_code": species["code"],
+        "species_name": species["name"],
+        "species_emoji": species["emoji"],
+        "survival": animal.gene_survival,
+        "reproduction": animal.gene_reproduction,
+        "appearance": animal.gene_appearance,
+        "size_trait": animal.gene_size,
+        "habitat": animal.habitat,
+        "dies_at": _iso(animal.dies_at),
+        "income": animal_income(animal, None, bonuses),
+    }
+
+
 def get_clan(session: Session, player_id: int) -> dict | None:
     membership = session.scalars(select(ClanMember).where(ClanMember.player_id == player_id)).first()
     if membership is None:

@@ -86,7 +86,7 @@ from api.app.zoopark.income import (
 )
 from api.app.zoopark.forge import roll_expedition_item
 from api.app.zoopark.notifications import enqueue_animal_death, enqueue_expedition_finished
-from api.app.zoopark.profile import animal_payload, breeding_animal_payload, get_player, item_payload, locality_animal_payload
+from api.app.zoopark.profile import animal_payload, breeding_animal_payload, expedition_animal_payload, get_player, item_payload, locality_animal_payload
 from api.app.zoopark.season import ensure_player_season
 
 random = SystemRandom()
@@ -1258,7 +1258,7 @@ def get_expeditions(tg_id: int) -> dict:
                 }
                 for loc in localities
             ],
-            "available_animals": [animal_payload(a, None, bonuses) for a in squad_pool],
+            "available_animals": [expedition_animal_payload(a, bonuses) for a in squad_pool],
             "expedition_minutes": {habitat: spec["minutes"] for habitat, spec in EXPEDITIONS.items()},
             "squad_min": EXPEDITION_SQUAD_MIN,
             "squad_max": EXPEDITION_SQUAD_MAX,
