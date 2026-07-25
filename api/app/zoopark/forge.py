@@ -226,6 +226,7 @@ def forge_upgrade(tg_id: int, body: ForgeItemIdBody) -> dict:
         payload = item_payload(item)
         # Item bonuses feed income, so an upgraded active item changes it immediately.
         sync_player_income(session, player)
+        active_bonuses = active_bonus_summary(bonuses_module.load(session, player.id))
         result = {
             "ok": True,
             "success": succeeded,
@@ -233,6 +234,10 @@ def forge_upgrade(tg_id: int, body: ForgeItemIdBody) -> dict:
             "item": payload,
             "cost_usd": cost,
             "new_usd": ledger.balance(player, "usd"),
+            "income_rub_per_min": player.income_rub_per_min,
+            "upkeep_rub_per_min": player.upkeep_rub_per_min,
+            "income_synced_at": player.income_synced_at.isoformat(),
+            "active_item_bonuses": active_bonuses,
         }
         session.commit()
         return result

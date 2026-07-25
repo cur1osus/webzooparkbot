@@ -13,6 +13,14 @@ def test_create_returns_next_price_and_inactive_sale_skips_income_scan(db, playe
     created = forge.forge_create(player, ForgeCreateBody(currency="usd"))
     assert created["next_cost_usd"] == forge_create_cost_usd(1)
 
+    upgraded = forge.forge_upgrade(player, ForgeItemIdBody(item_id=created["item"]["id"]))
+    assert upgraded["item"]["id"] == created["item"]["id"]
+    assert upgraded["new_usd"] < created["new_usd"]
+    assert "income_rub_per_min" in upgraded
+    assert "upkeep_rub_per_min" in upgraded
+    assert "income_synced_at" in upgraded
+    assert "active_item_bonuses" in upgraded
+
     sold = forge.forge_sell(player, ForgeItemIdBody(item_id=created["item"]["id"]))
     assert sold["removed_item_id"] == created["item"]["id"]
     assert sold["was_active"] is False

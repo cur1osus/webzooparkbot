@@ -129,7 +129,14 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
     setBusy(true);
     try {
       const r = await apiForgeUpgrade(item.id);
-      onRefresh();
+      onPatchState({
+        items: allItems.map(existing => existing.id === r.item.id ? r.item : existing),
+        usd: r.new_usd,
+        income_rub_per_min: r.income_rub_per_min,
+        upkeep_rub_per_min: r.upkeep_rub_per_min,
+        income_synced_at: r.income_synced_at,
+        active_item_bonuses: r.active_item_bonuses,
+      });
       if (r.success) showToast(`Успех! Уровень ${r.item.level}`);
       else showToast(`Провал. $${fmt(cost)} потрачены, свойства не изменились.`, false);
     } catch (e: unknown) {

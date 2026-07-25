@@ -17,6 +17,10 @@ export interface ForgeUpgradeResponse {
   item: ForgeItem;
   cost_usd: number;
   new_usd: number;
+  income_rub_per_min: number;
+  upkeep_rub_per_min: number;
+  income_synced_at: string;
+  active_item_bonuses: GameState['active_item_bonuses'];
 }
 
 export interface ForgeMergeResponse {
