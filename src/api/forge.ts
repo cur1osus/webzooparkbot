@@ -1,4 +1,5 @@
 import type {
+  ForgeApplySetResponse,
   ForgeCreateResponse,
   ForgeItem,
   ForgeMergeResponse,
@@ -22,7 +23,7 @@ export const apiForgeUpdateSet = (set_id: string, item_ids: string[]) =>
 export const apiForgeDeleteSet = (set_id: string) =>
   req<{ ok: boolean }>('/forge/sets/delete', { method: 'POST', body: JSON.stringify({ set_id }) });
 export const apiForgeApplySet = (set_id: string) =>
-  req<{ ok: boolean; income_rub_per_min: number }>('/forge/sets/apply', { method: 'POST', body: JSON.stringify({ set_id }) });
+  req<ForgeApplySetResponse>('/forge/sets/apply', { method: 'POST', body: JSON.stringify({ set_id }) });
 export const apiForgeUpgrade = (item_id: string) =>
   req<ForgeUpgradeResponse>('/forge/upgrade', { method: 'POST', body: JSON.stringify({ item_id }) });
 export const apiForgeMerge = (item_id1: string, item_id2: string) =>

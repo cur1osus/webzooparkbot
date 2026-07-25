@@ -521,6 +521,13 @@ def forge_set_apply(tg_id: int, body: ForgeSetIdBody) -> dict:
             item.is_active = item.id in wanted
 
         sync_player_income(session, player)
-        result = {"ok": True, "income_rub_per_min": player.income_rub_per_min}
+        result = {
+            "ok": True,
+            "income_rub_per_min": player.income_rub_per_min,
+            "upkeep_rub_per_min": player.upkeep_rub_per_min,
+            "income_synced_at": player.income_synced_at.isoformat(),
+            "active_item_ids": [str(item_id) for item_id in sorted(wanted)],
+            "active_item_bonuses": active_bonus_summary(bonuses_module.load(session, player.id)),
+        }
         session.commit()
         return result

@@ -23,6 +23,15 @@ export interface ForgeUpgradeResponse {
   active_item_bonuses: GameState['active_item_bonuses'];
 }
 
+export interface ForgeApplySetResponse {
+  ok: boolean;
+  income_rub_per_min: number;
+  upkeep_rub_per_min: number;
+  income_synced_at: string;
+  active_item_ids: string[];
+  active_item_bonuses: GameState['active_item_bonuses'];
+}
+
 export interface ForgeMergeResponse {
   ok: boolean;
   new_item: ForgeItem;

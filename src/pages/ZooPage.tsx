@@ -290,9 +290,24 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
 
   const handleForgeApplySet = useCallback((setId: string) => {
     void runForgeAction(async () => {
-      await apiForgeApplySet(setId);
-    }, 'Ошибка применения сета');
-  }, [runForgeAction]);
+      const result = await apiForgeApplySet(setId);
+      const activeItemIds = new Set(result.active_item_ids);
+      onPatchState({
+        items: gs.items.map(item => ({ ...item, is_active: activeItemIds.has(item.id) })),
+        item_sets: gs.item_sets.map(itemSet => {
+          const itemSetIds = new Set(itemSet.item_ids);
+          const isActive = itemSet.item_ids.length > 0
+            && itemSet.item_ids.length === activeItemIds.size
+            && itemSet.item_ids.every(itemId => activeItemIds.has(itemId));
+          return { ...itemSet, is_active: isActive && itemSetIds.size === activeItemIds.size };
+        }),
+        income_rub_per_min: result.income_rub_per_min,
+        upkeep_rub_per_min: result.upkeep_rub_per_min,
+        income_synced_at: result.income_synced_at,
+        active_item_bonuses: result.active_item_bonuses,
+      });
+    }, 'Ошибка применения сета', false);
+  }, [gs.items, gs.item_sets, onPatchState, runForgeAction]);
 
   const handleForgeCreateSet = useCallback((name?: string) => {
     void runForgeAction(async () => {
