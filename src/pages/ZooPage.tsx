@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type SetStateAction } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type SetStateAction } from 'react';
 import { fmt, fmtMin, fmtBalance } from '@/utils/format';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { TgsPlayer } from '@/components/TgsPlayer';
@@ -259,7 +259,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  function setSubPage(next: SetStateAction<SubPage>) {
+  const setSubPage = useCallback((next: SetStateAction<SubPage>) => {
     if (typeof next === 'function') {
       setSubPageState(next);
       return;
@@ -267,14 +267,14 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     setSubPageState(next);
     const route = routeForSubPage(next);
     if (route) setHashPath(route);
-  }
+  }, []);
 
   function showMessage(text: string) {
     setMessage(text);
     window.setTimeout(() => setMessage(null), 3000);
   }
 
-  async function runForgeAction(action: () => Promise<void>, fallback: string, refresh = true) {
+  const runForgeAction = useCallback(async (action: () => Promise<void>, fallback: string, refresh = true) => {
     if (busy) return;
     setBusy(true);
     setMessage(null);
@@ -286,7 +286,36 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     } finally {
       setBusy(false);
     }
-  }
+  }, [busy, onRefresh]);
+
+  const handleForgeApplySet = useCallback((setId: string) => {
+    void runForgeAction(async () => {
+      await apiForgeApplySet(setId);
+    }, 'Ошибка применения сета');
+  }, [runForgeAction]);
+
+  const handleForgeCreateSet = useCallback((name?: string) => {
+    void runForgeAction(async () => {
+      const result = await apiForgeCreateSet([], name);
+      setSubPage({ type: 'forge_select', setId: result.set.id, selectedIds: [] });
+    }, 'Ошибка создания сета');
+  }, [runForgeAction, setSubPage]);
+
+  const handleForgeDeleteSet = useCallback((setId: string) => {
+    void runForgeAction(async () => {
+      if (!(await tmaConfirm('Удалить этот сет? Предметы останутся у тебя.', 'Удалить сет?'))) return;
+      await apiForgeDeleteSet(setId);
+    }, 'Ошибка удаления сета');
+  }, [runForgeAction]);
+
+  const handleForgeSelectItems = useCallback((setId: string) => {
+    const itemSet = gs.item_sets.find(s => s.id === setId);
+    setSubPage({ type: 'forge_select', setId, selectedIds: [...(itemSet?.item_ids ?? [])] });
+  }, [gs.item_sets, setSubPage]);
+
+  const handleForgeItemDetail = useCallback((itemId: string) => {
+    setSubPage({ type: 'forge_item_detail', itemId });
+  }, [setSubPage]);
 
   if (subPage?.type === 'expeditions') {
     return <ExpeditionPage onRefresh={onRefresh} onBack={() => setSubPage(null)} />;
@@ -595,22 +624,11 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
         <ForgeTab items={gs.items} sets={gs.item_sets} bonuses={gs.active_item_bonuses}
           busy={busy}
           message={message}
-          onApplySet={(setId) => void runForgeAction(async () => {
-            await apiForgeApplySet(setId);
-          }, 'Ошибка применения сета')}
-          onCreateSet={(name) => void runForgeAction(async () => {
-            const result = await apiForgeCreateSet([], name);
-            setSubPage({ type: 'forge_select', setId: result.set.id, selectedIds: [] });
-          }, 'Ошибка создания сета')}
-          onDeleteSet={(setId) => void runForgeAction(async () => {
-            if (!(await tmaConfirm('Удалить этот сет? Предметы останутся у тебя.', 'Удалить сет?'))) return;
-            await apiForgeDeleteSet(setId);
-          }, 'Ошибка удаления сета')}
-          onSelectItems={(setId) => {
-            const itemSet = gs.item_sets.find(s => s.id === setId);
-            setSubPage({ type: 'forge_select', setId, selectedIds: [...(itemSet?.item_ids ?? [])] });
-          }}
-          onItemDetail={(itemId) => setSubPage({ type: 'forge_item_detail', itemId })}
+          onApplySet={handleForgeApplySet}
+          onCreateSet={handleForgeCreateSet}
+          onDeleteSet={handleForgeDeleteSet}
+          onSelectItems={handleForgeSelectItems}
+          onItemDetail={handleForgeItemDetail}
         />
       )}
 

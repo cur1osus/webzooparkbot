@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { ActiveItemBonus, ForgeItem, ForgeSet } from '@/types';
 import { PROPERTY_ICON, PROPERTY_SHORT } from '@/data/itemProperties';
 import { fmt } from '@/utils/format';
@@ -28,17 +28,43 @@ const RARITY_COLOR: Record<string, string> = {
 const RARITY_LABEL: Record<string, string> = {
   common: 'Обычный', rare: 'Редкий', epic: 'Эпический', mythical: 'Мифический', legendary: 'Легендарный',
 };
+const INVENTORY_PAGE_SIZE = 60;
 
-export function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems, onItemDetail }: {
+const ForgeInventoryItem = memo(function ForgeInventoryItem({ item, onItemDetail }: {
+  item: ForgeItem;
+  onItemDetail: (id: string) => void;
+}) {
+  const color = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
+  return (
+    <button key={item.id} onClick={() => onItemDetail(item.id)} className="card flex items-center gap-3 text-left border-none cursor-pointer">
+      <span className="w-11 h-11 rounded-2xl grid place-items-center text-[25px] shrink-0" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>{forgeItemIcon(item)}</span>
+      <span className="flex-1 min-w-0">
+        <span className="flex items-center gap-[6px] min-w-0">
+          <span className="font-bold text-sm truncate">{item.name}</span>
+          {item.is_active && <span className="shrink-0 text-[10px] font-bold" style={{ color: 'var(--c-green)' }}>ON</span>}
+        </span>
+        <span className="block mt-[2px] text-xs text-tg-hint truncate">Ур. {item.level} · {itemBonusSummary(item)}</span>
+      </span>
+      <span className="text-[11px] px-[7px] py-[3px] rounded-full font-semibold shrink-0" style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}>
+        {RARITY_LABEL[item.rarity] ?? item.rarity}
+      </span>
+    </button>
+  );
+});
+
+export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems, onItemDetail }: {
   items: ForgeItem[]; sets: ForgeSet[]; bonuses: ActiveItemBonus[];
   busy: boolean; message: string | null;
   onApplySet: (id: string) => void; onCreateSet: (name?: string) => void; onDeleteSet: (id: string) => void;
   onSelectItems: (id: string) => void; onItemDetail: (id: string) => void;
 }) {
   const [newSetName, setNewSetName] = useState('');
-  const activeItems = items.filter(i => i.is_active);
-  const activeSet = sets.find(s => s.is_active) ?? null;
-  const orderedSets = [...sets].sort((a, b) => Number(b.is_active) - Number(a.is_active));
+  const [visibleItemCount, setVisibleItemCount] = useState(INVENTORY_PAGE_SIZE);
+  const activeItems = useMemo(() => items.filter(i => i.is_active), [items]);
+  const activeSet = useMemo(() => sets.find(s => s.is_active) ?? null, [sets]);
+  const orderedSets = useMemo(() => [...sets].sort((a, b) => Number(b.is_active) - Number(a.is_active)), [sets]);
+  const itemsById = useMemo(() => new Map(items.map(item => [item.id, item])), [items]);
+  const visibleItems = items.slice(0, visibleItemCount);
   // The effective, already-capped totals from the server — the numbers the game actually
   // applies. Summing per-item labels here would overshoot the caps and mislead the player.
   const bonusEntries = bonuses;
@@ -149,7 +175,9 @@ export function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCr
           </button>
         </div>
       ) : orderedSets.map(itemSet => {
-        const setItems = items.filter(i => itemSet.item_ids.includes(i.id));
+        const setItems = itemSet.item_ids
+          .map(itemId => itemsById.get(itemId))
+          .filter((item): item is ForgeItem => Boolean(item));
         return (
           <div key={itemSet.id} className="card flex flex-col gap-3" style={{
             border: itemSet.is_active ? '1px solid rgba(var(--c-blue-rgb),0.45)' : undefined,
@@ -200,27 +228,21 @@ export function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCr
           <p className="mt-2 mb-0 font-bold text-sm">Инвентарь пуст</p>
           <p className="mt-[4px] mb-0 text-xs text-tg-hint">Открой Магазин → Кузница и создай первый предмет.</p>
         </div>
-      ) : items.map(item => {
-        const color = RARITY_COLOR[item.rarity] ?? 'var(--tg-theme-hint-color)';
-        return (
-          <button key={item.id} onClick={() => onItemDetail(item.id)} className="card flex items-center gap-3 text-left border-none cursor-pointer">
-            <span className="w-11 h-11 rounded-2xl grid place-items-center text-[25px] shrink-0" style={{ background: `color-mix(in srgb, ${color} 12%, transparent)` }}>{forgeItemIcon(item)}</span>
-            <span className="flex-1 min-w-0">
-              <span className="flex items-center gap-[6px] min-w-0">
-                <span className="font-bold text-sm truncate">{item.name}</span>
-                {item.is_active && <span className="shrink-0 text-[10px] font-bold" style={{ color: 'var(--c-green)' }}>ON</span>}
-              </span>
-              <span className="block mt-[2px] text-xs text-tg-hint truncate">Ур. {item.level} · {itemBonusSummary(item)}</span>
-            </span>
-            <span className="text-[11px] px-[7px] py-[3px] rounded-full font-semibold shrink-0" style={{ background: `color-mix(in srgb, ${color} 13%, transparent)`, color }}>
-              {RARITY_LABEL[item.rarity] ?? item.rarity}
-            </span>
-          </button>
-        );
-      })}
+      ) : visibleItems.map(item => <ForgeInventoryItem key={item.id} item={item} onItemDetail={onItemDetail} />)}
+
+      {visibleItemCount < items.length && (
+        <button
+          type="button"
+          onClick={() => setVisibleItemCount(count => Math.min(count + INVENTORY_PAGE_SIZE, items.length))}
+          className="w-full rounded-2xl border-none py-3 text-[13px] font-extrabold cursor-pointer"
+          style={{ background: 'var(--surface-subtle)', color: 'var(--c-blue)' }}
+        >
+          Показать ещё {Math.min(INVENTORY_PAGE_SIZE, items.length - visibleItemCount)} из {items.length - visibleItemCount}
+        </button>
+      )}
     </div>
   );
-}
+});
 
 export function ItemSelectPage({ items, selectedIds, onSelect, onApply, onBack }: {
   items: ForgeItem[]; setId: string; selectedIds: string[];
