@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimalArt } from '@/components/AnimalArt';
 import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
@@ -197,7 +197,7 @@ function ParentSlot({ label, animal, onClick }: {
 const PICKER_ROW_HEIGHT = 96;
 const PICKER_OVERSCAN = 8;
 
-function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteBusyId, onClose }: {
+function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteOverrides, favoriteBusyIds, onClose }: {
   animals: BreedingAnimal[];
   tgId: number;
   exclude: number | null;
@@ -205,7 +205,8 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
   mateSpeciesCode: string | null;
   onPick: (a: BreedingAnimal) => void;
   onToggleFavorite: (animal: BreedingAnimal) => void;
-  favoriteBusyId: number | null;
+  favoriteOverrides: ReadonlyMap<number, boolean>;
+  favoriteBusyIds: ReadonlySet<number>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -224,9 +225,9 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
     }
     return breedable.filter(animal => animal.species_code === mateSpeciesCode);
   }, [animals, exclude, mateSpeciesCode]);
-  const sorted = useMemo(() => [...available].sort((a, b) => {
-      const favoriteOrder = Number(b.is_favorite) - Number(a.is_favorite);
-      if (favoriteOrder !== 0) return favoriteOrder;
+  // Keep the expensive sort independent from star clicks. A favorite change only needs
+  // to repartition this already-sorted array, not sort all 11k animals again.
+  const baseSorted = useMemo(() => [...available].sort((a, b) => {
       // Keep possible partners at the top after the first parent is chosen.
       // The picker still shows other species below them so the search remains useful.
       if (mateSpeciesCode) {
@@ -239,6 +240,15 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
       if (sort === 'reproduction') return BREED_TIER_INDEX[b.reproduction] - BREED_TIER_INDEX[a.reproduction] || b.income - a.income;
       return new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || b.income - a.income;
     }), [available, mateSpeciesCode, sort]);
+  const sorted = useMemo(() => {
+    const favorites: BreedingAnimal[] = [];
+    const regular: BreedingAnimal[] = [];
+    for (const animal of baseSorted) {
+      if (favoriteOverrides.get(animal.id) ?? animal.is_favorite) favorites.push(animal);
+      else regular.push(animal);
+    }
+    return favorites.length === 0 ? regular : favorites.concat(regular);
+  }, [baseSorted, favoriteOverrides]);
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
     return needle
@@ -318,6 +328,7 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
               {filtered.slice(visibleStart, visibleEnd).map((a, offset) => {
                 const index = visibleStart + offset;
                 const rarity = SPECIES_RARITY_META[a.species_rarity];
+                const isFavorite = favoriteOverrides.get(a.id) ?? a.is_favorite;
                 return (
                   <div key={a.id} className="absolute left-0 right-0" style={{ top: index * PICKER_ROW_HEIGHT, height: PICKER_ROW_HEIGHT, paddingBottom: 8 }}>
                     <div
@@ -333,8 +344,8 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
                       className="relative flex h-full items-center gap-3 px-3 pr-14 rounded-xl text-left w-full"
                       style={{
                         background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-                        border: a.is_favorite ? '1px solid #f3b53f' : '1px solid transparent',
-                        boxShadow: a.is_favorite ? '0 0 12px rgba(243, 181, 63, 0.22)' : 'none',
+                        border: isFavorite ? '1px solid #f3b53f' : '1px solid transparent',
+                        boxShadow: isFavorite ? '0 0 12px rgba(243, 181, 63, 0.22)' : 'none',
                         cursor: 'pointer',
                       }}
                     >
@@ -351,8 +362,9 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
                       </div>
                       <AnimalFavoriteButton
                         className="absolute right-2 top-1/2 -translate-y-1/2"
-                        isFavorite={a.is_favorite}
-                        busy={favoriteBusyId === a.id}
+                        isFavorite={isFavorite}
+                        busy={favoriteBusyIds.has(a.id)}
+                        disableWhileBusy={false}
                         onToggle={() => onToggleFavorite(a)}
                       />
                     </div>
@@ -370,7 +382,7 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
+export function LabPage({ gs, onRefresh, onPatchState }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void }) {
   const [animals, setAnimals]   = useState<BreedingAnimal[]>([]);
   const [loading, setLoading]   = useState(true);
   const [parent1, setParent1]   = useState<BreedingAnimal | null>(null);
@@ -379,7 +391,9 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   const [breeding, setBreeding] = useState(false);
   const [result, setResult]     = useState<BreedResult | null>(null);
   const [error, setError]       = useState<string | null>(null);
-  const [favoriteBusyId, setFavoriteBusyId] = useState<number | null>(null);
+  const [favoriteOverrides, setFavoriteOverrides] = useState<Map<number, boolean>>(() => new Map());
+  const [favoriteBusyIds, setFavoriteBusyIds] = useState<Set<number>>(() => new Set());
+  const favoriteRequests = useRef(new Map<number, { desired: boolean; previousOverride: boolean | undefined }>());
 
   const load = async () => {
     try {
@@ -395,18 +409,54 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
   useEffect(() => { void load(); }, []);
 
   async function toggleFavorite(animal: BreedingAnimal) {
-    if (favoriteBusyId !== null) return;
-    const next = !animal.is_favorite;
-    setAnimals(previous => previous.map(item => item.id === animal.id ? { ...item, is_favorite: next } : item));
-    setFavoriteBusyId(animal.id);
+    const request = favoriteRequests.current.get(animal.id);
+    const previousOverride = request?.previousOverride ?? favoriteOverrides.get(animal.id);
+    const current = request?.desired ?? (previousOverride ?? animal.is_favorite);
+    const next = !current;
+
+    // The picker is optimistic and O(1): do not copy the entire breeding list just to
+    // flip one boolean. Independent ids can be clicked while their requests are in flight;
+    // repeated clicks on one id update the queued target instead of being dropped.
+    setFavoriteOverrides(previous => new Map(previous).set(animal.id, next));
+    if (request) {
+      request.desired = next;
+      return;
+    }
+
+    const nextRequest = { desired: next, previousOverride };
+    favoriteRequests.current.set(animal.id, nextRequest);
+    setFavoriteBusyIds(previous => new Set(previous).add(animal.id));
     try {
-      await apiSetAnimalFavorite(animal.id, next);
-      onRefresh();
+      while (true) {
+        const result = await apiSetAnimalFavorite(animal.id, nextRequest.desired);
+        if (nextRequest.desired !== result.is_favorite) continue;
+
+        // Keep the already-loaded full zoo state in sync without re-fetching and parsing
+        // the whole game state after every star click. Defer this O(n) immutable patch so
+        // it can never sit on the interaction's critical path; the picker already has the
+        // authoritative optimistic value on screen.
+        window.setTimeout(() => {
+          onPatchState({
+            animals: gs.animals.map(item => item.id === animal.id ? { ...item, is_favorite: result.is_favorite } : item),
+          });
+        }, 0);
+        break;
+      }
     } catch (e) {
-      setAnimals(previous => previous.map(item => item.id === animal.id ? { ...item, is_favorite: animal.is_favorite } : item));
+      setFavoriteOverrides(previous => {
+        const nextOverrides = new Map(previous);
+        if (nextRequest.previousOverride === undefined) nextOverrides.delete(animal.id);
+        else nextOverrides.set(animal.id, nextRequest.previousOverride);
+        return nextOverrides;
+      });
       setError(e instanceof Error ? e.message : 'Не удалось изменить избранное');
     } finally {
-      setFavoriteBusyId(null);
+      favoriteRequests.current.delete(animal.id);
+      setFavoriteBusyIds(previous => {
+        const nextBusy = new Set(previous);
+        nextBusy.delete(animal.id);
+        return nextBusy;
+      });
     }
   }
 
@@ -599,7 +649,8 @@ export function LabPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => voi
             setPicking(null);
           }}
           onToggleFavorite={animal => void toggleFavorite(animal)}
-          favoriteBusyId={favoriteBusyId}
+          favoriteOverrides={favoriteOverrides}
+          favoriteBusyIds={favoriteBusyIds}
           onClose={() => setPicking(null)}
         />
       )}

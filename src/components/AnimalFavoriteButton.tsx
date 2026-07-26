@@ -1,6 +1,7 @@
 type AnimalFavoriteButtonProps = {
   isFavorite: boolean;
   busy?: boolean;
+  disableWhileBusy?: boolean;
   onToggle: () => void;
   className?: string;
 };
@@ -10,18 +11,18 @@ type AnimalFavoriteButtonProps = {
 const FAVORITE_GOLD = '#f3b53f';
 
 /** The same 44px touch target is used in the zoo grid and the breeding picker. */
-export function AnimalFavoriteButton({ isFavorite, busy = false, onToggle, className = '' }: AnimalFavoriteButtonProps) {
+export function AnimalFavoriteButton({ isFavorite, busy = false, disableWhileBusy = true, onToggle, className = '' }: AnimalFavoriteButtonProps) {
   return (
     <button
       type="button"
       aria-label={isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
       aria-pressed={isFavorite}
-      disabled={busy}
+      disabled={disableWhileBusy && busy}
       onClick={event => {
         event.stopPropagation();
         onToggle();
       }}
-      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border-none text-[21px] leading-none transition-transform active:scale-90 disabled:opacity-50 ${className}`}
+      className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl border-none text-[21px] leading-none transition-transform active:scale-90 disabled:opacity-50 ${busy ? 'opacity-70' : ''} ${className}`}
       style={{
         color: isFavorite ? FAVORITE_GOLD : 'var(--tg-theme-hint-color)',
         background: isFavorite ? 'rgba(243, 181, 63, 0.15)' : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',

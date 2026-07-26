@@ -404,7 +404,7 @@ export default function App() {
                 />
               )}
               {tab === 'lab' && (
-                <LabPage gs={displayState} onRefresh={reloadFromServer} />
+                <LabPage gs={displayState} onRefresh={reloadFromServer} onPatchState={patchState} />
               )}
               {tab === 'games' && (
                 <GamesPage onRefresh={reloadFromServer} />
