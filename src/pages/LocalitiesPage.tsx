@@ -1,7 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { GameState, Habitat, Locality, LocalityAnimal, LocalitiesInfo } from '@/types';
-import { apiGetLocalities, apiBuyLocality, apiAssignLocality, apiAssignMatchingLocality } from '@/api';
+import {
+  apiAssignLocality,
+  apiAssignMatchingLocality,
+  apiBuyLocality,
+  apiGetLocalities,
+  apiGetLocalityAnimalsPage,
+} from '@/api';
 import { fmt } from '@/utils/format';
 import { AnimalArt } from '@/components/AnimalArt';
 
@@ -14,387 +20,249 @@ const HABITAT_INFO: Record<Habitat, { emoji: string; name: string; color: string
 };
 
 const ALL_HABITATS: Habitat[] = ['desert', 'mountains', 'forest', 'fields', 'antarctica'];
+const PAGE_SIZE = 120;
+const BONUS_MULTIPLIER = 1.5;
 
-// A locality can hold well over a thousand animals. Mount them all at once and expanding a
-// card — or just rendering the homeless pool — freezes the tab for seconds. So a long list
-// is revealed a page at a time as the sentinel scrolls into view, exactly like the zoo grid.
-const LIST_INITIAL = 40;
-const LIST_STEP = 40;
-
-function WindowedList<T>({ items, render }: { items: T[]; render: (item: T) => ReactNode }) {
-  const [count, setCount] = useState(LIST_INITIAL);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => { setCount(LIST_INITIAL); }, [items]);
-
-  const hasMore = count < items.length;
-  useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel || !hasMore) return;
-    const root = sentinel.closest('.page-scroll-area') as HTMLElement | null;
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries.some(entry => entry.isIntersecting)) {
-          setCount(c => Math.min(c + LIST_STEP, items.length));
-        }
-      },
-      { root, rootMargin: '600px 0px' },
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [hasMore, items.length]);
-
-  return (
-    <>
-      {items.slice(0, count).map(render)}
-      {hasMore && <div ref={sentinelRef} aria-hidden className="h-px w-full" />}
-    </>
-  );
+function mergeUnique(current: LocalityAnimal[], incoming: LocalityAnimal[]) {
+  const known = new Set(current.map(animal => animal.id));
+  return current.concat(incoming.filter(animal => !known.has(animal.id)));
 }
-
-// ─── Optimistic regrouping ────────────────────────────────────────────────────
-// Assigning happens server-side, but the response doesn't carry the regrouped animals, so
-// the tab used to re-download the whole (huge) localities payload — and `/api/me` on top —
-// before anything moved on screen, which is the couple-second wait on "Распределить сразу".
-// The move is deterministic and we already hold every animal client-side, so we mirror it
-// locally for an instant update and reconcile with the server's exact numbers in the
-// background. The habitat multiplier the server applies is ×1.5 (see HABITAT_MATCH_BONUS).
-const BONUS_MULT = 1.5;
-const withBonus = (income: number) => Math.round(income * BONUS_MULT);
-const withoutBonus = (income: number) => Math.round(income / BONUS_MULT);
-
-/** Every animal whose habitat matches the locality, pulled home from the pool and from any
- *  other locality it was misplaced in — the same set `matchingCountFor` counts. */
-function regroupMatching(info: LocalitiesInfo, localityId: number): LocalitiesInfo {
-  const target = info.localities.find(l => l.id === localityId);
-  if (!target) return info;
-  const moves: LocalityAnimal[] = [];
-  const takeMatching = (animal: LocalityAnimal): boolean => {
-    if (animal.habitat !== target.habitat) return true;
-    moves.push(animal);
-    return false;
-  };
-
-  const unassigned = info.unassigned.filter(takeMatching);
-  const localities = info.localities.map(loc => {
-    if (loc.id === localityId) return loc;
-    const kept = loc.animals.filter(takeMatching);
-    return kept.length === loc.animals.length ? loc : { ...loc, animals: kept };
-  });
-  // Every mover was standing outside its habitat, so it earns the ×1.5 bonus now.
-  const homed = moves.map(a => (a.habitat_bonus ? a : { ...a, habitat_bonus: true, income: withBonus(a.income) }));
-  return {
-    ...info,
-    unassigned,
-    localities: localities.map(loc =>
-      loc.id === localityId ? { ...loc, animals: [...loc.animals, ...homed] } : loc,
-    ),
-  };
-}
-
-/** Move one animal from the homeless pool into a locality. */
-function regroupAssign(info: LocalitiesInfo, animalId: number, localityId: number): LocalitiesInfo {
-  const animal = info.unassigned.find(a => a.id === animalId);
-  const target = info.localities.find(l => l.id === localityId);
-  if (!animal || !target) return info;
-  const matched = animal.habitat === target.habitat;
-  const moved = matched ? { ...animal, habitat_bonus: true, income: withBonus(animal.income) } : animal;
-  return {
-    ...info,
-    unassigned: info.unassigned.filter(a => a.id !== animalId),
-    localities: info.localities.map(loc =>
-      loc.id === localityId ? { ...loc, animals: [...loc.animals, moved] } : loc,
-    ),
-  };
-}
-
-/** Pull one animal out of whichever locality holds it, back into the homeless pool. */
-function regroupUnassign(info: LocalitiesInfo, animalId: number): LocalitiesInfo {
-  let removed: LocalityAnimal | undefined;
-  const localities = info.localities.map(loc => {
-    if (removed || !loc.animals.some(a => a.id === animalId)) return loc;
-    removed = loc.animals.find(a => a.id === animalId);
-    return { ...loc, animals: loc.animals.filter(a => a.id !== animalId) };
-  });
-  if (!removed) return info;
-  const back = removed.habitat_bonus
-    ? { ...removed, habitat_bonus: false, income: withoutBonus(removed.income) }
-    : removed;
-  return { ...info, localities, unassigned: [...info.unassigned, back] };
-}
-
-// ─── Animal chip inside a locality card ───────────────────────────────────────
 
 function AnimalChip({ animal, onRemove }: { animal: LocalityAnimal; onRemove: () => void }) {
-  const hab = HABITAT_INFO[animal.habitat];
+  const habitat = HABITAT_INFO[animal.habitat];
   return (
-    <div
-      className="flex items-center gap-2 px-3 py-[7px] rounded-xl"
-      style={{ background: `${hab.color}12`, border: `1px solid ${hab.color}25` }}
-    >
+    <div className="flex items-center gap-2 px-3 py-[7px] rounded-xl" style={{ background: `${habitat.color}12`, border: `1px solid ${habitat.color}25` }}>
       <AnimalArt animal={animal} size={32} className="shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="m-0 text-[12px] font-bold truncate">
-          {animal.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {animal.species_name}</span>
+          {animal.name} <span className="font-normal text-tg-hint">· {animal.species_name}</span>
         </p>
-        {/* income already includes the ×1.5 habitat bonus when it applies */}
         <div className="flex items-center gap-[6px]">
-          <span className="text-[11px] font-bold" style={{ color: 'var(--c-green)' }}>
-            ₽{fmt(animal.income)}/мин
-          </span>
-          {animal.habitat_bonus && (
-            <span className="text-[10px] font-bold" style={{ color: 'var(--c-gold)' }}>
-              (бонус среды)
-            </span>
-          )}
+          <span className="text-[11px] font-bold text-[var(--c-green)]">₽{fmt(animal.income)}/мин</span>
+          {animal.habitat_bonus && <span className="text-[10px] font-bold text-[var(--c-gold)]">(бонус среды)</span>}
         </div>
       </div>
-      <button
-        onClick={onRemove}
-        className="w-6 h-6 rounded-full border-none grid place-items-center cursor-pointer text-[13px]"
-        style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red)' }}
-      >
-        ×
-      </button>
+      <button onClick={onRemove} aria-label={`Убрать ${animal.name} из местности`} className="w-6 h-6 rounded-full border-none grid place-items-center cursor-pointer text-[13px]" style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red)' }}>×</button>
     </div>
   );
 }
 
-/** How many animals the "Распределить сразу" button would pull into this locality.
- *
- * Not just the homeless ones. An animal standing in another habitat earns two thirds of
- * what it would here, and the endpoint moves those too — so the count has to match, or the
- * button reports less than it does. */
-function matchingCountFor(info: LocalitiesInfo, locality: Locality): number {
-  const elsewhere = info.localities
-    .filter(other => other.id !== locality.id)
-    .flatMap(other => other.animals);
-  return [...info.unassigned, ...elsewhere].filter(a => a.habitat === locality.habitat).length;
-}
-
-// ─── Locality card ─────────────────────────────────────────────────────────────
-
-function LocalityCard({ locality, unassigned, matchingCount, onAdd, onAssignMatching, assigningMatching, onRemove }: {
+function LocalityCard({
+  locality,
+  unassignedCount,
+  animals,
+  hasMore,
+  loadingAnimals,
+  assigningMatching,
+  onOpen,
+  onLoadMore,
+  onAdd,
+  onAssignMatching,
+  onRemove,
+}: {
   locality: Locality;
-  unassigned: LocalityAnimal[];
+  unassignedCount: number;
+  animals: LocalityAnimal[];
+  hasMore: boolean;
+  loadingAnimals: boolean;
+  assigningMatching: boolean;
+  onOpen: () => void;
+  onLoadMore: () => void;
   onAdd: () => void;
   onAssignMatching: () => void;
-  assigningMatching: boolean;
-  matchingCount: number;
   onRemove: (id: number) => void;
 }) {
-  const hab = HABITAT_INFO[locality.habitat];
-  const totalIncome = locality.animals.reduce((s, a) => s + a.income, 0);
+  const habitat = HABITAT_INFO[locality.habitat];
+  const hasAnimals = locality.animals_count > 0;
+  const [collapsed, setCollapsed] = useState(true);
 
-  const canAdd = unassigned.length > 0;
-  const hasAnimals = locality.animals.length > 0;
-  const [collapsed, setCollapsed] = useState(hasAnimals);
+  const toggle = () => {
+    if (!hasAnimals) return;
+    const opening = collapsed;
+    setCollapsed(!collapsed);
+    if (opening && animals.length === 0) onOpen();
+  };
+
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: 'rgba(26,29,43,0.9)',
-        border: `1px solid color-mix(in srgb, ${hab.color} 30%, transparent)`,
-      }}
-    >
-      {/* Header — a full-width horizontal banner tinted with the habitat's own colour. Tapping
-          it collapses/expands the animal list, so long localities can be folded away. The
-          "+ добавить" action lives in its own nested button. Colours are CSS variables, so alpha
-          comes from color-mix (a `${var}55` hex suffix would be invalid). */}
-      <div
-        onClick={hasAnimals ? () => setCollapsed(c => !c) : undefined}
-        className="w-full flex items-center gap-3 px-4 py-[16px] text-left"
-        style={{
-          background: `linear-gradient(90deg, color-mix(in srgb, ${hab.color} 48%, transparent) 0%, color-mix(in srgb, ${hab.color} 20%, transparent) 55%, transparent 100%)`,
-          cursor: hasAnimals ? 'pointer' : 'default',
-        }}
-      >
-        {hasAnimals && (
-          <span
-            className="text-[12px] shrink-0 transition-transform"
-            style={{ color: hab.color, transform: collapsed ? 'rotate(-90deg)' : 'none' }}
-          >
-            ▾
-          </span>
-        )}
-        <div
-          className="w-11 h-11 rounded-xl grid place-items-center text-[24px] shrink-0"
-          style={{ background: `color-mix(in srgb, ${hab.color} 24%, transparent)`, border: `1px solid color-mix(in srgb, ${hab.color} 42%, transparent)` }}
-        >
-          {hab.emoji}
-        </div>
+    <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(26,29,43,0.9)', border: `1px solid color-mix(in srgb, ${habitat.color} 30%, transparent)` }}>
+      <div onClick={toggle} className="w-full flex items-center gap-3 px-4 py-4 text-left" style={{ background: `linear-gradient(90deg, color-mix(in srgb, ${habitat.color} 48%, transparent) 0%, color-mix(in srgb, ${habitat.color} 20%, transparent) 55%, transparent 100%)`, cursor: hasAnimals ? 'pointer' : 'default' }}>
+        {hasAnimals && <span className="text-[12px] shrink-0 transition-transform" style={{ color: habitat.color, transform: collapsed ? 'rotate(-90deg)' : 'none' }}>▾</span>}
+        <div className="w-11 h-11 rounded-xl grid place-items-center text-[24px] shrink-0" style={{ background: `color-mix(in srgb, ${habitat.color} 24%, transparent)`, border: `1px solid color-mix(in srgb, ${habitat.color} 42%, transparent)` }}>{habitat.emoji}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-[7px]">
-            <p className="m-0 font-extrabold text-[15px]">{hab.name}</p>
-            <span className="text-[13px] font-black" style={{ color: hab.color }}>{locality.animals.length}</span>
+            <p className="m-0 font-extrabold text-[15px]">{habitat.name}</p>
+            <span className="text-[13px] font-black" style={{ color: habitat.color }}>{locality.animals_count}</span>
           </div>
-          {totalIncome > 0 ? (
-            <p className="m-0 text-[11px]" style={{ color: 'var(--c-green)' }}>
-              ₽{fmt(totalIncome)}/мин суммарно
-            </p>
-          ) : (
-            <p className="m-0 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>Пусто</p>
-          )}
+          {locality.income_rub_per_min > 0
+            ? <p className="m-0 text-[11px] text-[var(--c-green)]">₽{fmt(locality.income_rub_per_min)}/мин суммарно</p>
+            : <p className="m-0 text-[11px] text-tg-hint">Пусто</p>}
         </div>
-        {canAdd && (
-          <button
-            onClick={e => { e.stopPropagation(); onAdd(); }}
-            className="text-[13px] font-bold shrink-0 flex items-center gap-1 border-none bg-transparent cursor-pointer px-1"
-            style={{ color: hab.color }}
-          >
-            + добавить
-          </button>
+        {unassignedCount > 0 && (
+          <button onClick={event => { event.stopPropagation(); onAdd(); }} className="text-[13px] font-bold shrink-0 border-none bg-transparent cursor-pointer px-1" style={{ color: habitat.color }}>+ добавить</button>
         )}
       </div>
 
-      {/* Animals */}
       {hasAnimals && !collapsed && (
         <div className="flex flex-col gap-[6px] px-4 py-3">
-          <WindowedList
-            items={locality.animals}
-            render={a => <AnimalChip key={a.id} animal={a} onRemove={() => onRemove(a.id)} />}
-          />
+          {loadingAnimals && animals.length === 0 ? <div className="flex justify-center py-3"><div className="spinner" /></div> : animals.map(animal => (
+            <AnimalChip key={animal.id} animal={animal} onRemove={() => onRemove(animal.id)} />
+          ))}
+          {hasMore && (
+            <button type="button" onClick={onLoadMore} disabled={loadingAnimals} className="mt-1 w-full rounded-xl border-none py-2 text-[11px] font-bold cursor-pointer disabled:opacity-50" style={{ background: 'var(--surface-subtle)', color: habitat.color }}>
+              {loadingAnimals ? 'Загружаем…' : `Показать ещё · ${Math.max(0, locality.animals_count - animals.length)}`}
+            </button>
+          )}
         </div>
       )}
 
-      {matchingCount > 0 && (
+      {locality.matching_count > 0 && (
         <div className="px-4 pt-3 pb-3">
-          <button
-            onClick={onAssignMatching}
-            disabled={assigningMatching}
-            data-testid={`assign-matching-${locality.habitat}`}
-            className="w-full min-h-11 rounded-xl border-none cursor-pointer font-extrabold text-[12px] disabled:opacity-55 disabled:cursor-wait"
-            style={{ background: `color-mix(in srgb, ${hab.color} 16%, transparent)`, color: hab.color, border: `1px solid color-mix(in srgb, ${hab.color} 30%, transparent)` }}
-          >
-            {assigningMatching ? 'Распределяем...' : `Распределить сразу · ${matchingCount}`}
+          <button onClick={onAssignMatching} disabled={assigningMatching} data-testid={`assign-matching-${locality.habitat}`} className="w-full min-h-11 rounded-xl border-none cursor-pointer font-extrabold text-[12px] disabled:opacity-55 disabled:cursor-wait" style={{ background: `color-mix(in srgb, ${habitat.color} 16%, transparent)`, color: habitat.color, border: `1px solid color-mix(in srgb, ${habitat.color} 30%, transparent)` }}>
+            {assigningMatching ? 'Распределяем...' : `Распределить сразу · ${locality.matching_count}`}
           </button>
         </div>
       )}
 
-      {locality.animals.length === 0 && !canAdd && (
-        <p className="m-0 px-4 py-3 text-center text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Нет свободных животных
-        </p>
-      )}
+      {!hasAnimals && unassignedCount === 0 && <p className="m-0 px-4 py-3 text-center text-[12px] text-tg-hint">Нет свободных животных</p>}
     </div>
   );
 }
 
-// ─── Animal picker bottom sheet ────────────────────────────────────────────────
-
-function AnimalPicker({ animals, localityHabitat, onPick, onClose }: {
-  animals: LocalityAnimal[];
+function AnimalPicker({ localityHabitat, onPick, onClose }: {
   localityHabitat: Habitat;
-  onPick: (id: number) => void;
+  onPick: (animal: LocalityAnimal) => void;
   onClose: () => void;
 }) {
-  const sorted = [...animals].sort(
-    (a, b) => (b.habitat === localityHabitat ? 1 : 0) - (a.habitat === localityHabitat ? 1 : 0)
-  );
+  const [query, setQuery] = useState('');
+  const [animals, setAnimals] = useState<LocalityAnimal[]>([]);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const requestSeq = useRef(0);
+
+  useEffect(() => {
+    const seq = ++requestSeq.current;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      void apiGetLocalityAnimalsPage({ limit: PAGE_SIZE, query: query.trim(), preferredHabitat: localityHabitat })
+        .then(result => {
+          if (seq !== requestSeq.current) return;
+          setAnimals(result.animals);
+          setNextOffset(result.next_offset);
+        })
+        .finally(() => { if (seq === requestSeq.current) setLoading(false); });
+    }, 140);
+    return () => window.clearTimeout(timer);
+  }, [localityHabitat, query]);
+
+  const loadMore = async () => {
+    if (loading || nextOffset === null) return;
+    setLoading(true);
+    try {
+      const result = await apiGetLocalityAnimalsPage({ offset: nextOffset, limit: PAGE_SIZE, query: query.trim(), preferredHabitat: localityHabitat });
+      setAnimals(current => mergeUnique(current, result.animals));
+      setNextOffset(result.next_offset);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return createPortal(
-    <div
-      className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[70vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
+    <div className="modal-backdrop fixed inset-0 z-[300] flex items-end justify-center" onClick={onClose}>
+      <div className="sheet-panel w-full max-w-[480px] rounded-t-3xl p-4 flex flex-col gap-3 max-h-[76vh] overflow-y-auto" onClick={event => event.stopPropagation()}>
         <div className="flex items-center justify-between">
           <p className="m-0 font-extrabold text-[15px]">Выбери животное</p>
-          <button
-            onClick={onClose}
-            aria-label="Закрыть"
-            className="tap-target -mr-2 border-none bg-transparent text-[18px] cursor-pointer"
-            style={{ color: 'var(--tg-theme-hint-color)' }}
-          >
-            ✕
-          </button>
+          <button onClick={onClose} aria-label="Закрыть" className="tap-target -mr-2 border-none bg-transparent text-[18px] cursor-pointer text-tg-hint">✕</button>
         </div>
-
-        {sorted.length === 0 ? (
-          <p className="text-center py-4 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-            Нет свободных животных
-          </p>
-        ) : sorted.map(a => {
-          const hab = HABITAT_INFO[a.habitat];
-          const isMatch = a.habitat === localityHabitat;
+        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Поиск по имени или виду" className="w-full rounded-xl border-none px-3 py-2.5 text-[13px] bg-[var(--surface-subtle)] text-tg-text outline-none" />
+        {loading && animals.length === 0 ? <div className="flex justify-center py-4"><div className="spinner" /></div> : animals.length === 0 ? (
+          <p className="text-center py-4 text-[13px] text-tg-hint">Нет свободных животных</p>
+        ) : animals.map(animal => {
+          const habitat = HABITAT_INFO[animal.habitat];
+          const isMatch = animal.habitat === localityHabitat;
           return (
-            <button
-              key={a.id}
-              onClick={() => onPick(a.id)}
-              className="flex items-center gap-3 px-3 py-[10px] rounded-xl border-none cursor-pointer text-left w-full"
-              style={{
-                background: isMatch
-                  ? `${hab.color}18`
-                  : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)',
-                border: `1px solid ${isMatch ? hab.color + '35' : 'transparent'}`,
-              }}
-            >
-              <AnimalArt animal={a} size={36} className="shrink-0" />
+            <button key={animal.id} onClick={() => onPick(animal)} className="flex items-center gap-3 px-3 py-[10px] rounded-xl border-none cursor-pointer text-left w-full" style={{ background: isMatch ? `${habitat.color}18` : 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)', border: `1px solid ${isMatch ? habitat.color + '35' : 'transparent'}` }}>
+              <AnimalArt animal={animal} size={36} className="shrink-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-[13px] font-bold truncate block">
-                  {a.name} <span className="font-normal" style={{ color: 'var(--tg-theme-hint-color)' }}>· {a.species_name}</span>
-                </span>
-                <span className="text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {/* Base income, and where the habitat matches, the ×1.5 result too */}
-                  ₽{fmt(a.income)}/мин
-                  {isMatch && (
-                    <span style={{ color: 'var(--c-gold)' }}> → ₽{fmt(Math.round(a.income * 1.5))} с бонусом среды</span>
-                  )}
-                </span>
+                <span className="text-[13px] font-bold truncate block">{animal.name} <span className="font-normal text-tg-hint">· {animal.species_name}</span></span>
+                <span className="text-[11px] text-tg-hint">₽{fmt(animal.income)}/мин{isMatch && <span className="text-[var(--c-gold)]"> → ₽{fmt(Math.round(animal.income * BONUS_MULTIPLIER))} с бонусом</span>}</span>
               </div>
             </button>
           );
         })}
+        {nextOffset !== null && <button type="button" onClick={() => void loadMore()} disabled={loading} className="w-full rounded-xl border-none py-2.5 text-[12px] font-bold cursor-pointer disabled:opacity-50 bg-[var(--surface-subtle)] text-tg-hint">{loading ? 'Загружаем…' : 'Показать ещё'}</button>}
       </div>
     </div>,
     document.body,
   );
 }
 
-// ─── Main page ─────────────────────────────────────────────────────────────────
-
 export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: () => void }) {
-  const [info, setInfo]           = useState<LocalitiesInfo | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [buying, setBuying]       = useState(false);
-  const [selHabitat, setSelHab]   = useState<Habitat | null>(null);
+  const [info, setInfo] = useState<LocalitiesInfo | null>(null);
+  const [bucketAnimals, setBucketAnimals] = useState<Record<number, LocalityAnimal[]>>({});
+  const [bucketNext, setBucketNext] = useState<Record<number, number | null>>({});
+  const [unassignedAnimals, setUnassignedAnimals] = useState<LocalityAnimal[]>([]);
+  const [unassignedNext, setUnassignedNext] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [buying, setBuying] = useState(false);
+  const [selHabitat, setSelHab] = useState<Habitat | null>(null);
   const [assigningTo, setAssigning] = useState<{ localityId: number; habitat: Habitat } | null>(null);
-  // Each locality has its own in-flight request. A single global lock made the next
-  // buttons ignore clicks while the previous 11k-animal income recalculation was running.
-  const [assigningMatchingIds, setAssigningMatchingIds] = useState<ReadonlySet<number>>(
-    () => new Set(),
-  );
+  const [loadingBuckets, setLoadingBuckets] = useState<ReadonlySet<number>>(() => new Set());
+  const loadingBucketsRef = useRef(new Set<number>());
+  const [assigningMatchingIds, setAssigningMatchingIds] = useState<ReadonlySet<number>>(() => new Set());
   const assigningMatchingIdsRef = useRef(new Set<number>());
+  const summarySeq = useRef(0);
 
-  // Bumped by every optimistic mutation. A background reconcile only writes its result if no
-  // newer mutation has landed since it started, so a slow refetch can't clobber fresher state.
-  const mutationSeq = useRef(0);
-  const matchingInFlight = useRef(0);
+  const refreshSummary = useCallback(async () => {
+    const seq = ++summarySeq.current;
+    const fresh = await apiGetLocalities();
+    if (seq === summarySeq.current) setInfo(fresh);
+    return fresh;
+  }, []);
 
-  const load = async () => {
+  const loadInitial = useCallback(async () => {
     try {
-      setInfo(await apiGetLocalities());
-    } catch (e) {
-      setError((e as Error).message);
+      setError(null);
+      const [summary, unassigned] = await Promise.all([
+        apiGetLocalities(),
+        apiGetLocalityAnimalsPage({ limit: PAGE_SIZE }),
+      ]);
+      setInfo(summary);
+      setUnassignedAnimals(unassigned.animals);
+      setUnassignedNext(unassigned.next_offset);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось загрузить местности');
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { void loadInitial(); }, [loadInitial]);
+
+  const loadBucket = async (localityId: number) => {
+    if (loadingBucketsRef.current.has(localityId)) return;
+    const current = bucketAnimals[localityId] ?? [];
+    const knownNext = bucketNext[localityId];
+    if (current.length > 0 && knownNext === null) return;
+    loadingBucketsRef.current.add(localityId);
+    setLoadingBuckets(previous => new Set(previous).add(localityId));
+    try {
+      const result = await apiGetLocalityAnimalsPage({ localityId, offset: current.length, limit: PAGE_SIZE });
+      setBucketAnimals(previous => ({ ...previous, [localityId]: mergeUnique(previous[localityId] ?? [], result.animals) }));
+      setBucketNext(previous => ({ ...previous, [localityId]: result.next_offset }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось загрузить животных');
+    } finally {
+      loadingBucketsRef.current.delete(localityId);
+      setLoadingBuckets(previous => { const next = new Set(previous); next.delete(localityId); return next; });
+    }
   };
 
-  useEffect(() => { void load(); }, []);
-
-  /** Pull the server's exact numbers in after an optimistic move, unless superseded. */
-  const reconcile = async (seq: number) => {
-    try {
-      const fresh = await apiGetLocalities();
-      if (seq === mutationSeq.current) setInfo(fresh);
-    } catch {
-      // Keep the optimistic state; the next load will correct it.
-    }
+  const loadMoreUnassigned = async () => {
+    if (unassignedNext === null) return;
+    const result = await apiGetLocalityAnimalsPage({ offset: unassignedNext, limit: PAGE_SIZE });
+    setUnassignedAnimals(current => mergeUnique(current, result.animals));
+    setUnassignedNext(result.next_offset);
   };
 
   const handleBuy = async () => {
@@ -404,218 +272,124 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
     try {
       await apiBuyLocality(selHabitat);
       setSelHab(null);
-      await load();
+      await refreshSummary();
       onRefresh();
-    } catch (e) {
-      setError((e as Error).message);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось купить местность');
     } finally {
       setBuying(false);
     }
   };
 
-  const handleAssign = async (animalId: number, localityId: number) => {
+  const handleAssign = async (animal: LocalityAnimal, localityId: number) => {
     setAssigning(null);
-    const seq = ++mutationSeq.current;
-    setInfo(prev => (prev ? regroupAssign(prev, animalId, localityId) : prev));
+    const locality = info?.localities.find(item => item.id === localityId);
+    const moved = locality && animal.habitat === locality.habitat
+      ? { ...animal, habitat_bonus: true, income: Math.round(animal.income * BONUS_MULTIPLIER) }
+      : animal;
+    setUnassignedAnimals(current => current.filter(item => item.id !== animal.id));
+    setBucketAnimals(current => ({ ...current, [localityId]: mergeUnique(current[localityId] ?? [], [moved]) }));
     try {
-      await apiAssignLocality(animalId, localityId);
+      await apiAssignLocality(animal.id, localityId);
+      await refreshSummary();
       onRefresh();
-      void reconcile(seq);
-    } catch (e) {
-      setError((e as Error).message);
-      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось распределить животное');
+      await loadInitial();
     }
   };
 
-  const handleUnassign = async (animalId: number) => {
-    const seq = ++mutationSeq.current;
-    setInfo(prev => (prev ? regroupUnassign(prev, animalId) : prev));
+  const handleUnassign = async (animalId: number, localityId: number) => {
+    const animal = (bucketAnimals[localityId] ?? []).find(item => item.id === animalId);
+    if (animal) {
+      setBucketAnimals(current => ({ ...current, [localityId]: (current[localityId] ?? []).filter(item => item.id !== animalId) }));
+      const unassigned = animal.habitat_bonus
+        ? { ...animal, habitat_bonus: false, income: Math.round(animal.income / BONUS_MULTIPLIER) }
+        : animal;
+      setUnassignedAnimals(current => mergeUnique(current, [unassigned]));
+    }
     try {
       await apiAssignLocality(animalId, null);
+      await refreshSummary();
       onRefresh();
-      void reconcile(seq);
-    } catch (e) {
-      setError((e as Error).message);
-      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось убрать животное');
+      await loadInitial();
     }
   };
 
-  const handleAssignMatching = async (localityId: number) => {
-    if (assigningMatchingIdsRef.current.has(localityId)) return;
-    assigningMatchingIdsRef.current.add(localityId);
-    setError(null);
-    ++mutationSeq.current;
-    setInfo(prev => (prev ? regroupMatching(prev, localityId) : prev));
-    setAssigningMatchingIds(prev => {
-      const next = new Set(prev);
-      next.add(localityId);
+  const handleAssignMatching = async (locality: Locality) => {
+    if (assigningMatchingIdsRef.current.has(locality.id)) return;
+    assigningMatchingIdsRef.current.add(locality.id);
+    setAssigningMatchingIds(previous => new Set(previous).add(locality.id));
+    setInfo(current => current ? { ...current, localities: current.localities.map(item => item.id === locality.id ? { ...item, matching_count: 0 } : item) } : current);
+    setUnassignedAnimals(current => current.filter(animal => animal.habitat !== locality.habitat));
+    setBucketAnimals(current => {
+      const next = { ...current };
+      const moved: LocalityAnimal[] = [];
+      for (const [key, animals] of Object.entries(current)) {
+        const id = Number(key);
+        if (id === locality.id) continue;
+        moved.push(...animals.filter(animal => animal.habitat === locality.habitat));
+        next[id] = animals.filter(animal => animal.habitat !== locality.habitat);
+      }
+      const fromUnassigned = unassignedAnimals.filter(animal => animal.habitat === locality.habitat);
+      next[locality.id] = mergeUnique(next[locality.id] ?? [], [...moved, ...fromUnassigned].map(animal => ({ ...animal, habitat_bonus: true, income: animal.habitat_bonus ? animal.income : Math.round(animal.income * BONUS_MULTIPLIER) })));
       return next;
     });
-    matchingInFlight.current += 1;
     try {
-      await apiAssignMatchingLocality(localityId);
-    } catch (e) {
-      setError((e as Error).message);
+      await apiAssignMatchingLocality(locality.id);
+      await refreshSummary();
+      onRefresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Не удалось распределить животных');
+      await loadInitial();
     } finally {
-      assigningMatchingIdsRef.current.delete(localityId);
-      setAssigningMatchingIds(prev => {
-        const next = new Set(prev);
-        next.delete(localityId);
-        return next;
-      });
-      matchingInFlight.current -= 1;
-      if (matchingInFlight.current === 0) {
-        onRefresh();
-        void reconcile(mutationSeq.current);
-      }
+      assigningMatchingIdsRef.current.delete(locality.id);
+      setAssigningMatchingIds(previous => { const next = new Set(previous); next.delete(locality.id); return next; });
     }
   };
 
   return (
     <div className="px-[14px] pt-4 pb-4 flex flex-col gap-4">
+      <div><p className="m-0 mb-[2px] font-extrabold text-[16px]">🌍 Местности</p><p className="m-0 text-[12px] text-tg-hint">Совпадение среды животного и местности даёт ×1.5 к доходу</p></div>
+      <span className="self-start px-3 py-[5px] rounded-[20px] text-[13px] font-bold" style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.25)' }}>₽ {fmt(gs.rub)}</span>
+      {error && <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}>{error}</div>}
 
-      {/* Header */}
-      <div>
-        <p className="m-0 mb-[2px] font-extrabold text-[16px]">🌍 Местности</p>
-        <p className="m-0 text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-          Совпадение среды животного и местности даёт ×1.5 к доходу
-        </p>
-      </div>
+      {loading ? <div className="flex justify-center py-8"><div className="spinner" /></div> : info ? <>
+        {info.localities.map(locality => (
+          <LocalityCard
+            key={locality.id}
+            locality={locality}
+            unassignedCount={info.unassigned_count}
+            animals={bucketAnimals[locality.id] ?? []}
+            hasMore={bucketNext[locality.id] !== null && (bucketAnimals[locality.id]?.length ?? 0) < locality.animals_count}
+            loadingAnimals={loadingBuckets.has(locality.id)}
+            assigningMatching={assigningMatchingIds.has(locality.id)}
+            onOpen={() => void loadBucket(locality.id)}
+            onLoadMore={() => void loadBucket(locality.id)}
+            onAdd={() => setAssigning({ localityId: locality.id, habitat: locality.habitat })}
+            onAssignMatching={() => void handleAssignMatching(locality)}
+            onRemove={id => void handleUnassign(id, locality.id)}
+          />
+        ))}
 
-      {/* Balance */}
-      <span
-        className="self-start px-3 py-[5px] rounded-[20px] text-[13px] font-bold"
-        style={{ background: 'rgba(var(--c-green-rgb),0.12)', color: 'var(--c-green)', border: '1px solid rgba(var(--c-green-rgb),0.25)' }}
-      >
-        ₽ {fmt(gs.rub)}
-      </span>
+        {info.unassigned_count > 0 && <div>
+          <p className="m-0 mb-2 font-bold text-[13px]">Без местности <span className="ml-2 font-normal text-[12px] text-tg-hint">{info.unassigned_count} шт. — без бонуса ×1.5</span></p>
+          <div className="rounded-2xl p-3 flex flex-col gap-[6px]" style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)' }}>
+            {unassignedAnimals.map(animal => <div key={animal.id} className="flex items-center gap-2 text-[12px]"><AnimalArt animal={animal} size={24} className="shrink-0" /><span className="font-semibold truncate">{animal.name}</span><span className="text-[10px] truncate text-tg-hint">{animal.species_name} {HABITAT_INFO[animal.habitat].emoji}</span><span className="ml-auto font-bold shrink-0 text-tg-hint">₽{fmt(animal.income)}/мин</span></div>)}
+            {unassignedNext !== null && <button type="button" onClick={() => void loadMoreUnassigned()} className="w-full rounded-xl border-none py-2 text-[11px] font-bold cursor-pointer bg-[var(--surface-subtle)] text-tg-hint">Показать ещё · {Math.max(0, info.unassigned_count - unassignedAnimals.length)}</button>}
+          </div>
+        </div>}
 
-      {error && (
-        <div
-          className="rounded-xl px-4 py-3 text-sm"
-          style={{ background: 'rgba(var(--c-red-rgb),0.1)', border: '1px solid rgba(var(--c-red-rgb),0.25)', color: 'var(--c-red)' }}
-        >
-          {error}
-        </div>
-      )}
+        {info.next_price !== null ? <div className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}>
+          <div className="flex items-center gap-2"><p className="m-0 font-extrabold text-[14px] flex-1">🔓 Открыть местность</p><span className="text-[13px] font-bold text-tg-hint">{info.next_price === 0 ? 'Бесплатно' : `₽${fmt(info.next_price)}`}</span></div>
+          <div className="grid grid-cols-5 gap-[6px]">{ALL_HABITATS.map(habitatCode => { const taken = info.habitats_taken.includes(habitatCode); const selected = selHabitat === habitatCode; const habitat = HABITAT_INFO[habitatCode]; return <button key={habitatCode} onClick={() => !taken && setSelHab(selected ? null : habitatCode)} disabled={taken} className="flex flex-col items-center gap-1 py-[10px] rounded-xl cursor-pointer disabled:cursor-default" style={{ background: taken ? 'rgba(143,149,171,0.08)' : selected ? `${habitat.color}25` : `${habitat.color}10`, border: `1px solid ${taken ? 'rgba(143,149,171,0.15)' : selected ? habitat.color + '60' : habitat.color + '25'}`, opacity: taken ? 0.45 : 1 }}><span className="text-[20px]">{habitat.emoji}</span><span className="text-[9px] font-bold leading-none" style={{ color: taken ? 'var(--tg-theme-hint-color)' : habitat.color }}>{taken ? '✓' : habitat.name.split(' ')[0]}</span></button>; })}</div>
+          <button onClick={() => void handleBuy()} disabled={!selHabitat || buying || (info.next_price > 0 && gs.rub < info.next_price)} className="w-full py-[11px] rounded-xl border-none font-extrabold text-[13px] cursor-pointer disabled:opacity-50" style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: 'var(--tg-theme-button-text-color)' }}>{buying ? '...' : selHabitat ? `Открыть ${HABITAT_INFO[selHabitat].name}` : 'Выбери среду обитания'}</button>
+        </div> : <p className="m-0 text-center text-[12px] py-2 text-tg-hint">✓ Все 5 местностей открыты</p>}
+      </> : null}
 
-      {loading ? (
-        <div className="flex justify-center py-8"><div className="spinner" /></div>
-      ) : info ? (
-        <>
-          {/* Locality cards */}
-          {info.localities.map(loc => (
-            <LocalityCard
-              key={loc.id}
-              locality={loc}
-              unassigned={info.unassigned}
-              matchingCount={matchingCountFor(info, loc)}
-              onAdd={() => setAssigning({ localityId: loc.id, habitat: loc.habitat })}
-              onAssignMatching={() => void handleAssignMatching(loc.id)}
-              assigningMatching={assigningMatchingIds.has(loc.id)}
-              onRemove={id => void handleUnassign(id)}
-            />
-          ))}
-
-          {/* Unassigned pool */}
-          {info.unassigned.length > 0 && (
-            <div>
-              <p className="m-0 mb-2 font-bold text-[13px]">
-                Без местности
-                <span className="ml-2 font-normal text-[12px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                  {info.unassigned.length} шт. — без бонуса ×1.5
-                </span>
-              </p>
-              <div
-                className="rounded-2xl p-3 flex flex-col gap-[6px]"
-                style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 12%, transparent)' }}
-              >
-                <WindowedList
-                  items={info.unassigned}
-                  render={a => {
-                    const hab = HABITAT_INFO[a.habitat];
-                    return (
-                      <div key={a.id} className="flex items-center gap-2 text-[12px]">
-                        <AnimalArt animal={a} size={24} className="shrink-0" />
-                        <span className="font-semibold truncate">{a.name}</span>
-                        <span className="text-[10px] truncate" style={{ color: 'var(--tg-theme-hint-color)' }}>{a.species_name} {hab.emoji}</span>
-                        <span className="ml-auto font-bold shrink-0" style={{ color: 'var(--tg-theme-hint-color)' }}>
-                          ₽{fmt(a.income)}/мин
-                        </span>
-                      </div>
-                    );
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Buy new locality */}
-          {info.next_price !== null ? (
-            <div
-              className="rounded-2xl p-4 flex flex-col gap-3"
-              style={{ background: 'rgba(var(--c-blue-rgb),0.08)', border: '1px solid rgba(var(--c-blue-rgb),0.2)' }}
-            >
-              <div className="flex items-center gap-2">
-                <p className="m-0 font-extrabold text-[14px] flex-1">🔓 Открыть местность</p>
-                <span className="text-[13px] font-bold" style={{ color: info.next_price === 0 ? 'var(--c-green)' : 'var(--tg-theme-hint-color)' }}>
-                  {info.next_price === 0 ? 'Бесплатно' : `₽${fmt(info.next_price)}`}
-                </span>
-              </div>
-
-              {/* Habitat picker */}
-              <div className="grid grid-cols-5 gap-[6px]">
-                {ALL_HABITATS.map(h => {
-                  const taken = info.habitats_taken.includes(h);
-                  const sel   = selHabitat === h;
-                  const hab   = HABITAT_INFO[h];
-                  return (
-                    <button
-                      key={h}
-                      onClick={() => !taken && setSelHab(sel ? null : h)}
-                      disabled={taken}
-                      className="flex flex-col items-center gap-1 py-[10px] rounded-xl border-none cursor-pointer disabled:cursor-default"
-                      style={{
-                        background: taken ? 'rgba(143,149,171,0.08)' : sel ? `${hab.color}25` : `${hab.color}10`,
-                        border: `1px solid ${taken ? 'rgba(143,149,171,0.15)' : sel ? hab.color + '60' : hab.color + '25'}`,
-                        opacity: taken ? 0.45 : 1,
-                      }}
-                    >
-                      <span className="text-[20px]">{hab.emoji}</span>
-                      <span className="text-[9px] font-bold leading-none" style={{ color: taken ? 'var(--tg-theme-hint-color)' : hab.color }}>
-                        {taken ? '✓' : hab.name.split(' ')[0]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                onClick={() => void handleBuy()}
-                disabled={!selHabitat || buying || (info.next_price > 0 && gs.rub < info.next_price)}
-                className="w-full py-[11px] rounded-xl border-none font-extrabold text-[13px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: 'linear-gradient(135deg, var(--c-blue), #0066dd)', color: 'var(--tg-theme-button-text-color)' }}
-              >
-                {buying ? '...' : selHabitat ? `Открыть ${HABITAT_INFO[selHabitat].name}` : 'Выбери среду обитания'}
-              </button>
-            </div>
-          ) : (
-            <p className="m-0 text-center text-[12px] py-2" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              ✓ Все 5 местностей открыты
-            </p>
-          )}
-        </>
-      ) : null}
-
-      {/* Animal picker overlay */}
-      {assigningTo && info && (
-        <AnimalPicker
-          animals={info.unassigned}
-          localityHabitat={assigningTo.habitat}
-          onPick={id => void handleAssign(id, assigningTo.localityId)}
-          onClose={() => setAssigning(null)}
-        />
-      )}
+      {assigningTo && <AnimalPicker localityHabitat={assigningTo.habitat} onPick={animal => void handleAssign(animal, assigningTo.localityId)} onClose={() => setAssigning(null)} />}
     </div>
   );
 }

@@ -177,13 +177,34 @@ def calc_player_income(
     active_bonuses = bonuses if bonuses is not None else bonuses_module.load(session, player_id)
     moment = now or utcnow()
 
+    sick_expression = Animal.sick_since.is_not(None)
     rows = session.execute(
-        select(Animal, Locality.habitat, Locality.level)
+        select(
+            Animal.species_id,
+            Animal.gene_survival,
+            Animal.gene_appearance,
+            Animal.gene_size,
+            Animal.habitat,
+            Locality.habitat,
+            Locality.level,
+            sick_expression,
+            func.count(Animal.id),
+        )
         .outerjoin(Locality, Animal.locality_id == Locality.id)
         .where(
             Animal.player_id == player_id,
             alive_clause(moment),
             Animal.id.not_in(on_expedition_subquery()),
+        )
+        .group_by(
+            Animal.species_id,
+            Animal.gene_survival,
+            Animal.gene_appearance,
+            Animal.gene_size,
+            Animal.habitat,
+            Locality.habitat,
+            Locality.level,
+            sick_expression,
         )
     ).all()
 
@@ -198,33 +219,45 @@ def calc_player_income(
     level_discounted_income = 0.0
     levelled_locality_levels = 0
     counts_by_species: dict[int, int] = {}
-    for animal, locality_habitat, locality_level in rows:
-        current_income = animal_income(animal, locality_habitat, active_bonuses)
+    animal_count = 0
+    for species_id, survival, appearance, size, animal_habitat, locality_habitat, locality_level, is_sick, count in rows:
+        group_count = int(count)
+        one_animal_income = animal_income_rub_per_min(
+            survival=survival,
+            appearance=appearance,
+            size=size,
+            habitat_matches=bool(locality_habitat) and locality_habitat == animal_habitat,
+            is_sick=bool(is_sick),
+            species_multiplier=active_bonuses.species_income_multiplier(species_id),
+            species_rarity=SPECIES_BY_ID[species_id]["rarity"],
+        )
         if clan_specialization == "specialist":
-            rarity = SPECIES_BY_ID[animal.species_id]["rarity"]
+            rarity = SPECIES_BY_ID[species_id]["rarity"]
             if rarity in ("epic", "mythic", "legendary"):
-                current_income = round(current_income * 1.5)
+                one_animal_income = round(one_animal_income * 1.5)
             elif rarity == "rare":
-                current_income = round(current_income * 0.8)
+                one_animal_income = round(one_animal_income * 0.8)
+        current_income = one_animal_income * group_count
         total += current_income
         upkeep_discount = locality_upkeep_discount(locality_level)
         level_discounted_income += current_income * upkeep_discount / 100
-        levelled_locality_levels += max(int(locality_level or 0), 0)
-        if locality_habitat and locality_habitat == animal.habitat:
+        levelled_locality_levels += max(int(locality_level or 0), 0) * group_count
+        if locality_habitat and locality_habitat == animal_habitat:
             upkeep_discount += HABITAT_MATCH_UPKEEP_DISCOUNT
         locality_discounted_income += current_income * upkeep_discount / 100
-        counts_by_species[animal.species_id] = counts_by_species.get(animal.species_id, 0) + 1
+        counts_by_species[species_id] = counts_by_species.get(species_id, 0) + group_count
+        animal_count += group_count
 
     # After the 100× denomination rebase, truncating every multiplier is too coarse for
     # small zoos (e.g. 42 × 1.30 should become 55, not 54). Round each derived rate so
     # percentage bonuses remain visible at the new scale.
     total = round(total * active_bonuses.income_multiplier() * diversity_multiplier(list(counts_by_species.values())))
     if clan_specialization == "megapark":
-        total = round(total * (1 + min(60, len(rows) // 10) / 100))
+        total = round(total * (1 + min(60, animal_count // 10) / 100))
     elif clan_specialization == "wild":
         total = round(total * (1 + len(counts_by_species) * 3 / 100))
 
-    base_upkeep = upkeep_rub_per_min(total, len(rows))
+    base_upkeep = upkeep_rub_per_min(total, animal_count)
     base_percent = 0.0 if total <= 0 else base_upkeep / total
     locality_relief = round(locality_discounted_income * base_percent)
     if levelled_locality_levels > 0 and base_upkeep > 0:
@@ -295,7 +328,7 @@ def accrue(session: Session, player: Player) -> int:
     return _accrue_until(session, player, utcnow())
 
 
-def _maybe_disease_outbreak(session: Session, player: Player, now: datetime) -> None:
+def _maybe_disease_outbreak(session: Session, player: Player, now: datetime) -> bool:
     """Roll for a passive disease outbreak over the time elapsed since the last check.
 
     Frequency-independent: the per-check probability is `1 - (1 - daily_chance)^elapsed_days`,
@@ -307,15 +340,24 @@ def _maybe_disease_outbreak(session: Session, player: Player, now: datetime) -> 
     if last is None:
         # First check for this player: establish the anchor, strike nothing.
         player.outbreak_checked_at = now
-        return
+        return False
     # Whole seconds, for the same reason the accrual counts them: the stored anchor carries
     # no fraction on MySQL, so advancing it to `now` handed the next check up to an extra
     # second of "elapsed" — and a client polling in a loop could rain outbreaks on itself.
     elapsed_seconds = int((now - last).total_seconds())
     if elapsed_seconds <= 0:
-        return
+        return False
     player.outbreak_checked_at = last + timedelta(seconds=elapsed_seconds)
     elapsed_days = elapsed_seconds / 86_400.0
+
+    chance = OUTBREAK_CHANCE_PER_DAY * (1 - development_effect_percent(player.vet_level) / 100)
+    if chance <= 0:
+        return False
+    probability = 1 - (1 - chance) ** elapsed_days
+    if random.random() >= probability:
+        # The usual heartbeat path must not hydrate an entire 11k-animal zoo merely to
+        # discover that the probability for this tiny interval did not fire.
+        return False
 
     healthy = session.scalars(
         select(Animal).where(
@@ -326,36 +368,31 @@ def _maybe_disease_outbreak(session: Session, player: Player, now: datetime) -> 
         )
     ).all()
     if len(healthy) < OUTBREAK_MIN_HEALTHY:
-        return
-
-    chance = OUTBREAK_CHANCE_PER_DAY * (1 - development_effect_percent(player.vet_level) / 100)
-    if chance <= 0:
-        return
-    probability = 1 - (1 - chance) ** elapsed_days
-    if random.random() >= probability:
-        return
+        return False
 
     by_locality: dict[int | None, list[Animal]] = defaultdict(list)
     for animal in healthy:
         by_locality[animal.locality_id].append(animal)
     candidates = [group for group in by_locality.values() if len(group) >= OUTBREAK_MIN_LOCALITY_HEALTHY]
     if not candidates:
-        return
+        return False
 
     struck = random.choice(candidates)
     count = max(1, math.ceil(len(struck) * OUTBREAK_SICKEN_FRACTION))
     for animal in random.sample(struck, min(count, len(struck))):
         animal.sick_since = now
     enqueue_disease_outbreak(session, player, count=count, at=now)
+    return True
 
 
-def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None = None) -> tuple[int, int]:
-    """Settle what the old rate owed, then recompute the rate.
-
-    Call after any change to the zoo, the player's items, or before any read of the
-    balance. Accruing first is what makes the order correct: the stored rate is exactly
-    the rate that applied over the elapsed period.
-    """
+def _settle_player_income(
+    session: Session,
+    player: Player,
+    bonuses: Bonuses | None,
+    *,
+    force_recalculate: bool,
+) -> tuple[int, int]:
+    """Settle the cached rate and rescan the zoo only when it can have changed."""
     now = utcnow()
     # The cached rate is authoritative only until the first animal dies. Settle each
     # time segment at the rate that applied then, enqueue the death event in this same
@@ -366,7 +403,9 @@ def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None
         .where(
             Animal.player_id == player.id,
             Animal.removed_at.is_(None),
-            Animal.dies_at > player.income_synced_at,
+            # Equality matters on MySQL's second-precision DATETIME. An animal whose death
+            # lands exactly on the accrual anchor still invalidates the cached rate.
+            Animal.dies_at >= player.income_synced_at,
             Animal.dies_at <= now,
         )
         .order_by(Animal.dies_at.asc(), Animal.id.asc())
@@ -381,13 +420,24 @@ def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None
     enqueue_animal_death_summaries(session, player, deaths, reason="естественная смерть")
 
     _accrue_until(session, player, now)
-    # Roll for a passive outbreak before recomputing the rate, so newly sick animals are
-    # already reflected in the income this call stores.
-    _maybe_disease_outbreak(session, player, now)
+    outbreak = _maybe_disease_outbreak(session, player, now)
+    if not force_recalculate and not deaths and not outbreak:
+        return player.income_rub_per_min, player.upkeep_rub_per_min
+
     income, upkeep = calc_player_income(session, player.id, bonuses, now=now)
     player.income_rub_per_min = income
     player.upkeep_rub_per_min = upkeep
     return income, upkeep
+
+
+def settle_player_income(session: Session, player: Player, bonuses: Bonuses | None = None) -> tuple[int, int]:
+    """Accrue balances and passive events without an unconditional full-zoo scan."""
+    return _settle_player_income(session, player, bonuses, force_recalculate=False)
+
+
+def sync_player_income(session: Session, player: Player, bonuses: Bonuses | None = None) -> tuple[int, int]:
+    """Settle the old rate and rebuild it after a zoo/item mutation."""
+    return _settle_player_income(session, player, bonuses, force_recalculate=True)
 
 
 def sync_active_player_income(session: Session) -> int:
@@ -396,8 +446,9 @@ def sync_active_player_income(session: Session) -> int:
     The web request path used to be the only caller of ``sync_player_income``. That made
     disease rolls and natural-death notifications wait until the player opened the app.
     The notification worker calls this periodically so the same authoritative transition
-    happens while the player is offline. The row lock keeps it from racing a foreground
-    mutation; notification dedupe keys make a concurrent worker safe as well.
+    happens while the player is offline. Cached rates are only rebuilt when that pass finds
+    a death or outbreak. The row lock keeps it from racing a foreground mutation;
+    notification dedupe keys make a concurrent worker safe as well.
     """
     players = session.scalars(
         select(Player)
@@ -406,15 +457,15 @@ def sync_active_player_income(session: Session) -> int:
         .with_for_update()
     ).all()
     for player in players:
-        sync_player_income(session, player)
+        settle_player_income(session, player)
     return len(players)
 
 
 def count_alive_animals(session: Session, player_id: int, season_id: int | None = None) -> int:
-    stmt = select(Animal.id).where(Animal.player_id == player_id, alive_clause())
+    stmt = select(func.count(Animal.id)).where(Animal.player_id == player_id, alive_clause())
     if season_id is not None:
         stmt = stmt.where(Animal.season_id == season_id)
-    return len(session.execute(stmt).all())
+    return int(session.scalar(stmt) or 0)
 
 
 def alive_animals(session: Session, player_id: int, season_id: int) -> list[tuple[Animal, str | None]]:

@@ -87,6 +87,26 @@ class TestPackBundles:
         with get_session() as session:
             assert session.query(LedgerEntry).filter_by(reason="pack_reward").count() == 2
 
+    def test_batch_pack_keeps_one_audit_and_two_ledger_rows_per_pack(self, db, player, grant):
+        grant(player, "usd", 10 ** 9)
+
+        result = progression.open_pack(player, "rare", quantity=10)
+
+        returned_ids = {animal["id"] for animal in result["animals"]}
+        with get_session() as session:
+            row = session.query(Player).filter_by(telegram_id=player).one()
+            openings = session.query(PackOpening).filter_by(player_id=row.id).all()
+            reward_rows = session.query(LedgerEntry).filter_by(
+                player_id=row.id,
+                reason="pack_reward",
+            ).all()
+
+        assert result["pack_count"] == 10
+        assert len(openings) == 10
+        assert len(reward_rows) == 20
+        assert {opening.animal_id for opening in openings} <= returned_ids
+        assert {entry.ref_id for entry in reward_rows} == {opening.id for opening in openings}
+
     def test_free_gift_is_once_per_day(self, db, player):
         progression.open_pack(player)  # claim the gift
         with pytest.raises(Exception, match="подарок уже получен"):
@@ -265,21 +285,52 @@ class TestExpeditionLifecycle:
 
     def _squad(self, telegram_id: int, grant) -> list[int]:
         self._stock(telegram_id, grant)
-        return [a["id"] for a in progression.get_expeditions(telegram_id)["available_animals"]][:3]
+        return [a["id"] for a in progression.list_expedition_animals_page(telegram_id)["animals"]][:3]
 
     def _free_squad(self, telegram_id: int, size: int = 3) -> list[int]:
         """Three animals not already committed to a raid."""
-        return [a["id"] for a in progression.get_expeditions(telegram_id)["available_animals"]][:size]
+        return [a["id"] for a in progression.list_expedition_animals_page(telegram_id)["animals"]][:size]
 
     def test_expedition_picker_uses_compact_animal_payload(self, db, player, grant):
         self._stock(player, grant, packs=1)
-        animal = progression.get_expeditions(player)["available_animals"][0]
+        animal = progression.list_expedition_animals_page(player)["animals"][0]
 
         assert {"id", "name", "species_code", "species_name", "species_emoji", "survival", "reproduction", "appearance", "size_trait", "habitat", "dies_at", "income"} <= set(animal)
         assert "income_breakdown" not in animal
         assert "cure_cost_usd" not in animal
         assert "parent_a_id" not in animal
         assert "is_sick" not in animal
+
+    def test_expedition_picker_is_paged_searchable_and_not_embedded_in_metadata(self, db, player, grant):
+        self._stock(player, grant, packs=4)
+        first = progression.list_expedition_animals_page(player, limit=2)
+        second = progression.list_expedition_animals_page(player, offset=2, limit=2)
+
+        assert len(first["animals"]) == 2
+        assert first["total"] >= 4
+        assert first["next_offset"] == 2
+        assert {a["id"] for a in first["animals"]}.isdisjoint(a["id"] for a in second["animals"])
+
+        animal = first["animals"][0]
+        by_name = progression.list_expedition_animals_page(player, query=animal["name"])
+        assert animal["id"] in {row["id"] for row in by_name["animals"]}
+
+        habitat_names = {
+            "desert": "Пустыня",
+            "mountains": "Горы",
+            "forest": "Лес",
+            "fields": "Поля",
+            "antarctica": "Антарктида",
+        }
+        by_habitat = progression.list_expedition_animals_page(
+            player, query=habitat_names[animal["habitat"]]
+        )
+        assert by_habitat["animals"]
+        assert all(row["habitat"] == animal["habitat"] for row in by_habitat["animals"])
+
+        metadata = progression.get_expeditions(player)
+        assert metadata["available_animals"] == []
+        assert metadata["available_animals_count"] == first["total"]
 
     def test_only_one_expedition_per_locality(self, db, player, grant):
         squad = self._squad(player, grant)
@@ -400,13 +451,14 @@ class TestExpeditionLifecycle:
         progression.start_expedition(player, StartExpeditionBody(locality_id=locality_id, animal_ids=squad))
 
         state = me(player)
-        visible_ids = {animal["id"] for animal in state["animals"]}
+        visible = progression.list_zoo_animals(player, limit=240)["animals"]
+        visible_ids = {animal["id"] for animal in visible}
         assert not visible_ids.intersection(squad)
-        assert state["live_animals_count"] == len(state["animals"])
+        assert state["live_animals_count"] == len(visible)
 
         public_profile = social.public_profile(player, player)
-        assert public_profile["animals_count"] == len(state["animals"])
-        assert public_profile["animals_count"] < len(squad) + len(state["animals"])
+        assert public_profile["animals_count"] == len(visible)
+        assert public_profile["animals_count"] < len(squad) + len(visible)
 
     def test_locality_upgrade_reduces_upkeep(self, db, player, grant):
         """One animal from the free pack used to be the whole zoo here, and upkeep is a
@@ -458,7 +510,10 @@ class TestExpeditionLifecycle:
         progression.assign_locality(player, AssignLocalityBody(animal_id=animal["id"], locality_id=locality["id"]))
 
         listed = next(a for a in progression.list_available_animals(player)["animals"] if a["id"] == animal["id"])
-        from_me = next(a for a in me(player)["animals"] if a["id"] == animal["id"])
+        from_me = next(
+            a for a in progression.list_zoo_animals(player, limit=240)["animals"]
+            if a["id"] == animal["id"]
+        )
 
         assert listed["habitat_bonus"] is True
         assert listed["income"] == from_me["income"]
@@ -605,6 +660,24 @@ class TestBreeding:
         assert all(animal["can_breed"] for animal in result["animals"])
         assert "income_breakdown" not in result["animals"][0]
         assert "dies_at" not in result["animals"][0]
+
+        first_page = progression.list_breeding_animals_page(player, limit=1)
+        assert len(first_page["animals"]) == 1
+        assert first_page["total"] == len(result["animals"])
+        assert first_page["next_offset"] == 1
+
+        picked = first_page["animals"][0]
+        matching = progression.list_breeding_animals_page(
+            player,
+            species_code=picked["species_code"],
+            exclude_id=picked["id"],
+        )
+        assert matching["animals"]
+        assert all(animal["species_code"] == picked["species_code"] for animal in matching["animals"])
+        assert picked["id"] not in {animal["id"] for animal in matching["animals"]}
+
+        search = progression.list_breeding_animals_page(player, query=picked["name"])
+        assert picked["id"] in {animal["id"] for animal in search["animals"]}
 
     def test_a_parent_breeds_once_a_day(self, db, player, grant):
         from api.app.schemas.progression import BreedBody
@@ -762,6 +835,56 @@ class TestBatchRelease:
 
         with get_session() as session:
             assert session.get(Animal, animal_ids[0]).removal_reason is None
+
+
+class TestLocalityPaging:
+    def test_forecast_preserves_counts_in_compact_minute_buckets(self, db, player, grant):
+        grant(player, "usd", 10_000)
+        progression.open_pack(player)
+        progression.open_pack(player, "rare", quantity=5)
+
+        total = progression.list_zoo_animals(player, limit=1)["total"]
+        forecast = progression.animal_forecast(player)
+
+        assert sum(event["count"] for event in forecast["animals"]) == total
+        assert len(forecast["animals"]) <= total
+        assert forecast["average_lifespan_ms"] > 0
+        assert all(set(event) == {"dies_at", "income", "count"} for event in forecast["animals"])
+
+    def test_summary_totals_match_legacy_state_and_rows_are_paged(self, db, player, grant):
+        from api.app.schemas.progression import AssignLocalityBody
+
+        grant(player, "usd", 10_000)
+        progression.open_pack(player)
+        progression.open_pack(player, "rare", quantity=5)
+        legacy = progression.list_localities(player)
+        summary = progression.list_localities_summary(player)
+
+        assert summary["unassigned"] == []
+        assert all(locality["animals"] == [] for locality in summary["localities"])
+        assert summary["unassigned_count"] == len(legacy["unassigned"])
+        legacy_by_id = {locality["id"]: locality for locality in legacy["localities"]}
+        for locality in summary["localities"]:
+            old = legacy_by_id[locality["id"]]
+            assert locality["animals_count"] == len(old["animals"])
+            assert locality["income_rub_per_min"] == sum(animal["income"] for animal in old["animals"])
+
+        first = progression.list_locality_animals_page(player, limit=2)
+        second = progression.list_locality_animals_page(player, offset=2, limit=2)
+        assert first["total"] == summary["unassigned_count"]
+        assert len(first["animals"]) == 2
+        assert first["next_offset"] == 2
+        assert {animal["id"] for animal in first["animals"]}.isdisjoint(
+            animal["id"] for animal in second["animals"]
+        )
+
+        locality_id = summary["localities"][0]["id"]
+        progression.assign_locality(
+            player,
+            AssignLocalityBody(animal_id=first["animals"][0]["id"], locality_id=locality_id),
+        )
+        assigned = progression.list_locality_animals_page(player, locality_id=locality_id)
+        assert first["animals"][0]["id"] in {animal["id"] for animal in assigned["animals"]}
 
 
 class TestAssigningEveryMatchingAnimal:

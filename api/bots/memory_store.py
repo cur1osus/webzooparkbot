@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,22 @@ def load(player_id: int) -> list[dict]:
         # A corrupt notebook must not stop a rival from playing; it starts a new one.
         logger.warning("bot %s has an unreadable memory file, starting empty", player_id)
         return []
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        return []
+    now = datetime.now(timezone.utc)
+    live: list[dict] = []
+    for note in data:
+        if not isinstance(note, dict):
+            continue
+        expires_at = note.get("истекает")
+        if expires_at:
+            try:
+                if datetime.fromisoformat(expires_at.replace("Z", "+00:00")) <= now:
+                    continue
+            except ValueError:
+                logger.warning("bot %s has an invalid memory expiry", player_id)
+        live.append(note)
+    return live
 
 
 def _save(player_id: int, notes: list[dict]) -> None:
@@ -60,13 +75,19 @@ def _save(player_id: int, notes: list[dict]) -> None:
     temp.replace(path)
 
 
-def remember(player_id: int, note: str) -> dict:
+def remember(player_id: int, note: str, ttl_days: int | None = None) -> dict:
     text = (note or "").strip()[:MAX_NOTE_CHARS]
     if not text:
         return {"ok": False, "error": "пустая заметка"}
 
     notes = load(player_id)
-    notes.append({"когда": datetime.now(timezone.utc).strftime("%d.%m %H:%M"), "заметка": text})
+    created = datetime.now(timezone.utc)
+    entry = {"когда": created.strftime("%d.%m %H:%M"), "заметка": text}
+    if ttl_days is not None:
+        if ttl_days not in {1, 3, 7, 30}:
+            return {"ok": False, "error": "срок может быть только 1, 3, 7 или 30 дней"}
+        entry["истекает"] = (created + timedelta(days=ttl_days)).isoformat()
+    notes.append(entry)
     dropped = 0
     if len(notes) > MAX_NOTES:
         dropped = len(notes) - MAX_NOTES

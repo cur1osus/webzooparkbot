@@ -1,5 +1,18 @@
 import type { GameState } from '@/types';
 
+export interface ForecastAnimal {
+  acquired_at?: string;
+  dies_at: string;
+  /** Aggregated events carry the sum and number dying in this minute. */
+  income: number;
+  count?: number;
+}
+
+type ForecastState = Pick<GameState, 'income_rub_per_min' | 'upkeep_rub_per_min'> & {
+  animals: ForecastAnimal[];
+  average_lifespan_ms?: number | null;
+};
+
 /**
  * Планирование дохода на клиенте.
  *
@@ -54,9 +67,10 @@ function rateFor(income: number, animalCount: number, discountRatio: number) {
  * Строит кусочно-постоянный график чистого дохода: он меняется только когда
  * умирает животное. Живые животные без срока смерти держат темп до бесконечности.
  */
-export function buildForecast(gs: GameState, now: number = Date.now()): Forecast {
+export function buildForecast(gs: ForecastState, now: number = Date.now()): Forecast {
   const alive = gs.animals.filter(a => new Date(a.dies_at).getTime() > now);
   const totalIncome = alive.reduce((acc, a) => acc + a.income, 0);
+  const totalCount = alive.reduce((acc, a) => acc + (a.count ?? 1), 0);
 
   // Серверный доход учитывает больше факторов, чем сумма животных (и исключает тех, кто
   // в экспедиции). Держим его как истину на старте, а вклад каждого животного берём как
@@ -65,19 +79,19 @@ export function buildForecast(gs: GameState, now: number = Date.now()): Forecast
 
   // Фактические скидки игрока на содержание — отношение того, что сервер насчитал, к
   // тому, что дала бы голая формула. Дальше это отношение считаем постоянным.
-  const baselinePercent = upkeepPercent(alive.length);
+  const baselinePercent = upkeepPercent(totalCount);
   const actualPercent = gs.income_rub_per_min > 0
     ? (gs.upkeep_rub_per_min / gs.income_rub_per_min) * 100
     : 0;
   const discountRatio = baselinePercent > 0 ? actualPercent / baselinePercent : 1;
 
   const deaths = alive
-    .map(a => ({ atMs: new Date(a.dies_at).getTime() - now, income: a.income }))
+    .map(a => ({ atMs: new Date(a.dies_at).getTime() - now, income: a.income, count: a.count ?? 1 }))
     .sort((a, b) => a.atMs - b.atMs);
 
   const segments: ForecastPoint[] = [];
   let remainingIncome = totalIncome;
-  let remainingCount = alive.length;
+  let remainingCount = totalCount;
   let cursor = 0;
 
   const pushSegment = (atMs: number) => {
@@ -91,7 +105,7 @@ export function buildForecast(gs: GameState, now: number = Date.now()): Forecast
   pushSegment(cursor);
   for (const death of deaths) {
     remainingIncome -= death.income;
-    remainingCount -= 1;
+    remainingCount -= death.count;
     cursor = death.atMs;
     // Несколько смертей в одну миллисекунду — один отрезок, а не несколько нулевой длины.
     if (segments[segments.length - 1].atMs === cursor) segments.pop();
@@ -213,9 +227,11 @@ const FALLBACK_LIFESPAN_MS = 8 * 24 * 60 * 60_000;
  * смерти. Срок задаётся геном выживаемости при рождении и никогда не меняется, поэтому
  * прошлые животные — честная оценка для будущих.
  */
-export function averageLifespanMs(gs: GameState): number {
+export function averageLifespanMs(gs: { animals: ForecastAnimal[]; average_lifespan_ms?: number | null }): number {
+  if (gs.average_lifespan_ms && gs.average_lifespan_ms > 0) return gs.average_lifespan_ms;
   const spans = gs.animals
-    .map(a => new Date(a.dies_at).getTime() - new Date(a.acquired_at).getTime())
+    .filter(a => a.acquired_at)
+    .map(a => new Date(a.dies_at).getTime() - new Date(a.acquired_at!).getTime())
     .filter(ms => ms > 0);
   if (spans.length === 0) return FALLBACK_LIFESPAN_MS;
   return spans.reduce((acc, ms) => acc + ms, 0) / spans.length;

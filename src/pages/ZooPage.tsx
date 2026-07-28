@@ -8,7 +8,7 @@ import type { Animal, GameState, GeneTier, MaintenancePollStatus } from '@/types
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
-import { apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeUpdateSet, apiReleaseAnimal, apiReleaseAnimals, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
+import { apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeUpdateSet, apiGetAnimal, apiGetZooAnimals, apiReleaseAnimal, apiReleaseAnimals, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
 import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
@@ -22,7 +22,6 @@ import { wallpaperClass } from '@/data/profileWallpapers';
 import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { getDefaultProfileAnimal, type ProfileAnimal } from '@/data/profileAnimals';
 import { SPECIES_RARITY_META } from '@/data/packs';
-import { compareByQuality } from '@/lib/animalQuality';
 import { useStoredChoice } from '@/hooks/useStoredChoice';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
@@ -87,28 +86,6 @@ const GENE_TIER_COLORS: Record<GeneTier, string> = {
 const ANIMAL_GRID_INITIAL = 60;
 const ANIMAL_GRID_STEP = 60;
 
-// Each mode returns a fully-ordered comparator; ties fall back to income so the list never
-// reshuffles arbitrarily between renders.
-function compareAnimals(mode: AnimalSort, favoriteOverrides: Map<number, boolean> = new Map()): (a: Animal, b: Animal) => number {
-  const byFavorite = (a: Animal, b: Animal) =>
-    Number(favoriteOverrides.get(b.id) ?? b.is_favorite) - Number(favoriteOverrides.get(a.id) ?? a.is_favorite);
-  const byIncome = (a: Animal, b: Animal) => b.income - a.income;
-  switch (mode) {
-    case 'income':
-      return (a, b) => byFavorite(a, b) || byIncome(a, b);
-    case 'life':
-      // Soonest death first — the animals that need attention.
-      return (a, b) => byFavorite(a, b) || new Date(a.dies_at).getTime() - new Date(b.dies_at).getTime() || byIncome(a, b);
-    case 'quality':
-      // Самые редкие с лучшими генами сверху, обычные со слабыми — внизу.
-      return (a, b) => byFavorite(a, b) || compareByQuality(a, b);
-    case 'new':
-    default:
-      // Most recently acquired first — freshly bought animals surface at the top.
-      return (a, b) => byFavorite(a, b) || new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || byIncome(a, b);
-  }
-}
-
 export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void; onlinePresence: MaintenancePollStatus }) {
   const [tab, setTab] = useState<ZooTab>('overview');
   const [subPage, setSubPageState] = useState<SubPage>(() => getZooSubPageFromHash());
@@ -122,14 +99,76 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
   const [favoriteOverrides, setFavoriteOverrides] = useState<Map<number, boolean>>(new Map());
   const [favoriteBusyId, setFavoriteBusyId] = useState<number | null>(null);
   const [defaultProfileAnimal] = useState<ProfileAnimal>(() => getDefaultProfileAnimal(gs.tg_id));
+  const [animals, setAnimals] = useState<Animal[]>(gs.animals);
+  const [animalsTotal, setAnimalsTotal] = useState(gs.live_animals_count);
+  const [nextAnimalsOffset, setNextAnimalsOffset] = useState<number | null>(0);
+  const [animalsLoading, setAnimalsLoading] = useState(false);
+  const animalsRequestRef = useRef(0);
+  const animalsLoadingRef = useRef(false);
 
   const profileAchievementId = gs.profile_emoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? gs.profile_emoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
-  const sortedAnimals = useMemo(
-    () => [...gs.animals].sort(compareAnimals(animalSort, favoriteOverrides)),
-    [gs.animals, animalSort, favoriteOverrides],
-  );
+  const baseSortedAnimals = animals;
+  const sortedAnimals = useMemo(() => {
+    const favorites: Animal[] = [];
+    const regular: Animal[] = [];
+    for (const animal of baseSortedAnimals) {
+      (favoriteOverrides.get(animal.id) ?? animal.is_favorite ? favorites : regular).push(animal);
+    }
+    return favorites.length === 0 ? regular : favorites.concat(regular);
+  }, [baseSortedAnimals, favoriteOverrides]);
+
+  useEffect(() => {
+    const requestId = ++animalsRequestRef.current;
+    animalsLoadingRef.current = true;
+    setAnimalsLoading(true);
+    setNextAnimalsOffset(0);
+    setVisibleAnimalCount(ANIMAL_GRID_INITIAL);
+    void apiGetZooAnimals(0, 120, animalSort)
+      .then(result => {
+        if (animalsRequestRef.current !== requestId) return;
+        setAnimals(result.animals);
+        setAnimalsTotal(result.total);
+        setNextAnimalsOffset(result.next_offset);
+      })
+      .catch(error => {
+        if (animalsRequestRef.current === requestId) {
+          showMessage(error instanceof Error ? error.message : 'Не удалось загрузить животных');
+        }
+      })
+      .finally(() => {
+        if (animalsRequestRef.current === requestId) {
+          animalsLoadingRef.current = false;
+          setAnimalsLoading(false);
+        }
+      });
+  }, [animalSort]);
+
+  const loadMoreAnimals = useCallback(() => {
+    const offset = nextAnimalsOffset;
+    if (offset === null || animalsLoadingRef.current) return;
+    const requestId = animalsRequestRef.current;
+    animalsLoadingRef.current = true;
+    setAnimalsLoading(true);
+    void apiGetZooAnimals(offset, 120, animalSort)
+      .then(result => {
+        if (animalsRequestRef.current !== requestId) return;
+        setAnimals(previous => {
+          const known = new Set(previous.map(animal => animal.id));
+          return previous.concat(result.animals.filter(animal => !known.has(animal.id)));
+        });
+        setAnimalsTotal(result.total);
+        setNextAnimalsOffset(result.next_offset);
+      })
+      .catch(error => showMessage(error instanceof Error ? error.message : 'Не удалось загрузить животных'))
+      .finally(() => {
+        if (animalsRequestRef.current === requestId) {
+          animalsLoadingRef.current = false;
+          setAnimalsLoading(false);
+        }
+      });
+  }, [animalSort, nextAnimalsOffset]);
 
   // Windowed reveal of the animal grid — see ANIMAL_GRID_INITIAL for the reasoning.
   const [visibleAnimalCount, setVisibleAnimalCount] = useState(ANIMAL_GRID_INITIAL);
@@ -146,7 +185,28 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     [sortedAnimals, visibleAnimalCount],
   );
 
-  const hasMoreAnimals = visibleAnimalCount < sortedAnimals.length;
+  const hasMoreAnimals = visibleAnimalCount < sortedAnimals.length || nextAnimalsOffset !== null;
+
+  const openAnimal = useCallback((animal: Animal) => {
+    setSelectedAnimal(animal);
+    void apiGetAnimal(animal.id)
+      .then(({ animal: fullAnimal }) => {
+        setSelectedAnimal(current => current?.id === fullAnimal.id ? fullAnimal : current);
+      })
+      .catch(() => {
+        // The compact passport already contains everything except the optional income
+        // breakdown, so a transient detail request must not block opening the card.
+      });
+  }, []);
+
+  const toggleSelectedAnimal = useCallback((animalId: number) => {
+    setSelectedAnimalIds(previous => {
+      const next = new Set(previous);
+      if (next.has(animalId)) next.delete(animalId);
+      else next.add(animalId);
+      return next;
+    });
+  }, []);
 
   // Grow the window as the sentinel near the end of the list scrolls into view. The
   // scroll container is the page shell, so observe against it rather than the viewport.
@@ -157,14 +217,18 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     const observer = new IntersectionObserver(
       entries => {
         if (entries.some(entry => entry.isIntersecting)) {
-          setVisibleAnimalCount(count => Math.min(count + ANIMAL_GRID_STEP, sortedAnimals.length));
+          if (visibleAnimalCount < sortedAnimals.length) {
+            setVisibleAnimalCount(count => Math.min(count + ANIMAL_GRID_STEP, sortedAnimals.length));
+          } else {
+            loadMoreAnimals();
+          }
         }
       },
       { root, rootMargin: '600px 0px' },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMoreAnimals, sortedAnimals.length, tab, subPage]);
+  }, [hasMoreAnimals, loadMoreAnimals, sortedAnimals.length, subPage, tab, visibleAnimalCount]);
 
   // Build the grid element only when the visible slice or favourite marks actually change.
   // The live-balance ticker replaces `gs` every second; without this the whole list would
@@ -179,18 +243,13 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
             isFavorite={favoriteOverrides.get(a.id) ?? a.is_favorite}
             selectionMode={selectionMode}
             isSelected={selectedAnimalIds.has(a.id)}
-            onSelect={setSelectedAnimal}
-            onToggleSelect={animalId => setSelectedAnimalIds(previous => {
-              const next = new Set(previous);
-              if (next.has(animalId)) next.delete(animalId);
-              else next.add(animalId);
-              return next;
-            })}
+            onSelect={openAnimal}
+            onToggleSelect={toggleSelectedAnimal}
           />
         ))}
       </div>
     ),
-    [visibleAnimals, favoriteOverrides, selectionMode, selectedAnimalIds],
+    [visibleAnimals, favoriteOverrides, selectionMode, selectedAnimalIds, openAnimal, toggleSelectedAnimal],
   );
 
   async function toggleFavorite(animal: Animal) {
@@ -201,7 +260,6 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     setFavoriteBusyId(animal.id);
     try {
       await apiSetAnimalFavorite(animal.id, next);
-      onRefresh();
     } catch (e) {
       setFavoriteOverrides(previous => {
         const nextOverrides = new Map(previous);
@@ -224,7 +282,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
   }
 
   function selectAllAnimals() {
-    setSelectedAnimalIds(new Set(gs.animals.map(animal => animal.id)));
+    setSelectedAnimalIds(new Set(animals.map(animal => animal.id)));
   }
 
   async function releaseSelectedAnimals() {
@@ -237,10 +295,17 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     setMessage(null);
     try {
       const result = await apiReleaseAnimals(ids);
+      const releasedIds = new Set(result.released_animal_ids);
+      onPatchState({
+        sick_animal_ids: gs.sick_animal_ids.filter(id => !releasedIds.has(id)),
+        live_animals_count: Math.max(0, gs.live_animals_count - result.released_count),
+        income_rub_per_min: result.income_rub_per_min,
+      });
+      setAnimals(previous => previous.filter(animal => !releasedIds.has(animal.id)));
+      setAnimalsTotal(previous => Math.max(0, previous - result.released_count));
       setSelectionMode(false);
       setSelectedAnimalIds(new Set());
       showMessage(`Отпущено животных: ${result.released_count}`);
-      onRefresh();
     } catch (e) {
       showMessage(e instanceof Error ? e.message : 'Не удалось отпустить животных');
     } finally {
@@ -540,7 +605,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
 
           {/* First-run onboarding: an empty zoo is an invitation, and it teaches the
               core loop by doing — get an animal, it earns income every minute. */}
-          {gs.animals.length === 0 && (
+          {animalsTotal === 0 && !animalsLoading && (
             <div className="card text-center" style={{ padding: '22px 18px', border: '1px solid rgba(var(--c-green-rgb),0.30)' }}>
               <p className="m-0 text-[40px]" style={{ animation: 'float 3s ease-in-out infinite' }}>🎁</p>
               <p className="mt-2 mb-1 font-extrabold text-[16px]">Заведи первого зверя</p>
@@ -556,11 +621,11 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
             </div>
           )}
 
-          {gs.animals.length > 0 && (
+          {animalsTotal > 0 && (
             <div>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="m-0 text-[11px] font-extrabold text-tg-hint tracking-[1px] uppercase">
-                  Мои животные · {gs.animals.length}{selectionMode ? '' : ' · нажми для карточки'}
+                  Мои животные · {animalsTotal}{selectionMode ? '' : ' · нажми для карточки'}
                 </p>
                 <button
                   type="button"
@@ -585,7 +650,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
                     className="shrink-0 rounded-xl border-none px-2 py-2 text-[10px] font-bold cursor-pointer"
                     style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 10%, transparent)', color: 'var(--tg-theme-hint-color)' }}
                   >
-                    Все
+                    Загруженные
                   </button>
                   <button
                     type="button"
@@ -598,7 +663,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
                   </button>
                 </div>
               )}
-              {gs.animals.length > 1 && (
+              {animalsTotal > 1 && (
                 <div className="grid grid-cols-4 gap-1 mb-2">
                   {ANIMAL_SORTS.map(s => {
                     const active = s.id === animalSort;
@@ -628,6 +693,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
               )}
               {animalGrid}
               {hasMoreAnimals && <div ref={animalSentinelRef} aria-hidden className="h-px w-full" />}
+              {animalsLoading && <div className="flex justify-center py-3"><div className="spinner" /></div>}
             </div>
           )}
         </div>
@@ -646,7 +712,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
       )}
 
       {tab === 'vet' && (
-        <VetTab animals={gs.animals} usd={gs.usd} onRefresh={onRefresh} />
+        <VetTab usd={gs.usd} onPatchState={onPatchState} />
       )}
 
       {tab === 'medals' && (
@@ -668,9 +734,15 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
           onToggleFavorite={() => void toggleFavorite(selectedAnimal)}
           onClose={() => setSelectedAnimal(null)}
           onRelease={async animal => {
-            await apiReleaseAnimal(animal.id);
+            const result = await apiReleaseAnimal(animal.id);
+            onPatchState({
+              sick_animal_ids: gs.sick_animal_ids.filter(id => id !== animal.id),
+              live_animals_count: Math.max(0, gs.live_animals_count - 1),
+              income_rub_per_min: result.income_rub_per_min,
+            });
+            setAnimals(previous => previous.filter(item => item.id !== animal.id));
+            setAnimalsTotal(previous => Math.max(0, previous - 1));
             setSelectedAnimal(null);
-            onRefresh();
           }}
         />
       )}

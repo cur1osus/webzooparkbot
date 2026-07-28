@@ -133,6 +133,7 @@ def _process(player_id: int, now, *, dry_run: bool) -> bool:
                 completion_tokens=result.completion_tokens,
                 reasoning_tokens=result.reasoning_tokens,
                 cost_micro_rub=result.cost_micro_rub,
+                evaluation=json.dumps(result.evaluation, ensure_ascii=False, default=str),
             ))
             session.commit()
     except Exception:

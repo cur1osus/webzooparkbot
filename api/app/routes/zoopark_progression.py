@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from api.app.routes._auth import TelegramId
 from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, DismissExpeditionBody, FavoriteAnimalBody, FinishExpeditionBody, OpenPackBody, ReleaseAnimalBody, ReleaseAnimalsBody, StartExpeditionBody, UpgradeLocalityBody
@@ -14,9 +14,45 @@ def list_animals(tg_id: TelegramId):
     return progression_service.list_available_animals(tg_id)
 
 
+@router.get("/api/zoo/animals")
+def list_zoo_animals(
+    tg_id: TelegramId,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=120, ge=1, le=240),
+    sort: str = Query(default="new"),
+):
+    return progression_service.list_zoo_animals(tg_id, offset=offset, limit=limit, sort=sort)
+
+
+@router.get("/api/zoo/forecast")
+def animal_forecast(tg_id: TelegramId):
+    return progression_service.animal_forecast(tg_id)
+
+
+@router.get("/api/animals/{animal_id}")
+def get_animal(animal_id: int, tg_id: TelegramId):
+    return progression_service.get_animal(tg_id, animal_id)
+
+
 @router.get("/api/breeding/animals")
 def list_breeding_animals(tg_id: TelegramId):
     return progression_service.list_breeding_animals(tg_id)
+
+
+@router.get("/api/breeding/animals/page")
+def list_breeding_animals_page(
+    tg_id: TelegramId,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=120, ge=1, le=240),
+    sort: str = Query(default="new"),
+    query: str = Query(default="", max_length=64),
+    species_code: str | None = Query(default=None),
+    exclude_id: int | None = Query(default=None, gt=0),
+):
+    return progression_service.list_breeding_animals_page(
+        tg_id, offset=offset, limit=limit, sort=sort, query=query,
+        species_code=species_code, exclude_id=exclude_id,
+    )
 
 
 @router.get("/api/packs/info")
@@ -32,6 +68,30 @@ def open_pack(tg_id: TelegramId, body: OpenPackBody = OpenPackBody()):
 @router.get("/api/localities")
 def list_localities(tg_id: TelegramId):
     return progression_service.list_localities(tg_id)
+
+
+@router.get("/api/localities/summary")
+def list_localities_summary(tg_id: TelegramId):
+    return progression_service.list_localities_summary(tg_id)
+
+
+@router.get("/api/localities/animals/page")
+def list_locality_animals_page(
+    tg_id: TelegramId,
+    locality_id: int | None = Query(default=None, gt=0),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=120, ge=1, le=240),
+    query: str = Query(default="", max_length=64),
+    preferred_habitat: str | None = Query(default=None),
+):
+    return progression_service.list_locality_animals_page(
+        tg_id,
+        locality_id=locality_id,
+        offset=offset,
+        limit=limit,
+        query=query,
+        preferred_habitat=preferred_habitat,
+    )
 
 
 @router.post("/api/localities/buy")
@@ -77,6 +137,16 @@ def breed(body: BreedBody, tg_id: TelegramId):
 @router.get("/api/expeditions")
 def get_expeditions(tg_id: TelegramId):
     return progression_service.get_expeditions(tg_id)
+
+
+@router.get("/api/expeditions/animals/page")
+def list_expedition_animals_page(
+    tg_id: TelegramId,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=120, ge=1, le=240),
+    query: str = Query(default="", max_length=64),
+):
+    return progression_service.list_expedition_animals_page(tg_id, offset=offset, limit=limit, query=query)
 
 
 @router.post("/api/expeditions/start")

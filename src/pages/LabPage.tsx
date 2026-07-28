@@ -4,10 +4,9 @@ import { AnimalArt } from '@/components/AnimalArt';
 import { AnimalFavoriteButton } from '@/components/AnimalFavoriteButton';
 import { PageHeader } from '@/components/PageHeader';
 import type { Animal, BreedResult, BreedingAnimal, GameState, GeneTier, InheritedGene } from '@/types';
-import { apiBreed, apiGetBreedingAnimals, apiSetAnimalFavorite } from '@/api';
+import { apiBreed, apiGetBreedingAnimalsPage, apiSetAnimalFavorite } from '@/api';
 import { fmt } from '@/utils/format';
 import { GENE_META, SPECIES_RARITY_META } from '@/data/packs';
-import { compareByQuality } from '@/lib/animalQuality';
 import { useStoredChoice } from '@/hooks/useStoredChoice';
 
 const GENETICS_BONUS_BY_LEVEL = [0, 1, 3, 6, 9, 12];
@@ -197,64 +196,40 @@ function ParentSlot({ label, animal, onClick }: {
 const PICKER_ROW_HEIGHT = 96;
 const PICKER_OVERSCAN = 8;
 
-function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggleFavorite, favoriteOverrides, favoriteBusyIds, onClose }: {
+function AnimalPicker({ animals, total, loading, hasMore, query, sort, exclude, mateSpeciesCode, onQueryChange, onSortChange, onLoadMore, onPick, onToggleFavorite, favoriteOverrides, favoriteBusyIds, onClose }: {
   animals: BreedingAnimal[];
-  tgId: number;
+  total: number;
+  loading: boolean;
+  hasMore: boolean;
+  query: string;
+  sort: PickerSort;
   exclude: number | null;
   // When the other parent is already chosen, only its species can breed with it.
   mateSpeciesCode: string | null;
+  onQueryChange: (query: string) => void;
+  onSortChange: (sort: PickerSort) => void;
+  onLoadMore: () => void;
   onPick: (a: BreedingAnimal) => void;
   onToggleFavorite: (animal: BreedingAnimal) => void;
   favoriteOverrides: ReadonlyMap<number, boolean>;
   favoriteBusyIds: ReadonlySet<number>;
   onClose: () => void;
 }) {
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useStoredChoice<PickerSort>('breed-picker-sort', tgId, PICKER_SORT_IDS, 'new');
   const [scrollTop, setScrollTop] = useState(0);
   const available = useMemo(() => {
     const breedable = animals.filter(a => a.can_breed && a.id !== exclude);
-    // The first slot should never offer a dead end: if the player has no other
-    // ready animal of that species, choosing it can only lead to an error later.
-    if (!mateSpeciesCode) {
-      const speciesCounts = new Map<string, number>();
-      for (const animal of breedable) {
-        speciesCounts.set(animal.species_code, (speciesCounts.get(animal.species_code) ?? 0) + 1);
-      }
-      return breedable.filter(animal => (speciesCounts.get(animal.species_code) ?? 0) > 1);
-    }
-    return breedable.filter(animal => animal.species_code === mateSpeciesCode);
+    return mateSpeciesCode ? breedable.filter(animal => animal.species_code === mateSpeciesCode) : breedable;
   }, [animals, exclude, mateSpeciesCode]);
-  // Keep the expensive sort independent from star clicks. A favorite change only needs
-  // to repartition this already-sorted array, not sort all 11k animals again.
-  const baseSorted = useMemo(() => [...available].sort((a, b) => {
-      // Keep possible partners at the top after the first parent is chosen.
-      // The picker still shows other species below them so the search remains useful.
-      if (mateSpeciesCode) {
-        const compatibleOrder = Number(b.species_code === mateSpeciesCode) - Number(a.species_code === mateSpeciesCode);
-        if (compatibleOrder !== 0) return compatibleOrder;
-      }
-      if (sort === 'income') return b.income - a.income;
-      // Самые редкие с лучшими генами сверху, обычные со слабыми — внизу.
-      if (sort === 'quality') return compareByQuality(a, b);
-      if (sort === 'reproduction') return BREED_TIER_INDEX[b.reproduction] - BREED_TIER_INDEX[a.reproduction] || b.income - a.income;
-      return new Date(b.acquired_at).getTime() - new Date(a.acquired_at).getTime() || b.income - a.income;
-    }), [available, mateSpeciesCode, sort]);
   const sorted = useMemo(() => {
     const favorites: BreedingAnimal[] = [];
     const regular: BreedingAnimal[] = [];
-    for (const animal of baseSorted) {
+    for (const animal of available) {
       if (favoriteOverrides.get(animal.id) ?? animal.is_favorite) favorites.push(animal);
       else regular.push(animal);
     }
     return favorites.length === 0 ? regular : favorites.concat(regular);
-  }, [baseSorted, favoriteOverrides]);
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    return needle
-      ? sorted.filter(a => `${a.name} ${a.species_name}`.toLocaleLowerCase().includes(needle))
-      : sorted;
-  }, [query, sorted]);
+  }, [available, favoriteOverrides]);
+  const filtered = sorted;
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, filtered.length * PICKER_ROW_HEIGHT - 420));
   const visibleStart = Math.max(0, Math.floor(effectiveScrollTop / PICKER_ROW_HEIGHT) - PICKER_OVERSCAN);
   const visibleEnd = Math.min(
@@ -270,33 +245,32 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
           <div>
             <p className="m-0 font-extrabold text-[15px]">Выбери родителя</p>
             <p className="m-0 mt-1 text-[11px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
-              {filtered.length} из {available.length} доступных
+              {filtered.length} из {total} доступных
             </p>
           </div>
           <button onClick={onClose} aria-label="Закрыть" className="tap-target -mr-2 border-none bg-transparent text-[18px] cursor-pointer"
                   style={{ color: 'var(--tg-theme-hint-color)' }}>✕</button>
         </div>
 
-        {available.length > 0 && (
           <>
             <label className="flex items-center gap-2 min-h-11 rounded-xl px-3"
                    style={{ background: 'color-mix(in srgb, var(--tg-theme-hint-color) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--tg-theme-hint-color) 14%, transparent)' }}>
               <span className="text-[16px]" aria-hidden="true">⌕</span>
               <input
                 value={query}
-                onChange={event => setQuery(event.target.value)}
+                onChange={event => onQueryChange(event.target.value)}
                 placeholder="Найти по имени или виду"
                 aria-label="Поиск животного"
                 className="min-w-0 flex-1 bg-transparent border-none outline-none text-[13px]"
               />
-              {query && <button type="button" onClick={() => setQuery('')} aria-label="Очистить поиск" className="border-none bg-transparent text-[16px] cursor-pointer" style={{ color: 'var(--tg-theme-hint-color)' }}>×</button>}
+              {query && <button type="button" onClick={() => onQueryChange('')} aria-label="Очистить поиск" className="border-none bg-transparent text-[16px] cursor-pointer" style={{ color: 'var(--tg-theme-hint-color)' }}>×</button>}
             </label>
             <div className="flex shrink-0 min-h-10 gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Сортировка животных">
               {PICKER_SORTS.map(option => (
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => setSort(option.id)}
+                  onClick={() => onSortChange(option.id)}
                   role="tab"
                   aria-selected={sort === option.id}
                   className="shrink-0 min-h-10 rounded-xl border-none px-3 text-[11px] font-bold cursor-pointer"
@@ -307,9 +281,10 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
               ))}
             </div>
           </>
-        )}
 
-        {available.length === 0 ? (
+        {loading && available.length === 0 ? (
+          <div className="flex justify-center py-6"><div className="spinner" /></div>
+        ) : available.length === 0 ? (
           <p className="text-center py-6 text-[13px]" style={{ color: 'var(--tg-theme-hint-color)' }}>
               Нет животных с доступным партнёром<br />
               <span className="text-[11px]">Нужны два животных одного вида, готовых к скрещиванию сегодня</span>
@@ -322,7 +297,13 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
           <div
             className="min-h-0 overflow-y-auto overscroll-contain"
             style={{ height: 'min(48vh, 420px)' }}
-            onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+            onScroll={event => {
+              const element = event.currentTarget;
+              setScrollTop(element.scrollTop);
+              if (hasMore && !loading && element.scrollHeight - element.scrollTop - element.clientHeight < PICKER_ROW_HEIGHT * 4) {
+                onLoadMore();
+              }
+            }}
           >
             <div className="relative" style={{ height: filtered.length * PICKER_ROW_HEIGHT }}>
               {filtered.slice(visibleStart, visibleEnd).map((a, offset) => {
@@ -372,6 +353,7 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
                 );
               })}
             </div>
+            {loading && <div className="absolute bottom-3 left-1/2 -translate-x-1/2"><div className="spinner" /></div>}
           </div>
         )}
       </div>
@@ -384,7 +366,7 @@ function AnimalPicker({ animals, tgId, exclude, mateSpeciesCode, onPick, onToggl
 
 export function LabPage({ gs, onRefresh, onPatchState }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void }) {
   const [animals, setAnimals]   = useState<BreedingAnimal[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const loading = false;
   const [parent1, setParent1]   = useState<BreedingAnimal | null>(null);
   const [parent2, setParent2]   = useState<BreedingAnimal | null>(null);
   const [picking, setPicking]   = useState<1 | 2 | null>(null);
@@ -394,19 +376,84 @@ export function LabPage({ gs, onRefresh, onPatchState }: { gs: GameState; onRefr
   const [favoriteOverrides, setFavoriteOverrides] = useState<Map<number, boolean>>(() => new Map());
   const [favoriteBusyIds, setFavoriteBusyIds] = useState<Set<number>>(() => new Set());
   const favoriteRequests = useRef(new Map<number, { desired: boolean; previousOverride: boolean | undefined }>());
+  const [pickerQuery, setPickerQuery] = useState('');
+  const [pickerSort, setPickerSort] = useStoredChoice<PickerSort>('breed-picker-sort', gs.tg_id, PICKER_SORT_IDS, 'new');
+  const [pickerTotal, setPickerTotal] = useState(0);
+  const [pickerNextOffset, setPickerNextOffset] = useState<number | null>(null);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const pickerRequestRef = useRef(0);
+  const pickerLoadingRef = useRef(false);
 
-  const load = async () => {
-    try {
-      const { animals } = await apiGetBreedingAnimals();
-      setAnimals(animals);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
+  const pickerSpeciesCode = picking === 1 ? parent2?.species_code ?? null : parent1?.species_code ?? null;
+  const pickerExcludeId = picking === 1 ? parent2?.id ?? null : parent1?.id ?? null;
+
+  useEffect(() => {
+    if (picking === null) return;
+    const requestId = ++pickerRequestRef.current;
+    pickerLoadingRef.current = true;
+    setPickerLoading(true);
+    const timer = window.setTimeout(() => {
+      void apiGetBreedingAnimalsPage({
+        offset: 0,
+        limit: 120,
+        sort: pickerSort,
+        query: pickerQuery.trim(),
+        speciesCode: pickerSpeciesCode,
+        excludeId: pickerExcludeId,
+      })
+        .then(response => {
+          if (pickerRequestRef.current !== requestId) return;
+          setAnimals(response.animals);
+          setPickerTotal(response.total);
+          setPickerNextOffset(response.next_offset);
+        })
+        .catch(error => {
+          if (pickerRequestRef.current === requestId) setError(error instanceof Error ? error.message : 'Не удалось загрузить животных');
+        })
+        .finally(() => {
+          if (pickerRequestRef.current === requestId) {
+            pickerLoadingRef.current = false;
+            setPickerLoading(false);
+          }
+        });
+    }, pickerQuery ? 140 : 0);
+    return () => window.clearTimeout(timer);
+  }, [pickerExcludeId, pickerQuery, pickerSort, pickerSpeciesCode, picking]);
+
+  const loadMorePickerAnimals = () => {
+    const offset = pickerNextOffset;
+    if (offset === null || pickerLoadingRef.current || picking === null) return;
+    const requestId = pickerRequestRef.current;
+    pickerLoadingRef.current = true;
+    setPickerLoading(true);
+    void apiGetBreedingAnimalsPage({
+      offset,
+      limit: 120,
+      sort: pickerSort,
+      query: pickerQuery.trim(),
+      speciesCode: pickerSpeciesCode,
+      excludeId: pickerExcludeId,
+    }).then(response => {
+      if (pickerRequestRef.current !== requestId) return;
+      setAnimals(previous => {
+        const known = new Set(previous.map(animal => animal.id));
+        return previous.concat(response.animals.filter(animal => !known.has(animal.id)));
+      });
+      setPickerTotal(response.total);
+      setPickerNextOffset(response.next_offset);
+    }).catch(error => setError(error instanceof Error ? error.message : 'Не удалось загрузить животных'))
+      .finally(() => {
+        if (pickerRequestRef.current === requestId) {
+          pickerLoadingRef.current = false;
+          setPickerLoading(false);
+        }
+      });
   };
 
-  useEffect(() => { void load(); }, []);
+  const openPicker = (slot: 1 | 2) => {
+    setPickerQuery('');
+    setPicking(slot);
+  };
 
   async function toggleFavorite(animal: BreedingAnimal) {
     const request = favoriteRequests.current.get(animal.id);
@@ -475,8 +522,8 @@ export function LabPage({ gs, onRefresh, onPatchState }: { gs: GameState; onRefr
           ? { ...animal, can_breed: false }
           : animal
       ));
-      if (res.animal && !fresh.some(animal => animal.id === res.animal?.id)) {
-        fresh.push(res.animal);
+      if (res.animal?.base_income !== undefined && !fresh.some(animal => animal.id === res.animal?.id)) {
+        fresh.push({ ...res.animal, base_income: res.animal.base_income });
       }
       setAnimals(fresh);
       const p1 = fresh.find(a => a.id === parent1.id);
@@ -514,9 +561,9 @@ export function LabPage({ gs, onRefresh, onPatchState }: { gs: GameState; onRefr
         <>
           {/* Parent selectors */}
           <div className="flex gap-3">
-            <ParentSlot label="Родитель 1" animal={parent1} onClick={() => setPicking(1)} />
+            <ParentSlot label="Родитель 1" animal={parent1} onClick={() => openPicker(1)} />
             <div className="flex items-center text-[24px]" style={{ color: 'var(--tg-theme-hint-color)' }}>×</div>
-            <ParentSlot label="Родитель 2" animal={parent2} onClick={() => setPicking(2)} />
+            <ParentSlot label="Родитель 2" animal={parent2} onClick={() => openPicker(2)} />
           </div>
 
           {parent1 && parent2 && <GeneComparison parentA={parent1} parentB={parent2} />}
@@ -639,9 +686,16 @@ export function LabPage({ gs, onRefresh, onPatchState }: { gs: GameState; onRefr
       {picking !== null && (
         <AnimalPicker
           animals={animals}
-          tgId={gs.tg_id}
+          total={pickerTotal}
+          loading={pickerLoading}
+          hasMore={pickerNextOffset !== null}
+          query={pickerQuery}
+          sort={pickerSort}
           exclude={picking === 1 ? parent2?.id ?? null : parent1?.id ?? null}
           mateSpeciesCode={picking === 1 ? parent2?.species_code ?? null : parent1?.species_code ?? null}
+          onQueryChange={setPickerQuery}
+          onSortChange={setPickerSort}
+          onLoadMore={loadMorePickerAnimals}
           onPick={a => {
             if (picking === 1) setParent1(a);
             else setParent2(a);

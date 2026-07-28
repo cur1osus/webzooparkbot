@@ -66,9 +66,20 @@ TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
 
 # AI rivals. Read by the bot runner only; the API process never calls the model, so a
 # missing key degrades the rivals to their fallback plans and leaves the game untouched.
-ROUTERAI_API_KEY = os.getenv("ROUTERAI_API_KEY", "")
-ROUTERAI_BASE_URL = os.getenv("ROUTERAI_BASE_URL", "https://routerai.ru/api/v1")
-BOT_PLANNER_MODEL = os.getenv("BOT_PLANNER_MODEL", "deepseek/deepseek-v4-flash")
+# The ROUTERAI_* names are retained as a compatibility fallback for old deployments.
+ROUTERAI_API_KEY = os.getenv("OPENROUTER_API_KEY", os.getenv("ROUTERAI_API_KEY", ""))
+ROUTERAI_BASE_URL = os.getenv(
+    "OPENROUTER_BASE_URL",
+    os.getenv("ROUTERAI_BASE_URL", "https://openrouter.ai/api/v1"),
+)
+BOT_PLANNER_MODEL = os.getenv(
+    "BOT_PLANNER_MODEL",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+)
+BOT_PLANNER_FALLBACK_MODEL = os.getenv(
+    "BOT_PLANNER_FALLBACK_MODEL",
+    "poolside/laguna-xs-2.1:free",
+)
 
 # `BANK_RATE_SECRET` is gone. It existed because the rate was `HMAC(secret, minute)` —
 # a pure function of the clock, which any client could precompute without it. The rate is

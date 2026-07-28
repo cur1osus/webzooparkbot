@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   apiDismissExpedition,
   apiFinishExpedition,
+  apiGetExpeditionAnimalsPage,
   apiGetExpeditions,
   apiStartExpedition,
 } from '@/api';
@@ -468,6 +469,14 @@ export function ExpeditionPage({
   const [animalSearch, setAnimalSearch] = useState('');
   const [visibleAnimalCount, setVisibleAnimalCount] = useState(60);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [availableAnimals, setAvailableAnimals] = useState<ExpeditionAnimal[]>([]);
+  const [availableAnimalsTotal, setAvailableAnimalsTotal] = useState(0);
+  const [nextAnimalsOffset, setNextAnimalsOffset] = useState<number | null>(null);
+  const [animalsLoading, setAnimalsLoading] = useState(false);
+  const [animalsReloadToken, setAnimalsReloadToken] = useState(0);
+  const [knownAnimals, setKnownAnimals] = useState<Map<number, ExpeditionAnimal>>(() => new Map());
+  const animalsRequestRef = useRef(0);
+  const animalsLoadingRef = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -479,7 +488,6 @@ export function ExpeditionPage({
         // Land on somewhere the player can actually launch from.
         return (nextInfo.localities.find(locality => !locality.busy) ?? nextInfo.localities[0])?.id ?? null;
       });
-      setSelectedAnimalIds(current => current.filter(id => nextInfo.available_animals.some(animal => animal.id === id)));
     } catch (e) {
       setError((e as Error).message ?? 'Ошибка загрузки');
     } finally {
@@ -490,6 +498,65 @@ export function ExpeditionPage({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const requestId = ++animalsRequestRef.current;
+    animalsLoadingRef.current = true;
+    setAnimalsLoading(true);
+    setVisibleAnimalCount(60);
+    const timer = window.setTimeout(() => {
+      void apiGetExpeditionAnimalsPage(0, 120, animalSearch.trim())
+        .then(response => {
+          if (animalsRequestRef.current !== requestId) return;
+          setAvailableAnimals(response.animals);
+          setAvailableAnimalsTotal(response.total);
+          setNextAnimalsOffset(response.next_offset);
+          setKnownAnimals(previous => {
+            const next = new Map(previous);
+            response.animals.forEach(animal => next.set(animal.id, animal));
+            return next;
+          });
+        })
+        .catch(e => { if (animalsRequestRef.current === requestId) setError((e as Error).message ?? 'Ошибка загрузки животных'); })
+        .finally(() => {
+          if (animalsRequestRef.current === requestId) {
+            animalsLoadingRef.current = false;
+            setAnimalsLoading(false);
+          }
+        });
+    }, animalSearch ? 140 : 0);
+    return () => window.clearTimeout(timer);
+  }, [animalSearch, animalsReloadToken]);
+
+  const loadMoreAnimals = useCallback(() => {
+    const offset = nextAnimalsOffset;
+    if (offset === null || animalsLoadingRef.current) return;
+    const requestId = animalsRequestRef.current;
+    animalsLoadingRef.current = true;
+    setAnimalsLoading(true);
+    void apiGetExpeditionAnimalsPage(offset, 120, animalSearch.trim())
+      .then(response => {
+        if (animalsRequestRef.current !== requestId) return;
+        setAvailableAnimals(previous => {
+          const known = new Set(previous.map(animal => animal.id));
+          return previous.concat(response.animals.filter(animal => !known.has(animal.id)));
+        });
+        setKnownAnimals(previous => {
+          const next = new Map(previous);
+          response.animals.forEach(animal => next.set(animal.id, animal));
+          return next;
+        });
+        setAvailableAnimalsTotal(response.total);
+        setNextAnimalsOffset(response.next_offset);
+      })
+      .catch(e => setError((e as Error).message ?? 'Ошибка загрузки животных'))
+      .finally(() => {
+        if (animalsRequestRef.current === requestId) {
+          animalsLoadingRef.current = false;
+          setAnimalsLoading(false);
+        }
+      });
+  }, [animalSearch, nextAnimalsOffset]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
@@ -522,24 +589,13 @@ export function ExpeditionPage({
     setSelectedDepth(current => Math.min(current, selectedLocality.max_depth));
   }, [selectedLocality]);
 
-  const availableAnimals = useMemo(
-    () => [...(info?.available_animals ?? [])].sort((a, b) => expeditionPower(b) - expeditionPower(a) || b.income - a.income),
-    [info?.available_animals],
-  );
-
   const selectedAnimalIdSet = useMemo(() => new Set(selectedAnimalIds), [selectedAnimalIds]);
-  const filteredAnimals = useMemo(() => {
-    const query = animalSearch.trim().toLocaleLowerCase();
-    if (!query) return availableAnimals;
-    return availableAnimals.filter(animal => (
-      `${animal.name} ${animal.species_name} ${HABITAT_INFO[animal.habitat].name}`.toLocaleLowerCase().includes(query)
-    ));
-  }, [animalSearch, availableAnimals]);
+  const filteredAnimals = availableAnimals;
   const visibleAnimals = filteredAnimals.slice(0, visibleAnimalCount);
 
   const selectedAnimals = useMemo(
-    () => availableAnimals.filter(animal => selectedAnimalIds.includes(animal.id)),
-    [availableAnimals, selectedAnimalIds],
+    () => selectedAnimalIds.map(id => knownAnimals.get(id)).filter((animal): animal is ExpeditionAnimal => animal !== undefined),
+    [knownAnimals, selectedAnimalIds],
   );
 
   const powerMultiplier = info?.power_multiplier ?? 1;
@@ -574,6 +630,7 @@ export function ExpeditionPage({
     try {
       await action();
       await load();
+      setAnimalsReloadToken(token => token + 1);
       onRefresh();
     } catch (e) {
       setError((e as Error).message ?? fallback);
@@ -635,7 +692,7 @@ export function ExpeditionPage({
               </div>
               <div className="rounded-2xl p-3 flex flex-col justify-between text-center" style={{ background: 'rgba(var(--c-green-rgb),0.08)', border: '1px solid rgba(var(--c-green-rgb),0.2)' }}>
                 <p className="m-0 text-[11px] text-tg-hint">Свободные животные</p>
-                <p className="m-0 mt-1 text-[18px] font-extrabold leading-none">{availableAnimals.length}</p>
+                <p className="m-0 mt-1 text-[18px] font-extrabold leading-none">{availableAnimalsTotal}</p>
               </div>
               <div className="rounded-2xl p-3 flex flex-col justify-between text-center" style={{ background: 'rgba(var(--c-gold-rgb),0.08)', border: '1px solid rgba(var(--c-gold-rgb),0.2)' }}>
                 <p className="m-0 text-[11px] text-tg-hint">Бонус к силе</p>
@@ -774,10 +831,12 @@ export function ExpeditionPage({
                   )}
                 </div>
                 <p className="m-0 mb-2 text-[11px] text-tg-hint">
-                  {animalSearch ? `Найдено ${filteredAnimals.length} из ${availableAnimals.length}` : `Свободно ${availableAnimals.length}. Сначала показаны самые сильные.`}
+                  {animalSearch ? `Найдено ${availableAnimalsTotal}` : `Свободно ${availableAnimalsTotal}. Сначала показаны самые сильные.`}
                 </p>
 
-                {availableAnimals.length === 0 ? (
+                {animalsLoading && availableAnimals.length === 0 ? (
+                  <div className="flex justify-center py-8"><div className="spinner" /></div>
+                ) : availableAnimals.length === 0 ? (
                   <div className="card text-center py-8">
                     <p className="m-0 text-[36px] mb-2">🐾</p>
                     <p className="m-0 text-sm text-tg-hint">Нет свободных животных для экспедиции</p>
@@ -801,14 +860,25 @@ export function ExpeditionPage({
                         />
                       );
                     })}
-                    {visibleAnimalCount < filteredAnimals.length && (
+                    {(visibleAnimalCount < filteredAnimals.length || nextAnimalsOffset !== null) && (
                       <button
                         type="button"
-                        onClick={() => setVisibleAnimalCount(count => Math.min(count + 60, filteredAnimals.length))}
+                        onClick={() => {
+                          if (visibleAnimalCount < filteredAnimals.length) {
+                            setVisibleAnimalCount(count => Math.min(count + 60, filteredAnimals.length));
+                          } else {
+                            loadMoreAnimals();
+                          }
+                        }}
+                        disabled={animalsLoading}
                         className="w-full rounded-2xl border-none py-3 text-[13px] font-extrabold"
                         style={{ background: 'var(--surface-subtle)', color: 'var(--c-blue)' }}
                       >
-                        Показать ещё {Math.min(60, filteredAnimals.length - visibleAnimalCount)} из {filteredAnimals.length - visibleAnimalCount}
+                        {animalsLoading
+                          ? 'Загружаем...'
+                          : visibleAnimalCount < filteredAnimals.length
+                            ? `Показать ещё ${Math.min(60, filteredAnimals.length - visibleAnimalCount)}`
+                            : 'Загрузить ещё'}
                       </button>
                     )}
                   </div>

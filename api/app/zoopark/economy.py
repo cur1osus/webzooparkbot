@@ -37,7 +37,7 @@ from api.app.zoopark.catalog import (
     RATE_STEPS,
     REFERRAL_PERCENT,
 )
-from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.income import settle_player_income
 from api.app.zoopark.profile import get_player
 
 random = SystemRandom()
@@ -141,7 +141,7 @@ def exchange(tg_id: int, body: BankExchangeBody) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
 
         rate, _published = effective_rate(session, player.id)
         budget = ledger.balance(player, "rub") if body.exchange_all else body.amount_rub

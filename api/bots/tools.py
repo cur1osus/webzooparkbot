@@ -83,6 +83,8 @@ from api.app.zoopark import safe as safe_service
 from api.app.zoopark import social as social_service
 from api.app.zoopark import status as status_service
 from api.bots import memory_store
+from api.bots import skills
+from api.bots.turn_snapshot import build as build_turn_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -144,12 +146,17 @@ def _did_you_mean(name: str, limit: int = 3) -> list[str]:
     similarity finds `get_bank` for `get_safe`, where no word is shared.
     """
     wanted = set(name.split("_"))
-    by_word = sorted(
-        (n for n in REGISTRY if wanted & set(n.split("_"))),
-        key=lambda n: -len(wanted & set(n.split("_"))),
-    )
-    ranked = by_word + difflib.get_close_matches(name, list(REGISTRY), n=limit, cutoff=0.5)
-    return list(dict.fromkeys(ranked))[:limit]
+    candidates = set(
+        n for n in REGISTRY if wanted & set(n.split("_"))
+    ) | set(difflib.get_close_matches(name, list(REGISTRY), n=limit, cutoff=0.35))
+    return sorted(
+        candidates,
+        key=lambda n: (
+            -len(wanted & set(n.split("_"))),
+            -difflib.SequenceMatcher(None, name, n).ratio(),
+            n,
+        ),
+    )[:limit]
 
 
 def call(name: str, tg_id: int, player_id: int, arguments: dict) -> dict:
@@ -180,6 +187,13 @@ def call(name: str, tg_id: int, player_id: int, arguments: dict) -> dict:
                 "Вызывай в начале хода, чтобы понять, с чем работаешь.")
 def _get_me(tg_id: int, **_):
     return core_service.me(tg_id)
+
+
+@tool("get_turn_snapshot", "Компактный свежий срез для выбора цели хода: деньги, доход, проблемы зверей, "
+                            "локации, курс, готовые награды, паки и торговец. Вызывай первым; "
+                            "подробные list_* инструменты нужны только для уточнения перед действием.")
+def _get_turn_snapshot(tg_id: int, **_):
+    return build_turn_snapshot(tg_id)
 
 
 @tool("list_animals", "Все свои звери с id, генами, средой обитания, здоровьем и тем, где они живут. "
@@ -234,7 +248,8 @@ def _get_player_profile(tg_id: int, target_tg_id: int, **_):
     return social_service.public_profile(tg_id, target_tg_id)
 
 
-@tool("forge_items", "Свои предметы в кузнице: редкость, уровень, свойства, надет ли предмет.")
+@tool("forge_items", "Свои предметы в кузнице, стоимость следующего создания и активные бонусы: "
+                    "редкость, уровень, свойства, надет ли предмет.")
 def _forge_items(tg_id: int, **_):
     return forge_service.forge_items(tg_id)
 
@@ -301,7 +316,9 @@ def _reroll_daily_bonus(tg_id: int, **_):
 
 
 @tool("open_pack", "Купить и открыть пак зверей. Лотерея: дорого, зверь случайный. "
-                   "Тир выше даёт лучших зверей, но открывается только после покупки тира ниже.",
+                   "Тир выше даёт лучших зверей, но открывается только после покупки тира ниже. "
+                   "Сравни цену партии с альтернативами в snapshot; обязательного приоритета "
+                   "у паков или кузницы нет.",
       {"tier": {"type": "string", "enum": ["rare", "epic", "legendary", "mythic"]},
        "quantity": {"type": "integer", "enum": [1, 5, 10, 50, 100], "description": "сколько паков разом"}},
       ["tier"])
@@ -675,20 +692,70 @@ def _claim_transfer(tg_id: int, code: str, **_):
 # ── Память и завершение хода ──────────────────────────────────────────────────
 
 
+@tool("set_turn_goal", "Зафиксировать цель этого хода до изменяющих действий. Укажи, что хочешь "
+                       "изменить, какой наблюдаемый эффект ожидаешь и какую альтернативу "
+                       "отверг. Это не игровая операция, а контракт для проверки результата.",
+      {"objective": {"type": "string", "description": "одна цель хода"},
+       "expected_effect": {"type": "string", "description": "что должно измениться в snapshot"},
+       "alternative": {"type": "string", "description": "главная рассмотренная альтернатива"}},
+      ["objective", "expected_effect"])
+def _set_turn_goal(objective: str, expected_effect: str, alternative: str = "", **_):
+    objective = (objective or "").strip()[:300]
+    expected_effect = (expected_effect or "").strip()[:400]
+    alternative = (alternative or "").strip()[:300]
+    if not objective or not expected_effect:
+        return {"ok": False, "error": "нужны цель и ожидаемый эффект"}
+    return {
+        "ok": True,
+        "цель": objective,
+        "ожидаемый_эффект": expected_effect,
+        "альтернатива": alternative,
+    }
+
+
 @tool("remember", "Записать себе вывод на будущее: что сработало, что оказалось ошибкой, "
                   "к чему ты идёшь. Эти заметки ты увидишь в начале следующего хода. "
                   "Не записывай баланс, доход и прочее, что и так видно инструментами — "
                   "к следующему ходу это устареет, а место в блокноте вытеснит нужное. "
+                  "Для курса, дат, балансов и других меняющихся фактов укажи ttl_days. "
                   "Одна заметка за ход, и только если узнал что-то новое.",
-      {"note": {"type": "string", "description": "один вывод, коротко"}}, ["note"])
-def _remember(player_id: int, note: str, **_):
-    return memory_store.remember(player_id, note)
+      {"note": {"type": "string", "description": "один проверенный вывод, коротко"},
+       "ttl_days": {"type": "integer", "enum": [1, 3, 7, 30],
+                    "description": "срок для меняющегося факта; для постоянного правила не указывай"}},
+      ["note"])
+def _remember(player_id: int, note: str, ttl_days: int | None = None, **_):
+    return memory_store.remember(player_id, note, ttl_days=ttl_days)
 
 
 @tool("read_memory", "Перечитать свои заметки. Они и так даются в начале хода — "
                      "вызывай, только если нужно свериться ещё раз.")
 def _read_memory(player_id: int, **_):
     return {"заметки": memory_store.load(player_id)}
+
+
+@tool("save_skill", "Сохранить проверенную повторяемую последовательность действий. Не записывай "
+                    "разовый баланс или случайную удачу: навык должен иметь условие, шаги и "
+                    "объяснение, почему последовательность сработала.",
+      {"name": {"type": "string", "description": "короткое название навыка"},
+       "trigger": {"type": "string", "description": "состояние, когда навык применять"},
+       "steps": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 6},
+       "rationale": {"type": "string", "description": "почему это сработало"}},
+      ["name", "trigger", "steps"])
+def _save_skill(player_id: int, name: str, trigger: str, steps: list[str], rationale: str = "", **_):
+    return skills.save(player_id, name, trigger, steps, rationale)
+
+
+@tool("read_skills", "Показать свою библиотеку проверенных навыков. Она уже даётся в начале "
+                    "хода; вызывай только если нужно свериться ещё раз.")
+def _read_skills(player_id: int, **_):
+    return {"навыки": skills.load(player_id)}
+
+
+@tool("forget_skill", "Удалить устаревший или опровергнутый навык.",
+      {"index": {"type": "integer", "description": "номер навыка в квадратных скобках"}},
+      ["index"])
+def _forget_skill(player_id: int, index: int, **_):
+    return skills.forget(player_id, index)
 
 
 @tool("forget", "Удалить свою заметку по номеру, если она устарела или оказалась неверной.",
@@ -698,10 +765,18 @@ def _forget(player_id: int, index: int, **_):
 
 
 @tool("end_turn", "Закончить ход. Вызывай, когда сделал всё, что хотел — "
-                  "не обязательно тратить весь лимит вызовов.",
-      {"summary": {"type": "string", "description": "одной фразой: что сделал и почему"}}, ["summary"])
-def _end_turn(summary: str, **_):
-    return {"ok": True, "ход_завершён": True, "итог": summary}
+                  "не обязательно тратить весь лимит вызовов. Обязательно укажи, достигнута "
+                  "ли цель, что показала проверка состояния и что изменить в следующий раз.",
+      {"summary": {"type": "string", "description": "что сделал и почему"},
+       "goal_reached": {"type": "string", "enum": ["yes", "no", "uncertain"]},
+       "observed_result": {"type": "string", "description": "что реально изменилось"},
+       "next_adjustment": {"type": "string", "description": "что изменить в следующем ходу"}},
+      ["summary", "goal_reached", "observed_result", "next_adjustment"])
+def _end_turn(summary: str, goal_reached: str = "uncertain", observed_result: str = "",
+              next_adjustment: str = "", **_):
+    return {"ok": True, "ход_завершён": True, "итог": summary,
+            "цель_достигнута": goal_reached, "наблюдаемый_результат": observed_result,
+            "следующая_поправка": next_adjustment}
 
 
 def schemas(tg_id: int | None = None, player_id: int | None = None) -> list[dict]:

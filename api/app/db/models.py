@@ -1169,5 +1169,11 @@ class BotPlan(Base):
     # Micro-roubles: RouterAI prices in roubles per token and a turn costs a few tens of
     # kopecks, so an integer currency keeps it exact.
     cost_micro_rub: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    # Deterministic outcome metrics derived from the compact snapshots and raw journal. This
+    # is intentionally separate from `tool_calls`: it can be aggregated without replaying or
+    # parsing a large, clipped transcript.
+    evaluation: Mapped[str] = mapped_column(
+        Text().with_variant(MEDIUMTEXT(), "mysql"), nullable=False, default="{}"
+    )
 
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False, default=utcnow)

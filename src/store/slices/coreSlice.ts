@@ -3,7 +3,20 @@ import { apiMe, ApiError } from '@/api';
 import type { GameState } from '@/types';
 import type { CoreSlice, ZooSliceCreator } from '@/store/types';
 
-const IDB_KEY = 'zooparkbot-v9';
+const IDB_KEY = 'zooparkbot-v10';
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingState: GameState | null = null;
+
+function persistSoon(state: GameState): void {
+  pendingState = state;
+  if (persistTimer !== null) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    const snapshot = pendingState;
+    pendingState = null;
+    if (snapshot) void idbSet(IDB_KEY, snapshot).catch(() => {});
+  }, 750);
+}
 
 /**
  * There is no `persistStateSilently` any more. It POSTed `data_version` to `/api/save`,
@@ -26,8 +39,8 @@ export const createCoreSlice: ZooSliceCreator<CoreSlice> = (set, get) => ({
       }
 
       const gs = await apiMe();
-      await idbSet(IDB_KEY, gs).catch(() => {});
       set({ state: gs, loading: false });
+      persistSoon(gs);
     } catch (err) {
       const status = err instanceof ApiError ? err.status : null;
       if (status === 404) {
@@ -46,7 +59,7 @@ export const createCoreSlice: ZooSliceCreator<CoreSlice> = (set, get) => ({
 
   setGameState: (gs: GameState) => {
     set({ state: gs });
-    idbSet(IDB_KEY, gs).catch(() => {});
+    persistSoon(gs);
   },
 
   patchState: (patch: Partial<GameState>) => {
@@ -54,6 +67,6 @@ export const createCoreSlice: ZooSliceCreator<CoreSlice> = (set, get) => ({
     if (!state) return;
     const next = { ...state, ...patch };
     set({ state: next });
-    idbSet(IDB_KEY, next).catch(() => {});
+    persistSoon(next);
   },
 });

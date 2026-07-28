@@ -10,6 +10,8 @@ import type {
   ExpeditionFinishResponse,
   ExpeditionInfo,
   ExpeditionStartResponse,
+  Habitat,
+  LocalityAnimal,
   LocalitiesInfo,
   ReleaseAnimalResult,
   ReleaseAnimalsResult,
@@ -20,6 +22,7 @@ import type {
   PackOpenResult,
 } from '@/types';
 import { req } from './client';
+import type { ForecastAnimal } from '@/lib/incomeForecast';
 
 export const apiGetMerchant = () => req<MerchantResponse>('/merchant/animals');
 export const apiBuyFromMerchant = (slot: number) =>
@@ -31,15 +34,59 @@ export const apiCreateDonateInvoice = (stars: number) =>
 
 /** Alive animals that are not away on an expedition — the breeding and squad pool. */
 export const apiGetAnimals = () => req<{ animals: Animal[] }>('/animals');
+export const apiGetZooAnimals = (offset = 0, limit = 120, sort = 'new') =>
+  req<{ animals: Animal[]; total: number; next_offset: number | null }>(
+    `/zoo/animals?offset=${offset}&limit=${limit}&sort=${encodeURIComponent(sort)}`,
+  );
+export const apiGetAnimalForecast = () => req<{ animals: ForecastAnimal[]; average_lifespan_ms: number | null }>('/zoo/forecast');
+/** Full passport fields are loaded only for the one animal the player opens. */
+export const apiGetAnimal = (animalId: number) => req<{ animal: Animal }>(`/animals/${animalId}`);
 /** Compact list of ready animals from species that already have a ready partner. */
 export const apiGetBreedingAnimals = () => req<{ animals: BreedingAnimal[] }>('/breeding/animals');
+export const apiGetBreedingAnimalsPage = (params: {
+  offset?: number;
+  limit?: number;
+  sort?: string;
+  query?: string;
+  speciesCode?: string | null;
+  excludeId?: number | null;
+}) => {
+  const search = new URLSearchParams({
+    offset: String(params.offset ?? 0),
+    limit: String(params.limit ?? 120),
+    sort: params.sort ?? 'new',
+  });
+  if (params.query) search.set('query', params.query);
+  if (params.speciesCode) search.set('species_code', params.speciesCode);
+  if (params.excludeId) search.set('exclude_id', String(params.excludeId));
+  return req<{ animals: BreedingAnimal[]; total: number; next_offset: number | null }>(`/breeding/animals/page?${search}`);
+};
 
 export const apiGetPacksInfo = () => req<PackInfo>('/packs/info');
 /** `tier` omitted opens the free daily gift; a tier name buys that (unlocked) tier. */
 export const apiOpenPack = (tier?: string, quantity = 1) =>
   req<PackOpenResult>('/packs/open', { method: 'POST', body: JSON.stringify({ tier: tier ?? null, quantity }) });
 
-export const apiGetLocalities = () => req<LocalitiesInfo>('/localities');
+/** Constant-size locality totals; animal rows are fetched per bucket only when opened. */
+export const apiGetLocalities = () => req<LocalitiesInfo>('/localities/summary');
+export const apiGetLocalityAnimalsPage = (params: {
+  localityId?: number | null;
+  offset?: number;
+  limit?: number;
+  query?: string;
+  preferredHabitat?: Habitat | null;
+}) => {
+  const search = new URLSearchParams({
+    offset: String(params.offset ?? 0),
+    limit: String(params.limit ?? 120),
+  });
+  if (params.localityId) search.set('locality_id', String(params.localityId));
+  if (params.query) search.set('query', params.query);
+  if (params.preferredHabitat) search.set('preferred_habitat', params.preferredHabitat);
+  return req<{ animals: LocalityAnimal[]; total: number; next_offset: number | null }>(
+    `/localities/animals/page?${search}`,
+  );
+};
 export const apiBuyLocality = (habitat: string) =>
   req<BuyLocalityResult>('/localities/buy', { method: 'POST', body: JSON.stringify({ habitat }) });
 export const apiUpgradeLocality = (localityId: number) =>
@@ -77,6 +124,13 @@ export const apiSetAnimalFavorite = (animal_id: number, is_favorite: boolean) =>
   });
 
 export const apiGetExpeditions = () => req<ExpeditionInfo>('/expeditions');
+export const apiGetExpeditionAnimalsPage = (offset = 0, limit = 120, query = '') => {
+  const search = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (query) search.set('query', query);
+  return req<{ animals: import('@/types').ExpeditionAnimal[]; total: number; next_offset: number | null }>(
+    `/expeditions/animals/page?${search}`,
+  );
+};
 /** `depth` picks how hard the raid is; the habitat caps it (see `ExpeditionLocality.max_depth`). */
 export const apiStartExpedition = (locality_id: number, animal_ids: number[], depth = 1) =>
   req<ExpeditionStartResponse>('/expeditions/start', {

@@ -9,6 +9,7 @@ exploit detectable after the fact instead of merely suspected.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Literal, cast
 
@@ -74,6 +75,8 @@ Reason = Literal[
     "expedition_loot",
     "season_reset",
 ]
+
+GrantMovement = tuple[Currency, int, Reason, str | None, int | None]
 
 # The house's own reasons. Separate from `Reason`: nothing a player does appears here, and
 # nothing here touches a player balance.
@@ -173,6 +176,48 @@ def grant(
         )
     )
     return new_balance
+
+
+def grant_many(
+    session: Session,
+    player: Player,
+    movements: Iterable[GrantMovement],
+) -> dict[Currency, int]:
+    """Apply many positive grants with one database insert while preserving every row.
+
+    Pack bundles can award two currencies hundreds of times in one request. Calling
+    :func:`grant` in a loop preserves the journal but turns it into hundreds of network
+    round trips. This computes the same per-currency ``balance_after`` sequence in memory
+    and inserts all journal rows as one executemany operation.
+    """
+    balances = {currency: balance(player, currency) for currency in CURRENCIES}
+    rows: list[dict] = []
+    for currency, raw_delta, reason, ref_table, ref_id in movements:
+        if currency not in CURRENCIES:
+            raise ValueError(f"unknown currency {currency!r}")
+        delta = int(raw_delta)
+        if delta < 0:
+            raise ValueError("grant_many() only accepts non-negative grants")
+        if delta == 0:
+            continue
+        balances[currency] += delta
+        rows.append(
+            {
+                "player_id": player.id,
+                "currency": currency,
+                "delta": delta,
+                "balance_after": balances[currency],
+                "reason": reason,
+                "ref_table": ref_table,
+                "ref_id": ref_id,
+            }
+        )
+
+    if rows:
+        session.execute(LedgerEntry.__table__.insert(), rows)
+    for currency, new_balance in balances.items():
+        setattr(player, _BALANCE_ATTR[currency], new_balance)
+    return balances
 
 
 def spend(

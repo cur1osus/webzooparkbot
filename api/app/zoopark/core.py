@@ -43,7 +43,7 @@ from api.app.zoopark.catalog import (
     REFERRAL_NEW_PLAYER_REWARD_USD,
     REFERRAL_SIGNUP_REWARD_USD,
 )
-from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.income import settle_player_income, sync_player_income
 from api.app.zoopark.progression import ensure_first_locality
 from api.app.zoopark.profile import build_state, get_player
 from api.app.zoopark.season import ensure_player_season
@@ -168,7 +168,7 @@ def me(tg_id: int) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Пользователь не найден")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
         player.last_seen_at = utcnow()
         state = build_state(session, player)
         session.commit()

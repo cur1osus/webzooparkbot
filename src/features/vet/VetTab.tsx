@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimalArt } from '@/components/AnimalArt';
-import { apiCureAllAnimals, apiCureAnimal } from '@/api';
-import type { Animal } from '@/types';
+import { apiCureAllAnimals, apiCureAnimal, apiGetSickAnimals } from '@/api';
+import type { Animal, GameState } from '@/types';
 import { fmt } from '@/utils/format';
 
 // A sick animal earns half its income until healed. This tab is the only place to cure
@@ -9,27 +9,40 @@ import { fmt } from '@/utils/format';
 // (10 hours of its healthy income) and arrives on each animal as `cure_cost_usd`.
 
 export function VetTab({
-  animals,
   usd,
-  onRefresh,
+  onPatchState,
 }: {
-  animals: Animal[];
   usd: number;
-  onRefresh: () => void;
+  onPatchState: (patch: Partial<GameState>) => void;
 }) {
-  const sick = animals.filter(a => a.is_sick);
+  const [sick, setSick] = useState<Animal[]>([]);
+  const [loading, setLoading] = useState(true);
   const [curingId, setCuringId] = useState<number | null>(null);
   const [curingAll, setCuringAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const totalCureCost = sick.reduce((sum, animal) => sum + animal.cure_cost_usd, 0);
+
+  useEffect(() => {
+    let active = true;
+    void apiGetSickAnimals()
+      .then(result => { if (active) setSick(result.animals); })
+      .catch(error => { if (active) setError(error instanceof Error ? error.message : 'Не удалось загрузить животных'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const cure = async (id: number) => {
     if (curingId !== null || curingAll) return;
     setCuringId(id);
     setError(null);
     try {
-      await apiCureAnimal(id);
-      onRefresh();
+      const result = await apiCureAnimal(id);
+      setSick(previous => previous.filter(animal => animal.id !== id));
+      onPatchState({
+        usd: result.new_usd,
+        income_rub_per_min: result.income_rub_per_min,
+        sick_animal_ids: sick.filter(animal => animal.id !== id).map(animal => animal.id),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось вылечить');
     } finally {
@@ -42,14 +55,19 @@ export function VetTab({
     setCuringAll(true);
     setError(null);
     try {
-      await apiCureAllAnimals();
-      onRefresh();
+      const result = await apiCureAllAnimals();
+      setSick([]);
+      onPatchState({ usd: result.new_usd, income_rub_per_min: result.income_rub_per_min, sick_animal_ids: [] });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось вылечить животных');
     } finally {
       setCuringAll(false);
     }
   };
+
+  if (loading) {
+    return <div className="flex justify-center py-10"><div className="spinner" /></div>;
+  }
 
   if (sick.length === 0) {
     return (

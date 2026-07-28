@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { GameState } from '@/types';
 import { fmt } from '@/utils/format';
 import { PACK_TIER_META, PACK_TIER_ORDER } from '@/data/packs';
-import { apiGetBank, apiGetPacksInfo } from '@/api';
+import { apiGetAnimalForecast, apiGetBank, apiGetPacksInfo } from '@/api';
 import { applyBankDiscount, bankDiscountPercent, rublesToUsd, usdToRubles } from '@/lib/bankMath';
 import {
   accumulate,
@@ -109,13 +109,26 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
     staleTime: 60_000,
   });
 
-  const forecast = useMemo(() => buildForecast(gs, now), [gs, now]);
+  const { data: forecastData = null, isLoading: forecastLoading } = useQuery({
+    queryKey: ['zoo', 'forecast', gs.tg_id],
+    queryFn: apiGetAnimalForecast,
+    staleTime: 60_000,
+  });
+
+  const forecastInput = useMemo(() => ({
+    animals: forecastData?.animals ?? [],
+    average_lifespan_ms: forecastData?.average_lifespan_ms,
+    income_rub_per_min: gs.income_rub_per_min,
+    upkeep_rub_per_min: gs.upkeep_rub_per_min,
+  }), [forecastData, gs.income_rub_per_min, gs.upkeep_rub_per_min]);
+
+  const forecast = useMemo(() => buildForecast(forecastInput, now), [forecastInput, now]);
   const declines = useMemo(
     () => DECLINE_HORIZONS.map(h => ({ ...h, ...declineOver(forecast, h.ms) })),
     [forecast],
   );
   const weekly = declines[declines.length - 1];
-  const lifespanMs = useMemo(() => averageLifespanMs(gs), [gs]);
+  const lifespanMs = useMemo(() => averageLifespanMs(forecastInput), [forecastInput]);
   // Считаем по прогнозу, а не по серверному счётчику: тот собран в момент запроса, а
   // здесь животные «умирают» ещё и по ходу открытой страницы.
   const aliveNow = forecast.segments[0]?.animalCount ?? 0;
@@ -192,6 +205,10 @@ export function CalculatorPage({ gs }: { gs: GameState }) {
     : goalCurrency === 'usd' && usdShortfall === 0
       ? 0
       : timeToTarget(forecast, goalRub, gs.rub);
+
+  if (forecastLoading || !forecastData) {
+    return <div className="flex justify-center py-10"><div className="spinner" /></div>;
+  }
 
   return (
     <div className="p-[14px] flex flex-col gap-3">

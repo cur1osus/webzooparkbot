@@ -12,7 +12,7 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from api.bots import agent, dreaming, memory_store, runner, tools
+from api.bots import agent, dreaming, evaluator, memory_store, runner, skills, tools
 from api.bots.characters import CHARACTERS, get
 from api.bots.runner import _awake, _journal
 
@@ -51,6 +51,65 @@ def test_schemas_are_wellformed_for_the_api():
         assert schema["type"] == "function"
         assert function["name"] and function["description"]
         assert function["parameters"]["type"] == "object"
+
+
+def test_turn_snapshot_is_a_compact_first_pass(monkeypatch):
+    from api.bots import turn_snapshot
+    from datetime import datetime, timezone
+
+    monkeypatch.setattr(turn_snapshot.core_service, "me", lambda _tg: {
+        "nickname": "tester", "rub": 1000, "usd": 20, "paw_coins": 3,
+        "income_rub_per_min": 50, "upkeep_rub_per_min": 10,
+    })
+    monkeypatch.setattr(turn_snapshot.progression_service, "list_localities", lambda _tg: {
+        "localities": [{"id": 1, "habitat": "forest", "level": 2,
+                        "animals": [{"id": 10, "habitat": "desert", "name": "x"}]}],
+    })
+    monkeypatch.setattr(turn_snapshot.progression_service, "list_available_animals", lambda _tg: {
+        "animals": [{"id": 10, "name": "x", "species_code": "fox", "habitat": "desert",
+                     "locality_id": 1, "survival": "low", "is_sick": True,
+                     "income": 3, "dies_at": "2026-07-27T05:00:00+00:00"}],
+    })
+    monkeypatch.setattr(turn_snapshot.progression_service, "packs_info", lambda _tg: {
+        "gift_available": True,
+        "tiers": [{"tier": "rare", "price": 1000, "unlocked": True,
+                   "batch_prices": {"50": 49_000, "100": 96_000}}],
+    })
+    monkeypatch.setattr(turn_snapshot.economy_service, "bank", lambda _tg: {
+        "rate_rub_per_usd": 64, "history": [],
+    })
+    monkeypatch.setattr(turn_snapshot.forge_service, "forge_items", lambda _tg: {
+        "items": [], "next_cost_usd": 80000, "cost_paw": 350,
+        "active_item_count": 0, "active_item_bonuses": [],
+    })
+    monkeypatch.setattr(turn_snapshot.progression_service, "get_expeditions", lambda _tg: {
+        "expeditions": [],
+    })
+    monkeypatch.setattr(turn_snapshot.merchant_service, "merchant_animals", lambda _tg: {
+        "animals": [],
+    })
+    monkeypatch.setattr(turn_snapshot.safe_service, "safe_state", lambda _tg: {})
+    monkeypatch.setattr(turn_snapshot.status_service, "daily_bonus", lambda _tg: {"claimed": False})
+
+    snapshot = turn_snapshot.build(1001, now=datetime(2026, 7, 27, 0, 0, tzinfo=timezone.utc))
+
+    assert snapshot["ok"] is True
+    assert snapshot["игрок"]["рубли"] == 1000
+    assert snapshot["игрок"]["доллары"] == 20
+    assert snapshot["игрок"]["лапки"] == 3
+    assert snapshot["зоопарк"]["больных"] == 1
+    assert snapshot["зоопарк"]["не_в_своей_среде"] == 1
+    assert snapshot["зоопарк"]["умирают_в_6ч"] == 1
+    assert snapshot["зоопарк"]["потеря_дохода_руб_мин_в_6ч"] == 3
+    assert snapshot["кузница"]["стоимость_следующего_usd"] == 80000
+    assert snapshot["кузница"]["можно_создать_за_usd"] is False
+    assert snapshot["возможности"]["бесплатный_пак"] is True
+    assert snapshot["возможности"]["платные_паки"] == [{
+        "тир": "rare", "доступен": True, "цена_1_usd": 1000,
+        "цена_50_usd": 49_000, "цена_100_usd": 96_000,
+        "диапазон_награды": None,
+    }]
+    assert snapshot["возможности"]["курс_руб_за_usd"] == 64
 
 
 def test_the_squad_bounds_a_tool_advertises_are_the_ones_the_game_enforces():
@@ -197,6 +256,77 @@ def test_wrong_arguments_come_back_as_a_readable_error(monkeypatch):
     assert result["ok"] is False and "аргумент" in result["error"]
 
 
+def test_large_pack_remains_a_model_decision_when_a_forge_creation_is_affordable(monkeypatch):
+    executed = []
+    monkeypatch.setitem(
+        tools.REGISTRY,
+        "open_pack",
+        tools.Tool("open_pack", "d", {}, [], lambda **_: executed.append(True) or {"opened": 100}),
+    )
+
+    result = tools.call(
+        "open_pack", tg_id=-1001, player_id=1,
+        arguments={"tier": "rare", "quantity": 100},
+    )
+
+    assert result == {"ok": True, "opened": 100}
+    assert executed == [True]
+
+
+def test_turn_evaluator_records_state_deltas_without_claiming_goal_success():
+    before = {
+        "игрок": {"рубли": 1_000, "доллары": 90_000, "лапки": 10,
+                  "доход_руб_мин": 100, "содержание_руб_мин": 60},
+        "зоопарк": {"зверей": 2, "больных": 1, "без_локации": 1,
+                    "не_в_своей_среде": 0, "умирают_в_6ч": 1},
+        "кузница": {"можно_создать_за_usd": True, "можно_создать_за_лапки": False},
+    }
+    after = {
+        "игрок": {"рубли": 1_200, "доллары": 20_000, "лапки": 10,
+                  "доход_руб_мин": 160, "содержание_руб_мин": 70},
+        "зоопарк": {"зверей": 3, "больных": 0, "без_локации": 0,
+                    "не_в_своей_среде": 0, "умирают_в_6ч": 0},
+    }
+    calls = [
+        {"name": "open_pack", "аргументы": {"quantity": 100}, "результат": {"ok": True}},
+        {"name": "forge_create", "аргументы": {"currency": "usd"}, "результат": {"ok": True}},
+    ]
+
+    result = evaluator.evaluate(
+        before, after, calls, rounds=2, stopped_because="закончил сам", model="test-model",
+        goal={"objective": "поднять доход", "expected_effect": "маржа растёт"},
+        reflection={"goal_reached": "yes", "observed_result": "маржа выросла",
+                    "next_adjustment": "проверить здоровье"},
+    )
+
+    assert result["stopped_cleanly"] is True
+    assert result["usd"]["delta"] == -70_000
+    assert result["income_margin_rub_per_min"]["delta"] == 50
+    assert result["forge_affordable_before_turn"] is True
+    assert result["large_pack_calls_with_forge_available"] == 1
+    assert result["forge_calls"] == 1
+    assert result["goal_defined"] is True
+    assert result["goal_reached"] == "yes"
+    assert result["next_adjustment"] == "проверить здоровье"
+    assert "goal_success" not in result
+
+
+def test_skill_library_replaces_stale_procedure_and_is_bounded(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+
+    first = skills.save(1, "здоровый доход", "есть больные звери", ["cure_all_animals"], "убирает эпидемию")
+    second = skills.save(1, "здоровый доход", "есть больные или чужая среда",
+                         ["assign_matching_animals", "cure_all_animals"], "сначала доход, потом здоровье")
+
+    assert first["ok"] is True and second["ok"] is True
+    entries = skills.load(1)
+    assert len(entries) == 1
+    assert entries[0]["шаги"] == ["assign_matching_animals", "cure_all_animals"]
+    assert "здоровый доход" in skills.as_text(1)
+    assert skills.forget(1, 0)["ok"] is True
+    assert skills.load(1) == []
+
+
 # ── budget ────────────────────────────────────────────────────────────────────
 
 
@@ -214,9 +344,17 @@ def test_the_deadline_leaves_room_for_a_full_budget_of_rounds():
 
 
 def test_cost_prices_cached_input_below_fresh_input():
-    result = agent.TurnResult(prompt_tokens=10_000, cached_tokens=10_000, completion_tokens=0)
-    expensive = agent.TurnResult(prompt_tokens=10_000, cached_tokens=0, completion_tokens=0)
+    result = agent.TurnResult(model="deepseek/deepseek-v4-flash", prompt_tokens=10_000,
+                              cached_tokens=10_000, completion_tokens=0)
+    expensive = agent.TurnResult(model="deepseek/deepseek-v4-flash", prompt_tokens=10_000,
+                                 cached_tokens=0, completion_tokens=0)
     assert 0 < result.cost_micro_rub < expensive.cost_micro_rub
+
+
+def test_free_model_is_reported_as_free():
+    result = agent.TurnResult(model="nvidia/nemotron-3-ultra-550b-a55b:free",
+                              prompt_tokens=10_000, completion_tokens=10_000)
+    assert result.cost_micro_rub == 0
 
 
 def test_actions_exclude_reads():
@@ -302,6 +440,86 @@ def _round(name, arguments, *, finish="stop"):
                          "message": {"tool_calls": [{"id": "1", "function": {
                              "name": name, "arguments": arguments}}]}}],
             "usage": {}}
+
+
+def test_response_normalizer_accepts_top_level_tool_calls():
+    normalized = agent._normalize_chat_response({
+        "id": "test",
+        "tool_calls": [{"id": "1", "function": {"name": "end_turn", "arguments": "{}"}}],
+        "finish_reason": "tool_calls",
+    })
+
+    assert normalized["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "end_turn"
+
+
+def test_response_normalizer_rejects_an_unreadable_payload():
+    assert agent._normalize_chat_response({"error": {"message": "bad gateway"}}) is None
+
+
+def test_malformed_provider_response_is_retried_before_a_round_is_recorded(monkeypatch):
+    replies = iter([
+        {"error": {"message": "temporary gateway response"}},
+        _round("end_turn", '{"summary": "повтор сработал"}'),
+    ])
+    calls = []
+    monkeypatch.setattr(agent, "_ask", lambda payload: calls.append(payload) or next(replies))
+    monkeypatch.setattr(agent, "RESPONSE_RETRY_DELAY_SECONDS", 0)
+
+    result, invalid = agent._ask_with_response_retries({"messages": []})
+
+    assert invalid is False
+    assert result["choices"][0]["message"]["tool_calls"][0]["function"]["name"] == "end_turn"
+    assert len(calls) == 2
+
+
+def test_run_turn_retries_unreadable_response_without_replaying_tools(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(agent, "ROUTERAI_API_KEY", "test-key")
+    monkeypatch.setattr(agent.tools, "schemas", lambda *a, **k: [])
+    monkeypatch.setattr(agent.tools, "call", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(agent, "RESPONSE_RETRY_DELAY_SECONDS", 0)
+
+    replies = iter([
+        {"error": {"message": "temporary gateway response"}},
+        _round("end_turn", '{"summary": "повтор сработал"}'),
+    ])
+    monkeypatch.setattr(agent, "_ask", lambda payload: next(replies))
+
+    result = agent.run_turn(get("gambler"), tg_id=-1002, player_id=1, nickname="Сфорца")
+
+    assert result.rounds == 1
+    assert result.stopped_because == "закончил сам"
+    assert result.summary == "повтор сработал"
+    assert [action["name"] for action in result.actions] == ["end_turn"]
+
+
+def test_run_turn_switches_to_a_fallback_model_after_response_retries(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(agent, "ROUTERAI_API_KEY", "test-key")
+    monkeypatch.setattr(agent, "BOT_PLANNER_FALLBACK_MODEL", "poolside/fallback:free")
+    monkeypatch.setattr(agent, "RESPONSE_RETRY_DELAY_SECONDS", 0)
+    monkeypatch.setattr(agent.tools, "schemas", lambda *a, **k: [])
+    monkeypatch.setattr(agent.tools, "call", lambda *a, **k: {"ok": True})
+
+    models = []
+
+    def ask(payload):
+        models.append(payload["model"])
+        if len(models) <= agent.RESPONSE_ATTEMPTS:
+            return {"error": {"message": "temporary provider overload"}}
+        return _round("end_turn", '{"summary": "резерв сработал"}')
+
+    monkeypatch.setattr(agent, "_ask", ask)
+
+    result = agent.run_turn(get("gambler"), tg_id=-1002, player_id=1, nickname="Сфорца")
+
+    assert models == [agent.BOT_PLANNER_MODEL] * agent.RESPONSE_ATTEMPTS + [
+        "poolside/fallback:free",
+    ]
+    assert result.model == "poolside/fallback:free"
+    assert result.rounds == 1
+    assert result.stopped_because == "закончил сам"
+    assert result.summary == "резерв сработал"
 
 
 def test_a_tool_call_with_truncated_arguments_is_not_executed(tmp_path, monkeypatch):
@@ -501,6 +719,22 @@ def test_memory_round_trip(tmp_path, monkeypatch):
     assert "горная локация" in memory_store.as_text(7)
     assert memory_store.forget(7, 0)["ok"] is True
     assert memory_store.load(7) == []
+
+
+def test_memory_can_expire_a_volatile_note(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    assert memory_store.remember(8, "курс хороший", ttl_days=1)["ok"] is True
+    notes = memory_store.load(8)
+    assert notes[0]["истекает"]
+    notes[0]["истекает"] = "2000-01-01T00:00:00+00:00"
+    (tmp_path / "bot_8.json").write_text(json.dumps(notes), encoding="utf-8")
+    assert memory_store.load(8) == []
+
+
+def test_memory_rejects_unknown_expiry(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_store, "MEMORY_DIR", tmp_path)
+    result = memory_store.remember(8, "факт", ttl_days=2)
+    assert result["ok"] is False
 
 
 def test_memory_is_bounded_so_it_cannot_become_a_transcript(tmp_path, monkeypatch):
@@ -822,15 +1056,13 @@ def test_the_exchange_tool_tells_the_model_low_rate_means_more_dollars():
     assert "подожди" not in text or "высок" in text, "ждать надо при высоком курсе, не при низком"
 
 
-def test_the_prompt_states_the_real_safe_code_length():
-    """The system prompt hardcoded "код из четырёх цифр" while `SAFE_CODE_LENGTH` was 6, so a
-    rival was told to guess a length the safe would reject. It is sourced from the constant
-    now — this fails if anyone restates it, or if the placeholder stops being substituted."""
-    from api.app.zoopark.catalog import SAFE_CODE_LENGTH
-
-    assert "__SAFE_LEN__" not in agent.SYSTEM_PROMPT, "плейсхолдер должен быть подставлен"
-    assert f"код из {SAFE_CODE_LENGTH} цифр" in agent.SYSTEM_PROMPT
-    assert "код из четырёх цифр" not in agent.SYSTEM_PROMPT, "старое зашитое число не должно вернуться"
+def test_the_prompt_defers_dynamic_safe_rules_to_the_tool():
+    """The prompt must not fossilize the safe's current window or code length; safe_state is
+    the runtime source of truth."""
+    text = agent.SYSTEM_PROMPT.lower()
+    assert "__safe_len__" not in text
+    assert "safe_state" in text
+    assert "код из четырёх цифр" not in text
 
 
 def test_a_rival_can_list_its_own_achievements_to_pick_an_avatar():

@@ -1,4 +1,4 @@
-import type { BankInfo, BonusClaimResult, BonusOffer, CureAllResponse, CureResponse, ExchangeResult } from '@/types';
+import type { Animal, BankInfo, BonusClaimResult, BonusOffer, CureAllResponse, CureResponse, ExchangeResult } from '@/types';
 import { req } from './client';
 
 export const apiGetBank = () => req<BankInfo>('/bank');
@@ -19,3 +19,5 @@ export const apiCureAnimal = (animal_id: number) =>
 
 export const apiCureAllAnimals = () =>
   req<CureAllResponse>('/animals/cure-all', { method: 'POST' });
+
+export const apiGetSickAnimals = () => req<{ animals: Animal[] }>('/vet/animals');

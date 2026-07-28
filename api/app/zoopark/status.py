@@ -19,8 +19,8 @@ from api.app.zoopark import bonuses as bonuses_module
 from api.app.zoopark import ledger
 from api.app.zoopark.catalog import HABITATS, SPECIES_BY_CODE, SPECIES_ID_BY_CODE, Currency
 from api.app.zoopark.daily_bonus import roll_daily_bonus_offer
-from api.app.zoopark.income import alive_clause, cure_cost_usd, sync_player_income
-from api.app.zoopark.profile import get_player
+from api.app.zoopark.income import alive_clause, cure_cost_usd, settle_player_income, sync_player_income
+from api.app.zoopark.profile import get_player, zoo_animal_payload
 from api.app.zoopark.progression import create_animal, roll_genes, roll_habitat
 from api.app.zoopark.season import ensure_player_season
 from api.app.zoopark.time import moscow_period_day
@@ -33,6 +33,33 @@ _HABITAT_REWARD_META = {
     "fields": ("Поля", "🌾"),
     "antarctica": ("Антарктида", "🏔️"),
 }
+
+
+def sick_animals(tg_id: int) -> dict:
+    """Only the patients needed by the veterinarian tab."""
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        rows = session.execute(
+            select(Animal, Locality.habitat)
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+                Animal.sick_since.is_not(None),
+            )
+            .order_by(Animal.sick_since.asc(), Animal.id.asc())
+        ).all()
+        return {
+            "animals": [
+                zoo_animal_payload(animal, habitat, bonuses, vet_level=player.vet_level)
+                for animal, habitat in rows
+            ]
+        }
 
 
 def _today_offer(session: Session, player: Player) -> DailyBonus:
@@ -112,7 +139,7 @@ def claim_bonus(tg_id: int) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
 
         offer = _today_offer(session, player)
         if offer.claimed_at is not None:

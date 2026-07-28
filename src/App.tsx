@@ -22,6 +22,7 @@ import { Toast } from '@/components/Toast';
 import type { MaintenancePollStatus } from '@/types';
 
 const HIDDEN_RELOAD_MS = 30_000;
+const MAINTENANCE_POLL_MS = 5_000;
 const TRANSFER_HANDLED_STORAGE_KEY = 'zoopark_transfer_claims_v1';
 
 function getTransferCode(): string | null {
@@ -228,11 +229,15 @@ export default function App() {
       }
     };
 
-    void syncMaintenance();
-    const timer = window.setInterval(() => void syncMaintenance(), 2_000);
+    const poll = () => { if (!document.hidden) void syncMaintenance(); };
+    const onVisibility = () => { if (!document.hidden) void syncMaintenance(); };
+    poll();
+    const timer = window.setInterval(poll, MAINTENANCE_POLL_MS);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [patchState, state]);
 
@@ -251,11 +256,15 @@ export default function App() {
       }
     };
 
-    void syncRegistrationMaintenance();
-    const timer = window.setInterval(() => void syncRegistrationMaintenance(), 2_000);
+    const poll = () => { if (!document.hidden) void syncRegistrationMaintenance(); };
+    const onVisibility = () => { if (!document.hidden) void syncRegistrationMaintenance(); };
+    poll();
+    const timer = window.setInterval(poll, MAINTENANCE_POLL_MS);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       disposed = true;
       window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [state]);
 

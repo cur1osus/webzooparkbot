@@ -52,7 +52,7 @@ from api.app.zoopark.catalog import (
     item_sell_refund_paw,
     item_sell_refund_usd,
 )
-from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.income import settle_player_income, sync_player_income
 from api.app.zoopark.profile import active_bonus_summary, get_player, item_payload, list_item_sets, list_items
 
 random = SystemRandom()
@@ -222,6 +222,7 @@ def forge_upgrade(tg_id: int, body: ForgeItemIdBody) -> dict:
         if not item.properties:
             raise HTTPException(400, "У предмета нет свойств для улучшения")
 
+        settle_player_income(session, player)
         cost = upgrade_cost_usd(item.level)
         success_pct = upgrade_success_pct(item.level)
         ledger.spend(session, player, "usd", cost, "forge_upgrade")
@@ -234,8 +235,9 @@ def forge_upgrade(tg_id: int, body: ForgeItemIdBody) -> dict:
         session.flush()
         session.refresh(item)
         payload = item_payload(item)
-        # Item bonuses feed income, so an upgraded active item changes it immediately.
-        sync_player_income(session, player)
+        # A failed roll or an inactive item leaves every income multiplier unchanged.
+        if succeeded and item.is_active:
+            sync_player_income(session, player)
         active_bonuses = active_bonus_summary(bonuses_module.load(session, player.id))
         result = {
             "ok": True,
@@ -305,6 +307,8 @@ def forge_merge(tg_id: int, body: ForgeMergeBody) -> dict:
             if item.rarity == "legendary":
                 raise HTTPException(400, "Легендарные предметы нельзя объединять")
 
+        settle_player_income(session, player)
+        changed_active_loadout = bool(item_a.is_active or item_b.is_active)
         cost = merge_cost_usd()
         ledger.spend(session, player, "usd", cost, "forge_merge")
 
@@ -323,7 +327,8 @@ def forge_merge(tg_id: int, body: ForgeMergeBody) -> dict:
 
         new_item = _add_item(session, player.id, rarity, properties, origin)
         payload = item_payload(new_item)
-        sync_player_income(session, player)
+        if changed_active_loadout:
+            sync_player_income(session, player)
         result = {
             "ok": True,
             "new_item": payload,
@@ -346,6 +351,7 @@ def forge_sell(tg_id: int, body: ForgeItemIdBody) -> dict:
         if not item:
             raise HTTPException(404, "Предмет не найден")
 
+        settle_player_income(session, player)
         # Refund in the currency the item was forged with: dollars for a dollar-forged item,
         # PawCoins for a PawCoin-forged one. Upgrade levels always refund in dollars.
         earned_usd = item_sell_refund_usd(item.level, item.origin, item.create_currency)  # type: ignore[arg-type]

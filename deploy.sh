@@ -195,8 +195,8 @@ set +a
 # Not fatal: without a key the rivals fall back to in-character default plans and keep
 # playing. Worth saying out loud, because the symptom (bots that never change strategy)
 # otherwise looks like a bug in the planner rather than a missing secret.
-if [ -z "${ROUTERAI_API_KEY:-}" ]; then
-    echo "[bots] WARNING: ROUTERAI_API_KEY is not set in ${ENV_FILE}."
+if [ -z "${OPENROUTER_API_KEY:-${ROUTERAI_API_KEY:-}}" ]; then
+    echo "[bots] WARNING: OPENROUTER_API_KEY is not set in ${ENV_FILE}."
     echo "[bots] The rivals will run on fallback plans and never replan."
 fi
 

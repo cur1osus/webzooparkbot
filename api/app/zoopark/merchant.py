@@ -28,7 +28,7 @@ from api.app.zoopark.catalog import (
     Rarity,
     merchant_price_rub,
 )
-from api.app.zoopark.income import sync_player_income
+from api.app.zoopark.income import settle_player_income, sync_player_income
 from api.app.zoopark.profile import animal_payload, get_player
 from api.app.zoopark.progression import create_animal, random, roll_genes, roll_habitat, roll_species_id
 from api.app.zoopark.season import ensure_player_season
@@ -172,7 +172,7 @@ def buy_offer(tg_id: int, slot: int) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
         season = ensure_player_season(session, player)
         ensure_offers(session, player.id, season.id)
 

@@ -55,7 +55,9 @@ def findings(tg_id: int) -> list[str]:
 
     for loc in localities["localities"]:
         for animal in loc["animals"]:
-            if animal["is_sick"]:
+            # The locality endpoint intentionally returns a slim animal payload; sickness
+            # is not part of that shape, so treat an omitted field as healthy.
+            if animal.get("is_sick", False):
                 sick.append(animal)
             if animal["habitat"] != loc["habitat"]:
                 if animal["habitat"] in owned:
@@ -64,7 +66,7 @@ def findings(tg_id: int) -> list[str]:
                     misplaced_homeless.setdefault(animal["habitat"], []).append(animal)
 
     unassigned = localities["unassigned"]
-    sick.extend(a for a in unassigned if a["is_sick"])
+    sick.extend(a for a in unassigned if a.get("is_sick", False))
 
     if misplaced_with_home:
         by_habitat: dict[str, list[dict]] = {}

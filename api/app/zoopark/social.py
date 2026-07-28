@@ -48,7 +48,7 @@ from api.app.zoopark.catalog import (
     SPECIES_BY_ID,
 )
 from api.app.zoopark import achievements as achievements_module
-from api.app.zoopark.income import count_alive_animals, on_expedition_subquery, sync_player_income
+from api.app.zoopark.income import alive_clause, on_expedition_subquery, settle_player_income, sync_player_income
 from api.app.zoopark.profile import get_clan, get_player, item_payload
 from api.app.zoopark.season import active_season
 
@@ -128,18 +128,17 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
         rank = int(ahead or 0) + 1
 
         season = active_season(session)
-        animals = session.scalars(
-            select(Animal).where(
+        species_rows = session.execute(
+            select(Animal.species_id, func.count(Animal.id)).where(
                 Animal.player_id == target.id,
                 Animal.season_id == season.id,
                 Animal.removed_at.is_(None),
                 Animal.dies_at > utcnow(),
                 Animal.id.not_in(on_expedition_subquery()),
-            )
+            ).group_by(Animal.species_id)
         ).all()
-        species_counts: dict[int, int] = {}
-        for animal in animals:
-            species_counts[animal.species_id] = species_counts.get(animal.species_id, 0) + 1
+        species_counts = {int(species_id): int(count) for species_id, count in species_rows}
+        animals_count = sum(species_counts.values())
 
         species = [
             {
@@ -168,7 +167,7 @@ def public_profile(viewer_tg_id: int, target_tg_id: int) -> dict:
             "rank": rank,
             "income_rub_per_min": target.income_rub_per_min,
             "upkeep_rub_per_min": target.upkeep_rub_per_min,
-            "animals_count": len(animals),
+            "animals_count": animals_count,
             "species_count": len(species_counts),
             "localities_count": len(localities),
             "locality_levels": sum(int(locality.level) for locality in localities),
@@ -205,6 +204,17 @@ def _member_counts(session: Session) -> dict[int, int]:
         select(ClanMember.clan_id, func.count(ClanMember.player_id)).group_by(ClanMember.clan_id)
     ).all()
     return {clan_id: int(count) for clan_id, count in rows}
+
+
+def _alive_animal_counts(session: Session, player_ids: list[int]) -> dict[int, int]:
+    if not player_ids:
+        return {}
+    rows = session.execute(
+        select(Animal.player_id, func.count(Animal.id))
+        .where(Animal.player_id.in_(player_ids), alive_clause())
+        .group_by(Animal.player_id)
+    ).all()
+    return {int(player_id): int(count) for player_id, count in rows}
 
 
 def _clan_entry(
@@ -304,7 +314,7 @@ def clan_details(tg_id: int) -> dict:
         assert clan is not None
         members = session.scalars(select(ClanMember).where(ClanMember.clan_id == clan.id)).all()
         total_income = sum(int(member.player.income_rub_per_min) for member in members)
-        animal_counts = {member.player_id: count_alive_animals(session, member.player_id) for member in members}
+        animal_counts = _alive_animal_counts(session, [member.player_id for member in members])
         requirements = _level_requirements(clan.level, len(members), total_income, animal_counts)
         owner = session.get(Player, clan.owner_id)
         return {
@@ -491,6 +501,7 @@ def clan_members(tg_id: int) -> dict:
             .order_by(Player.income_rub_per_min.desc())
         ).all()
 
+        animal_counts = _alive_animal_counts(session, [member.id for member, _role in rows])
         members = [
             {
                 "id": member.id,
@@ -498,7 +509,7 @@ def clan_members(tg_id: int) -> dict:
                 "nickname": member.nickname,
                 "role": role,
                 "income_rub_per_min": member.income_rub_per_min,
-                "animals_count": count_alive_animals(session, member.id),
+                "animals_count": animal_counts.get(member.id, 0),
             }
             for member, role in rows
         ]
@@ -552,7 +563,7 @@ def clan_level_up(tg_id: int) -> dict:
             raise HTTPException(404, "Нет игрока")
         clan, _ = _clan_owner(session, player)
         members = session.scalars(select(ClanMember).where(ClanMember.clan_id == clan.id)).all()
-        counts = {member.player_id: count_alive_animals(session, member.player_id) for member in members}
+        counts = _alive_animal_counts(session, [member.player_id for member in members])
         requirements = _level_requirements(clan.level, len(members), sum(int(member.player.income_rub_per_min) for member in members), counts)
         if clan.level >= 3:
             raise HTTPException(400, "Клан уже достиг максимального уровня")
@@ -620,7 +631,7 @@ def transfers_create(tg_id: int, body: TransferCreateBody) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
 
         transfer = Transfer(
             code=secrets.token_urlsafe(12),

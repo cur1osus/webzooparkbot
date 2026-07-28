@@ -44,13 +44,13 @@ export interface Animal {
   can_breed: boolean;
   income: number;
   /** Intrinsic income/min (genes + rarity only) — the value breeding is priced from. */
-  base_income: number;
+  base_income?: number;
   income_breakdown?: AnimalIncomeBreakdown;
   /** Price to cure this animal, in dollars (10 hours of its healthy income). */
   cure_cost_usd: number;
   habitat_bonus: boolean;
-  parent_a_id: number | null;
-  parent_b_id: number | null;
+  parent_a_id?: number | null;
+  parent_b_id?: number | null;
 }
 
 /** Fields needed by the breeding picker; the full animal payload is much larger. */
@@ -69,8 +69,7 @@ export type BreedingAnimal = Pick<Animal,
   | 'acquired_at'
   | 'can_breed'
   | 'income'
-  | 'base_income'
->;
+> & Required<Pick<Animal, 'base_income'>>;
 
 export interface PackTierInfo {
   tier: PackTier;
@@ -139,11 +138,16 @@ export interface Locality {
   next_upkeep_discount_percent: number | null;
   upgrade_cost_rub: number | null;
   animals: LocalityAnimal[];
+  /** Authoritative totals; the interactive summary intentionally leaves `animals` empty. */
+  animals_count: number;
+  income_rub_per_min: number;
+  matching_count: number;
 }
 
 export interface LocalitiesInfo {
   localities: Locality[];
   unassigned: LocalityAnimal[];
+  unassigned_count: number;
   next_price: number | null;
   habitats_taken: Habitat[];
   max_localities: number;
@@ -325,6 +329,7 @@ export interface ExpeditionInfo {
   active: ActiveExpedition | null;
   localities: ExpeditionLocality[];
   available_animals: ExpeditionAnimal[];
+  available_animals_count?: number;
   expedition_minutes: Record<Habitat, number>;
   squad_min: number;
   squad_max: number;

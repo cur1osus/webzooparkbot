@@ -8,7 +8,7 @@ from random import SystemRandom
 from typing import cast
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,7 @@ from api.app.db.models import (
     Locality,
     PackOpening,
     Player,
+    Species,
     utcnow,
 )
 from api.app.schemas.progression import AssignLocalityBody, AssignMatchingLocalityBody, BreedBody, BuyLocalityBody, FavoriteAnimalBody, ReleaseAnimalBody, ReleaseAnimalsBody, StartExpeditionBody, UpgradeLocalityBody
@@ -47,8 +48,11 @@ from api.app.zoopark.catalog import (
     expedition_rarity_weights,
     expedition_wild_power_range,
     expedition_wild_scale,
+    BASE_INCOME_RUB_PER_MIN,
+    GENE_INCOME_MULT,
     GENE_ROLL_WEIGHTS,
     GENE_TIERS,
+    HABITAT_MATCH_BONUS,
     HABITATS,
     LIFESPAN_DAYS,
     LOCALITY_BASE_PRICE_RUB,
@@ -59,8 +63,11 @@ from api.app.zoopark.catalog import (
     PackTier,
     Rarity,
     SPECIES_IDS_BY_RARITY,
+    SPECIES_ID_BY_CODE,
     SPECIES_BY_ID,
+    SPECIES_RARITY_INCOME_MULT,
     SPECIES_RARITY_WEIGHTS,
+    SICK_INCOME_MULT,
     BREED_WORSE_GENE_CHANCE,
     BREED_TIER_INDEX,
     breed_cost_rub,
@@ -79,17 +86,58 @@ from api.app.zoopark.income import (
     alive_animals,
     alive_clause,
     animal_base_income_rub_per_min,
+    animal_income,
+    animal_income_rub_per_min,
     available_animals,
     breeding_animals,
     on_expedition_subquery,
+    settle_player_income,
     sync_player_income,
 )
 from api.app.zoopark.forge import roll_expedition_item
 from api.app.zoopark.notifications import enqueue_animal_death, enqueue_expedition_finished
-from api.app.zoopark.profile import animal_payload, breeding_animal_payload, expedition_animal_payload, get_player, item_payload, locality_animal_payload
+from api.app.zoopark.profile import animal_payload, breeding_animal_payload, expedition_animal_payload, get_player, item_payload, locality_animal_payload, zoo_animal_payload
 from api.app.zoopark.season import ensure_player_season
 
 random = SystemRandom()
+
+_HABITAT_SEARCH_ALIASES: dict[str, tuple[str, ...]] = {
+    "desert": ("пустыня",),
+    "mountains": ("горы", "гора"),
+    "forest": ("густой лес", "лес"),
+    "fields": ("поля", "поле"),
+    "antarctica": ("антарктида",),
+}
+
+
+def _mapped_case(column, values: dict[str, float], default: float = 1.0):
+    return case(*[(column == key, value) for key, value in values.items()], else_=default)
+
+
+def _gene_rank(column):
+    return case((column == "high", 2), (column == "medium", 1), else_=0)
+
+
+def _animal_income_order(bonuses: Bonuses):
+    """Database ordering key equivalent to the per-animal income factors."""
+    rarity_multiplier = case(*[
+        (Animal.species_id == species_id, SPECIES_RARITY_INCOME_MULT[spec["rarity"]])
+        for species_id, spec in SPECIES_BY_ID.items()
+    ], else_=1.0)
+    species_multiplier = case(*[
+        (Animal.species_id == species_id, bonuses.species_income_multiplier(species_id))
+        for species_id in SPECIES_BY_ID
+    ], else_=1.0)
+    return (
+        BASE_INCOME_RUB_PER_MIN
+        * _mapped_case(Animal.gene_survival, GENE_INCOME_MULT["survival"])
+        * _mapped_case(Animal.gene_appearance, GENE_INCOME_MULT["appearance"])
+        * _mapped_case(Animal.gene_size, GENE_INCOME_MULT["size"])
+        * rarity_multiplier
+        * case((Locality.habitat == Animal.habitat, HABITAT_MATCH_BONUS), else_=1.0)
+        * case((Animal.sick_since.is_not(None), SICK_INCOME_MULT), else_=1.0)
+        * species_multiplier
+    )
 
 
 # ─── Rolling an animal ────────────────────────────────────────────────────────
@@ -163,6 +211,7 @@ def create_animal(
     species_id: int | None = None,
     parent_a_id: int | None = None,
     parent_b_id: int | None = None,
+    flush: bool = True,
 ) -> Animal:
     now = utcnow()
     animal = Animal(
@@ -179,7 +228,8 @@ def create_animal(
         **genes,
     )
     session.add(animal)
-    session.flush()
+    if flush:
+        session.flush()
     return animal
 
 
@@ -260,6 +310,128 @@ def list_available_animals(tg_id: int) -> dict:
         return result
 
 
+def list_zoo_animals(tg_id: int, *, offset: int = 0, limit: int = 120, sort: str = "new") -> dict:
+    """One ordered page for the overview grid; initial load stays independent of zoo size."""
+    if sort not in {"new", "income", "life", "quality"}:
+        raise HTTPException(400, "Неизвестная сортировка")
+    offset = max(0, offset)
+    limit = max(1, min(limit, 240))
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        today = utcnow().date()
+        filters = (
+            Animal.player_id == player.id,
+            Animal.season_id == season.id,
+            alive_clause(),
+            Animal.id.not_in(on_expedition_subquery()),
+        )
+        total = int(session.scalar(select(func.count(Animal.id)).where(*filters)) or 0)
+        statement = select(Animal, Locality.habitat).outerjoin(Locality, Animal.locality_id == Locality.id).where(*filters)
+        if sort in {"new", "life"}:
+            chronology = Animal.acquired_at.desc() if sort == "new" else Animal.dies_at.asc()
+            rows = session.execute(
+                statement.order_by(Animal.is_favorite.desc(), chronology, Animal.id.desc()).offset(offset).limit(limit)
+            ).all()
+        else:
+            income_order = _animal_income_order(bonuses)
+            if sort == "income":
+                orders = [income_order.desc()]
+            else:
+                rarity_order = case(*[
+                    (Animal.species_id == species_id, {"rare": 0, "epic": 1, "mythic": 2, "legendary": 3}[spec["rarity"]])
+                    for species_id, spec in SPECIES_BY_ID.items()
+                ], else_=0)
+                gene_order = sum(_gene_rank(column) for column in (
+                    Animal.gene_survival,
+                    Animal.gene_reproduction,
+                    Animal.gene_appearance,
+                    Animal.gene_size,
+                ))
+                orders = [rarity_order.desc(), gene_order.desc(), income_order.desc()]
+            rows = session.execute(
+                statement.order_by(Animal.is_favorite.desc(), *orders, Animal.id.desc())
+                .offset(offset).limit(limit)
+            ).all()
+
+        animals = [zoo_animal_payload(animal, habitat, bonuses, today, player.vet_level) for animal, habitat in rows]
+        next_offset = offset + len(animals)
+        return {
+            "animals": animals,
+            "total": total,
+            "next_offset": next_offset if next_offset < total else None,
+        }
+
+
+def animal_forecast(tg_id: int) -> dict:
+    """Minute-bucketed death/income series loaded only by the calculator.
+
+    Sending one JSON object per animal made this otherwise secondary screen rebuild and
+    sort 11k dates.  A forecast is already an estimate; grouping deaths to one-minute
+    precision preserves every ruble and count while shrinking the series dramatically.
+    """
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        rows = session.execute(
+            select(Animal.acquired_at, Animal.dies_at, _animal_income_order(bonuses))
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
+            )
+        ).all()
+        buckets: dict[datetime, dict[str, int]] = {}
+        lifespan_total_ms = 0.0
+        animal_count = 0
+        for acquired_at, dies_at, income in rows:
+            bucket = dies_at.replace(second=0, microsecond=0)
+            event = buckets.setdefault(bucket, {"income": 0, "count": 0})
+            event["income"] += int(income)
+            event["count"] += 1
+            lifespan_total_ms += (dies_at - acquired_at).total_seconds() * 1_000
+            animal_count += 1
+        return {
+            "animals": [
+                {"dies_at": dies_at.isoformat(), **event}
+                for dies_at, event in sorted(buckets.items())
+            ],
+            "average_lifespan_ms": lifespan_total_ms / animal_count if animal_count else None,
+        }
+
+
+def get_animal(tg_id: int, animal_id: int) -> dict:
+    """One full animal passport, loaded on demand instead of repeated in `/api/me`."""
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        row = session.execute(
+            select(Animal, Locality.habitat)
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(
+                Animal.id == animal_id,
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(404, "Животное не найдено")
+        animal, habitat = row
+        bonuses = bonuses_module.load(session, player.id)
+        return {"animal": animal_payload(animal, habitat, bonuses, vet_level=player.vet_level)}
+
+
 def list_breeding_animals(tg_id: int) -> dict:
     """Return only ready animals that can actually form a breeding pair."""
     with get_session() as session:
@@ -275,6 +447,113 @@ def list_breeding_animals(tg_id: int) -> dict:
         }
         session.commit()
         return result
+
+
+def list_breeding_animals_page(
+    tg_id: int,
+    *,
+    offset: int = 0,
+    limit: int = 120,
+    sort: str = "new",
+    query: str = "",
+    species_code: str | None = None,
+    exclude_id: int | None = None,
+) -> dict:
+    """Paged squad-independent breeding picker used by the mobile client."""
+    if sort not in {"new", "income", "quality", "reproduction"}:
+        raise HTTPException(400, "Неизвестная сортировка")
+    offset = max(0, offset)
+    limit = max(1, min(limit, 240))
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        today = utcnow().date()
+        ready = (
+            Animal.player_id == player.id,
+            Animal.season_id == season.id,
+            alive_clause(),
+            Animal.id.not_in(on_expedition_subquery()),
+            or_(Animal.last_bred_on.is_(None), Animal.last_bred_on != today),
+        )
+        filters = list(ready)
+        if exclude_id is not None:
+            filters.append(Animal.id != exclude_id)
+        if species_code:
+            species_id = SPECIES_ID_BY_CODE.get(species_code)
+            if species_id is None:
+                return {"animals": [], "total": 0, "next_offset": None}
+            filters.append(Animal.species_id == species_id)
+        else:
+            pairable = (
+                select(Animal.species_id)
+                .where(*ready)
+                .group_by(Animal.species_id)
+                .having(func.count(Animal.id) >= 2)
+                .scalar_subquery()
+            )
+            filters.append(Animal.species_id.in_(pairable))
+
+        raw_query = query.strip()
+        needle = raw_query.lower()
+        if needle:
+            # SQLite's lower() only handles ASCII, while production MySQL uses a
+            # case-insensitive Unicode collation. Keep the predicate portable so local
+            # tests and the dev server behave exactly like production for Russian names.
+            patterns = {raw_query, raw_query.lower(), raw_query.capitalize(), raw_query.upper()}
+            filters.append(or_(*(
+                [Animal.name.like(f"%{pattern}%") for pattern in patterns]
+                + [Species.name.like(f"%{pattern}%") for pattern in patterns]
+            )))
+
+        statement = (
+            select(Animal, Locality.habitat)
+            .join(Species, Species.id == Animal.species_id)
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(*filters)
+        )
+        total = int(session.scalar(select(func.count(Animal.id)).join(Species, Species.id == Animal.species_id).where(*filters)) or 0)
+        if sort in {"new", "reproduction"}:
+            orders = [Animal.acquired_at.desc()] if sort == "new" else [
+                case(
+                    (Animal.gene_reproduction == "high", 2),
+                    (Animal.gene_reproduction == "medium", 1),
+                    else_=0,
+                ).desc(),
+                Animal.acquired_at.desc(),
+            ]
+            rows = session.execute(
+                statement.order_by(Animal.is_favorite.desc(), *orders, Animal.id.desc())
+                .offset(offset).limit(limit)
+            ).all()
+        else:
+            income_order = _animal_income_order(bonuses)
+            if sort == "income":
+                orders = [income_order.desc()]
+            else:
+                rarity_order = case(
+                    (Species.rarity == "legendary", 3),
+                    (Species.rarity == "mythic", 2),
+                    (Species.rarity == "epic", 1),
+                    else_=0,
+                )
+                gene_order = sum(_gene_rank(column) for column in (
+                    Animal.gene_survival,
+                    Animal.gene_reproduction,
+                    Animal.gene_appearance,
+                    Animal.gene_size,
+                ))
+                orders = [rarity_order.desc(), gene_order.desc(), income_order.desc()]
+            rows = session.execute(
+                statement.order_by(Animal.is_favorite.desc(), *orders, Animal.id.desc())
+                .offset(offset).limit(limit)
+            ).all()
+
+        animals = [breeding_animal_payload(animal, habitat, bonuses, today) for animal, habitat in rows]
+        next_offset = offset + len(animals)
+        return {"animals": animals, "total": total, "next_offset": next_offset if next_offset < total else None}
 
 
 def packs_info(tg_id: int) -> dict:
@@ -325,7 +604,7 @@ def open_pack(tg_id: int, tier: str | None = None, quantity: int = 1) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
         season = ensure_player_season(session, player)
 
         openings = _openings_today(session, player.id, season.id)
@@ -355,6 +634,7 @@ def open_pack(tg_id: int, tier: str | None = None, quantity: int = 1) -> dict:
         # One request can contain a large bundle, but each pack remains independently
         # auditable and keeps its own price step and reward reference.
         animals: list[Animal] = []
+        pack_batches: list[tuple[int, list[Animal], int, int]] = []
         rub_reward = 0
         usd_reward = 0
         for price in prices:
@@ -366,10 +646,22 @@ def open_pack(tg_id: int, tier: str | None = None, quantity: int = 1) -> dict:
                     origin="pack",
                     genes=roll_genes(),
                     habitat=roll_habitat(),
+                    flush=False,
                 )
                 for _ in range(random.randint(*rewards["animals"]))
             ]
             animals.extend(pack_animals)
+            pack_rub = random.randint(*rewards["rub"])
+            pack_usd = random.randint(*rewards["usd"])
+            rub_reward += pack_rub
+            usd_reward += pack_usd
+            pack_batches.append((price, pack_animals, pack_rub, pack_usd))
+
+        # A batch may contain hundreds of animals. Flushing once lets SQLAlchemy/the
+        # database use batched inserts instead of forcing a round trip for every animal.
+        session.flush()
+        opening_batches: list[tuple[PackOpening, int, int]] = []
+        for price, pack_animals, pack_rub, pack_usd in pack_batches:
             opening = PackOpening(
                 player_id=player.id,
                 season_id=season.id,
@@ -380,13 +672,20 @@ def open_pack(tg_id: int, tier: str | None = None, quantity: int = 1) -> dict:
                 price_paid_usd=price,
             )
             session.add(opening)
-            session.flush()
-            pack_rub = random.randint(*rewards["rub"])
-            pack_usd = random.randint(*rewards["usd"])
-            rub_reward += pack_rub
-            usd_reward += pack_usd
-            ledger.grant(session, player, "rub", pack_rub, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
-            ledger.grant(session, player, "usd", pack_usd, "pack_reward", ref_table="pack_openings", ref_id=opening.id)
+            opening_batches.append((opening, pack_rub, pack_usd))
+
+        # Opening ids are needed as immutable ledger references. A single flush keeps
+        # one audit row per pack without serialising the whole request pack-by-pack.
+        session.flush()
+        reward_movements: list[ledger.GrantMovement] = []
+        for opening, pack_rub, pack_usd in opening_batches:
+            reward_movements.extend(
+                (
+                    ("rub", pack_rub, "pack_reward", "pack_openings", opening.id),
+                    ("usd", pack_usd, "pack_reward", "pack_openings", opening.id),
+                )
+            )
+        ledger.grant_many(session, player, reward_movements)
 
         sync_player_income(session, player, bonuses)
         animal_payloads = [animal_payload(animal, None, bonuses) for animal in animals]
@@ -496,6 +795,174 @@ def list_localities(tg_id: int) -> dict:
         return result
 
 
+def list_localities_summary(tg_id: int) -> dict:
+    """Constant-size locality metadata for the interactive client.
+
+    The legacy domain endpoint above remains available to bot audits that intentionally
+    inspect every animal.  A phone must never download the entire zoo merely to draw five
+    collapsed cards, so this endpoint groups counts and income in SQL and returns no animal
+    rows.  Individual buckets are loaded from :func:`list_locality_animals_page` on demand.
+    """
+    with get_session() as session:
+        player = get_player(session, tg_id, for_update=True)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        ensure_first_locality(session, player.id, season.id)
+        localities = session.scalars(
+            select(Locality)
+            .where(Locality.player_id == player.id, Locality.season_id == season.id)
+            .order_by(Locality.purchased_at.asc(), Locality.id.asc())
+        ).all()
+        bonuses = bonuses_module.load(session, player.id)
+        sick = Animal.sick_since.is_not(None)
+        rows = session.execute(
+            select(
+                Animal.locality_id,
+                Animal.habitat,
+                Animal.species_id,
+                Animal.gene_survival,
+                Animal.gene_appearance,
+                Animal.gene_size,
+                Locality.habitat,
+                sick,
+                func.count(Animal.id),
+            )
+            .outerjoin(Locality, Animal.locality_id == Locality.id)
+            .where(
+                Animal.player_id == player.id,
+                Animal.season_id == season.id,
+                alive_clause(),
+                Animal.id.not_in(on_expedition_subquery()),
+            )
+            .group_by(
+                Animal.locality_id,
+                Animal.habitat,
+                Animal.species_id,
+                Animal.gene_survival,
+                Animal.gene_appearance,
+                Animal.gene_size,
+                Locality.habitat,
+                sick,
+            )
+        ).all()
+
+        locality_ids = {locality.id for locality in localities}
+        counts: dict[int | None, int] = {locality.id: 0 for locality in localities}
+        counts[None] = 0
+        incomes: dict[int | None, int] = {locality.id: 0 for locality in localities}
+        incomes[None] = 0
+        habitat_counts: dict[tuple[int | None, str], int] = {}
+        for locality_id, animal_habitat, species_id, survival, appearance, size, locality_habitat, is_sick, count in rows:
+            bucket = locality_id if locality_id in locality_ids else None
+            group_count = int(count)
+            counts[bucket] += group_count
+            habitat_counts[(bucket, animal_habitat)] = habitat_counts.get((bucket, animal_habitat), 0) + group_count
+            incomes[bucket] += animal_income_rub_per_min(
+                survival=survival,
+                appearance=appearance,
+                size=size,
+                habitat_matches=bool(locality_habitat) and locality_habitat == animal_habitat,
+                is_sick=bool(is_sick),
+                species_multiplier=bonuses.species_income_multiplier(species_id),
+                species_rarity=SPECIES_BY_ID[species_id]["rarity"],
+            ) * group_count
+
+        owned = len(localities)
+        result = {
+            "localities": [
+                {
+                    "id": locality.id,
+                    "habitat": locality.habitat,
+                    "level": locality.level,
+                    "upkeep_discount_percent": locality_upkeep_discount(locality.level),
+                    "next_upkeep_discount_percent": locality_upkeep_discount(locality.level + 1) if locality_upgrade_cost_rub(locality.level) is not None else None,
+                    "upgrade_cost_rub": locality_upgrade_cost_rub(locality.level),
+                    "animals": [],
+                    "animals_count": counts[locality.id],
+                    "income_rub_per_min": incomes[locality.id],
+                    "matching_count": sum(
+                        count
+                        for (bucket, habitat), count in habitat_counts.items()
+                        if bucket != locality.id and habitat == locality.habitat
+                    ),
+                }
+                for locality in localities
+            ],
+            "unassigned": [],
+            "unassigned_count": counts[None],
+            "next_price": locality_price_rub(owned, bonuses.locality_discount_multiplier()) if owned < MAX_LOCALITIES else None,
+            "habitats_taken": [locality.habitat for locality in localities],
+            "max_localities": MAX_LOCALITIES,
+        }
+        session.commit()
+        return result
+
+
+def list_locality_animals_page(
+    tg_id: int,
+    *,
+    locality_id: int | None = None,
+    offset: int = 0,
+    limit: int = 120,
+    query: str = "",
+    preferred_habitat: str | None = None,
+) -> dict:
+    """One small assigned or unassigned locality bucket page."""
+    offset = max(0, offset)
+    limit = max(1, min(limit, 240))
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        locality_habitat: str | None = None
+        if locality_id is not None:
+            locality = session.scalars(
+                select(Locality).where(
+                    Locality.id == locality_id,
+                    Locality.player_id == player.id,
+                    Locality.season_id == season.id,
+                )
+            ).first()
+            if locality is None:
+                raise HTTPException(404, "Местность не найдена")
+            locality_habitat = locality.habitat
+
+        filters = [
+            Animal.player_id == player.id,
+            Animal.season_id == season.id,
+            Animal.locality_id == locality_id if locality_id is not None else Animal.locality_id.is_(None),
+            alive_clause(),
+            Animal.id.not_in(on_expedition_subquery()),
+        ]
+        raw_query = query.strip()
+        if raw_query:
+            patterns = {raw_query, raw_query.lower(), raw_query.capitalize(), raw_query.upper()}
+            filters.append(or_(*(
+                [Animal.name.like(f"%{pattern}%") for pattern in patterns]
+                + [Species.name.like(f"%{pattern}%") for pattern in patterns]
+            )))
+        total = int(session.scalar(
+            select(func.count(Animal.id)).join(Species, Species.id == Animal.species_id).where(*filters)
+        ) or 0)
+        order = []
+        if preferred_habitat in HABITATS:
+            order.append(case((Animal.habitat == preferred_habitat, 1), else_=0).desc())
+        animals = session.scalars(
+            select(Animal)
+            .join(Species, Species.id == Animal.species_id)
+            .where(*filters)
+            .order_by(*order, Animal.acquired_at.desc(), Animal.id.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        bonuses = bonuses_module.load(session, player.id)
+        payload = [locality_animal_payload(animal, locality_habitat, bonuses) for animal in animals]
+        next_offset = offset + len(payload)
+        return {"animals": payload, "total": total, "next_offset": next_offset if next_offset < total else None}
+
+
 def buy_locality(tg_id: int, body: BuyLocalityBody) -> dict:
     if body.habitat not in HABITATS:
         raise HTTPException(400, "Неверная среда обитания")
@@ -504,7 +971,7 @@ def buy_locality(tg_id: int, body: BuyLocalityBody) -> dict:
         player = get_player(session, tg_id, for_update=True)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        sync_player_income(session, player)
+        settle_player_income(session, player)
         season = ensure_player_season(session, player)
 
         localities = session.scalars(
@@ -651,36 +1118,28 @@ def assign_matching_locality(tg_id: int, body: AssignMatchingLocalityBody) -> di
         if body.locality_id is not None and not localities:
             raise HTTPException(404, "Местность не найдена")
 
-        # One row per habitat, so an animal has exactly one place it belongs.
-        home = {locality.habitat: locality for locality in localities}
-
-        candidates = session.scalars(
-            select(Animal)
-            .where(
-                Animal.player_id == player.id,
-                Animal.season_id == season.id,
-                Animal.habitat.in_(home),
-                # Deliberately no filter on `locality_id` here. Which locality counts as home
-                # differs per animal, so "not already home" is not a condition SQL can state
-                # once for the whole sweep — and the obvious attempt, excluding everything
-                # already in *some* owned locality, silently drops the misplaced animals this
-                # exists to rescue. The comparison is made per row below; the extra rows are
-                # this player's own animals of these habitats, and there are hundreds at most.
-                alive_clause(),
-                Animal.id.not_in(on_expedition_subquery()),
-            )
-            .with_for_update()
-        ).all()
-
         by_habitat: dict[str, int] = {}
         moved = 0
-        for animal in candidates:
-            destination = home[animal.habitat]
-            if animal.locality_id == destination.id:
-                continue
-            animal.locality_id = destination.id
-            by_habitat[animal.habitat] = by_habitat.get(animal.habitat, 0) + 1
-            moved += 1
+        # Let the database update each habitat as a set. Hydrating and mutating 11k ORM
+        # objects spent most of the request in Python and generated a huge unit-of-work;
+        # at most five indexed UPDATE statements do the identical job in-place.
+        for destination in localities:
+            changed = session.execute(
+                update(Animal)
+                .where(
+                    Animal.player_id == player.id,
+                    Animal.season_id == season.id,
+                    Animal.habitat == destination.habitat,
+                    or_(Animal.locality_id.is_(None), Animal.locality_id != destination.id),
+                    alive_clause(),
+                    Animal.id.not_in(on_expedition_subquery()),
+                )
+                .values(locality_id=destination.id)
+                .execution_options(synchronize_session=False)
+            ).rowcount or 0
+            if changed:
+                by_habitat[destination.habitat] = int(changed)
+                moved += int(changed)
 
         sync_player_income(session, player)
         result = {
@@ -1241,9 +1700,13 @@ def get_expeditions(tg_id: int) -> dict:
         payloads = [_expedition_payload(session, e, bonuses) for e in open_expeditions]
         busy_locality_ids = {e.locality_id for e in open_expeditions}
 
-        squad_pool = available_animals(session, player.id, season.id)
-        # Serialise before committing: commit expires the squad pool, and re-reading each animal
-        # during payload building turns into thousands of round-trips on a large zoo.
+        available_filters = (
+            Animal.player_id == player.id,
+            Animal.season_id == season.id,
+            alive_clause(),
+            Animal.id.not_in(on_expedition_subquery()),
+        )
+        available_count = int(session.scalar(select(func.count(Animal.id)).where(*available_filters)) or 0)
         result = {
             "expeditions": payloads,
             # Kept until all deployed clients read the list.
@@ -1258,7 +1721,8 @@ def get_expeditions(tg_id: int) -> dict:
                 }
                 for loc in localities
             ],
-            "available_animals": [expedition_animal_payload(a, bonuses) for a in squad_pool],
+            "available_animals": [],
+            "available_animals_count": available_count,
             "expedition_minutes": {habitat: spec["minutes"] for habitat, spec in EXPEDITIONS.items()},
             "squad_min": EXPEDITION_SQUAD_MIN,
             "squad_max": EXPEDITION_SQUAD_MAX,
@@ -1271,6 +1735,63 @@ def get_expeditions(tg_id: int) -> dict:
         }
         session.commit()
         return result
+
+
+def list_expedition_animals_page(
+    tg_id: int,
+    *,
+    offset: int = 0,
+    limit: int = 120,
+    query: str = "",
+) -> dict:
+    """Strongest free animals in small pages for the expedition squad picker."""
+    offset = max(0, offset)
+    limit = max(1, min(limit, 240))
+    with get_session() as session:
+        player = get_player(session, tg_id)
+        if not player:
+            raise HTTPException(404, "Нет игрока")
+        season = ensure_player_season(session, player)
+        bonuses = bonuses_module.load(session, player.id)
+        filters = [
+            Animal.player_id == player.id,
+            Animal.season_id == season.id,
+            alive_clause(),
+            Animal.id.not_in(on_expedition_subquery()),
+        ]
+        raw_query = query.strip()
+        needle = raw_query.lower()
+        if needle:
+            habitat_codes = [
+                code
+                for code, aliases in _HABITAT_SEARCH_ALIASES.items()
+                if needle in code or any(needle in alias or alias in needle for alias in aliases)
+            ]
+            patterns = {raw_query, raw_query.lower(), raw_query.capitalize(), raw_query.upper()}
+            search_filters = (
+                [Animal.name.like(f"%{pattern}%") for pattern in patterns]
+                + [Species.name.like(f"%{pattern}%") for pattern in patterns]
+                + [Animal.habitat.like(f"%{pattern}%") for pattern in patterns]
+            )
+            if habitat_codes:
+                search_filters.append(Animal.habitat.in_(habitat_codes))
+            filters.append(or_(*search_filters))
+        power_order = sum(
+            case((column == "high", 3), (column == "medium", 2), else_=1)
+            for column in (Animal.gene_survival, Animal.gene_reproduction, Animal.gene_appearance, Animal.gene_size)
+        )
+        total = int(session.scalar(select(func.count(Animal.id)).join(Species, Species.id == Animal.species_id).where(*filters)) or 0)
+        animals = session.scalars(
+            select(Animal)
+            .join(Species, Species.id == Animal.species_id)
+            .where(*filters)
+            .order_by(power_order.desc(), Animal.acquired_at.desc(), Animal.id.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        payload = [expedition_animal_payload(animal, bonuses) for animal in animals]
+        next_offset = offset + len(payload)
+        return {"animals": payload, "total": total, "next_offset": next_offset if next_offset < total else None}
 
 
 def has_collectible_expedition(tg_id: int) -> bool:

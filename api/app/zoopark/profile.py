@@ -6,8 +6,8 @@ from datetime import datetime
 from typing import cast
 
 from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
 
 from api.app.core.config import ADMIN_TG_IDS
 from api.app.db.models import Animal, Clan, ClanMember, Item, ItemSet, Locality, Player, PlayerCosmetic, Season, utcnow
@@ -36,12 +36,13 @@ from api.app.zoopark.catalog import (
     item_sell_refund_usd,
 )
 from api.app.zoopark.income import (
-    alive_animals,
+    alive_clause,
     animal_base_income_rub_per_min,
     animal_income,
     cure_cost_usd,
     diversity_multiplier,
     effective_species_count,
+    on_expedition_subquery,
 )
 from api.app.zoopark.season import ensure_player_season
 
@@ -136,14 +137,20 @@ def item_payload(item: Item) -> dict:
 
 def list_items(session: Session, player_id: int) -> list[dict]:
     items = session.scalars(
-        select(Item).where(Item.player_id == player_id).order_by(Item.created_at.asc(), Item.id.asc())
+        select(Item)
+        .options(selectinload(Item.properties))
+        .where(Item.player_id == player_id)
+        .order_by(Item.created_at.asc(), Item.id.asc())
     ).all()
     return [item_payload(item) for item in items]
 
 
 def list_item_sets(session: Session, player_id: int) -> list[dict]:
     sets = session.scalars(
-        select(ItemSet).where(ItemSet.player_id == player_id).order_by(ItemSet.created_at.asc(), ItemSet.id.asc())
+        select(ItemSet)
+        .options(selectinload(ItemSet.members))
+        .where(ItemSet.player_id == player_id)
+        .order_by(ItemSet.created_at.asc(), ItemSet.id.asc())
     ).all()
     active_ids = {
         str(row) for row in session.scalars(
@@ -225,6 +232,41 @@ def animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuse
         "habitat_bonus": matches,
         "parent_a_id": animal.parent_a_id,
         "parent_b_id": animal.parent_b_id,
+    }
+
+
+def zoo_animal_payload(animal: Animal, locality_habitat: str | None, bonuses: Bonuses, today=None, vet_level: int = 0) -> dict:
+    """Flat animal shape kept in the global game state.
+
+    A full passport embeds a six-row income breakdown. Repeating that tree for every animal
+    made `/api/me` exceed 11 MiB at 11.5k animals. The overview and veterinarian need the
+    fields below; the full breakdown is fetched only when a passport is opened.
+    """
+    species = SPECIES_BY_ID[animal.species_id]
+    day = today or utcnow().date()
+    matches = bool(locality_habitat) and locality_habitat == animal.habitat
+    return {
+        "id": animal.id,
+        "name": animal.name or species["name"],
+        "is_favorite": bool(animal.is_favorite),
+        "species_code": species["code"],
+        "species_name": species["name"],
+        "species_emoji": species["emoji"],
+        "species_rarity": species["rarity"],
+        "survival": animal.gene_survival,
+        "reproduction": animal.gene_reproduction,
+        "appearance": animal.gene_appearance,
+        "size_trait": animal.gene_size,
+        "habitat": animal.habitat,
+        "origin": animal.origin,
+        "acquired_at": _iso(animal.acquired_at),
+        "dies_at": _iso(animal.dies_at),
+        "locality_id": animal.locality_id,
+        "is_sick": animal.sick_since is not None,
+        "can_breed": animal.last_bred_on != day,
+        "income": animal_income(animal, locality_habitat, bonuses),
+        "cure_cost_usd": cure_cost_usd(animal, locality_habitat, bonuses, vet_level),
+        "habitat_bonus": matches,
     }
 
 
@@ -375,13 +417,21 @@ def build_state(session: Session, player: Player) -> dict:
     season: Season = ensure_player_season(session, player)
     bonuses = bonuses_module.load(session, player.id)
 
-    rows = alive_animals(session, player.id, season.id)
-    today = utcnow().date()
-    animals = [animal_payload(animal, habitat, bonuses, today, player.vet_level) for animal, habitat in rows]
-
-    counts_by_species: dict[int, int] = {}
-    for animal, _habitat in rows:
-        counts_by_species[animal.species_id] = counts_by_species.get(animal.species_id, 0) + 1
+    visible = (
+        Animal.player_id == player.id,
+        Animal.season_id == season.id,
+        alive_clause(),
+        Animal.id.not_in(on_expedition_subquery()),
+    )
+    counts_by_species = {
+        int(species_id): int(count)
+        for species_id, count in session.execute(
+            select(Animal.species_id, func.count(Animal.id)).where(*visible).group_by(Animal.species_id)
+        )
+    }
+    sick_animal_ids = list(
+        session.scalars(select(Animal.id).where(*visible, Animal.sick_since.is_not(None)))
+    )
 
     localities_count = len(
         session.scalars(
@@ -416,14 +466,16 @@ def build_state(session: Session, player: Player) -> dict:
         "income_rub_per_min": player.income_rub_per_min,
         "upkeep_rub_per_min": player.upkeep_rub_per_min,
         "income_synced_at": _iso(player.income_synced_at),
-        "animals": animals,
-        "sick_animal_ids": [a["id"] for a in animals if a["is_sick"]],
+        # The collection itself is paged by `/api/zoo/animals`. Booting the application no
+        # longer serialises every resident before the header can appear.
+        "animals": [],
+        "sick_animal_ids": sick_animal_ids,
         "species_count": len(counts_by_species),
         # What the diversity bonus is actually computed from, so the client can stop
         # rendering a percentage the server never applied.
         "effective_species_count": round(effective_species_count(counts), 2),
         "diversity_bonus_percent": round((diversity - 1) * 100, 2),
-        "live_animals_count": len(animals),
+        "live_animals_count": sum(counts_by_species.values()),
         "localities_count": localities_count,
         "season_id": season.id,
         "season_started_at": _iso(season.starts_at),

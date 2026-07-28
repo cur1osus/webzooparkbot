@@ -536,6 +536,8 @@ def _stock_zoo(telegram_id: int, count: int = 7) -> None:
                 habitat="fields",
                 species_id=SPECIES_ID_BY_CODE["dragon"],
             )
+        from api.app.zoopark.income import sync_player_income
+        sync_player_income(session, row)
         session.commit()
 
 
@@ -553,4 +555,7 @@ def _activate(telegram_id: int, kind: str, value: int, species_id: int | None = 
         session.add(item)
         session.flush()
         session.add(ItemProperty(item_id=item.id, kind=kind, value=value, species_id=species_id))
+        session.flush()
+        from api.app.zoopark.income import sync_player_income
+        sync_player_income(session, row)
         session.commit()

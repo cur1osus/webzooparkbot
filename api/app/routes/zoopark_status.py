@@ -14,6 +14,11 @@ def bonus(tg_id: TelegramId):
     return status_service.daily_bonus(tg_id)
 
 
+@router.get("/api/vet/animals")
+def sick_animals(tg_id: TelegramId):
+    return status_service.sick_animals(tg_id)
+
+
 @router.post("/api/bonus/reroll")
 def bonus_reroll(tg_id: TelegramId):
     return status_service.reroll_daily_bonus(tg_id)
