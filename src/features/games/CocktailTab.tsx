@@ -7,6 +7,9 @@ import type { CocktailHistoryEntry } from '@/types';
 const FRUITS = ['🍓', '🫐', '🍏', '🍐', '🍇', '🍒'];
 
 export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadRequest, setLoadRequest] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null]);
   const [attemptsLeft, setAttemptsLeft] = useState(10);
   const [guessing, setGuessing] = useState(false);
@@ -21,6 +24,8 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
 
   useEffect(() => {
     let mounted = true;
+    setLoadState('loading');
+    setLoadError(null);
     void apiGetCocktailState()
       .then((state) => {
         if (!mounted) return;
@@ -35,12 +40,49 @@ export function CocktailTab({ onRefresh }: { onRefresh: () => void }) {
         } else if (state.attempts_left === 0) {
           setResult({ won: false, message: 'Попытки закончились. Завтра будет новый рецепт.' });
         }
+        // Publish the screen only after every field from the same server snapshot has
+        // landed. Rendering optimistic defaults first made a solved cocktail flash as a
+        // playable board and then abruptly replace itself with the result card.
+        setLoadState('ready');
       })
-      .catch(() => {
-        // The board remains usable if an older server has not deployed the read endpoint.
+      .catch((loadFailure) => {
+        if (!mounted) return;
+        setLoadError(loadFailure instanceof Error ? loadFailure.message : 'Не удалось загрузить коктейль.');
+        setLoadState('error');
       });
     return () => { mounted = false; };
-  }, []);
+  }, [loadRequest]);
+
+  if (loadState !== 'ready') {
+    return (
+      <section
+        className="min-h-[320px] px-[14px] pt-[14px] grid place-items-center"
+        aria-busy={loadState === 'loading'}
+        aria-live="polite"
+      >
+        {loadState === 'loading' ? (
+          <div className="flex flex-col items-center gap-3 text-tg-hint">
+            <div className="spinner" aria-hidden />
+            <p className="m-0 text-[13px]">Проверяем коктейль дня…</p>
+          </div>
+        ) : (
+          <div className="text-center">
+            <p className="m-0 text-[13px]" style={{ color: 'var(--c-red-soft)' }}>
+              {loadError ?? 'Не удалось загрузить коктейль.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setLoadRequest((request) => request + 1)}
+              className="mt-3 rounded-xl border-none px-4 py-2 text-[13px] font-bold"
+              style={{ background: 'var(--tg-theme-button-color)', color: 'var(--tg-theme-button-text-color)' }}
+            >
+              Повторить
+            </button>
+          </div>
+        )}
+      </section>
+    );
+  }
 
   const gameFinished = attemptsLeft <= 0 || solvedByMe;
 
