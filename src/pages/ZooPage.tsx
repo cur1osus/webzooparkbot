@@ -317,11 +317,32 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
       setMessage('Название сета не может быть пустым');
       return;
     }
+    const previousSet = gs.item_sets.find(s => s.id === setId);
+    if (!previousSet || previousSet.name === trimmedName) return;
+
+    // Rename is a local metadata change. Patch it immediately so a large zoo does not make
+    // the pencil interaction wait for a full `/api/me` refresh (which also contains animals).
+    onPatchState({
+      item_sets: gs.item_sets.map(itemSet => itemSet.id === setId ? { ...itemSet, name: trimmedName } : itemSet),
+    });
     void runForgeAction(async () => {
-      const itemSet = gs.item_sets.find(s => s.id === setId);
-      await apiForgeUpdateSet(setId, itemSet?.item_ids ?? [], trimmedName);
-    }, 'Ошибка переименования сета');
-  }, [gs.item_sets, runForgeAction]);
+      try {
+        const result = await apiForgeUpdateSet(setId, previousSet.item_ids, trimmedName);
+        onPatchState({
+          item_sets: gs.item_sets.map(itemSet => itemSet.id === setId
+            ? { ...itemSet, ...result.set, is_active: itemSet.is_active }
+            : itemSet),
+        });
+      } catch (error) {
+        onPatchState({
+          item_sets: gs.item_sets.map(itemSet => itemSet.id === setId
+            ? { ...itemSet, name: previousSet.name }
+            : itemSet),
+        });
+        throw error;
+      }
+    }, 'Ошибка переименования сета', false);
+  }, [gs.item_sets, onPatchState, runForgeAction]);
 
   const handleForgeDeleteSet = useCallback((setId: string) => {
     void runForgeAction(async () => {

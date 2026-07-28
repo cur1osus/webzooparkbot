@@ -214,7 +214,7 @@ export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, mes
                 ) : (
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="font-bold text-sm truncate">{itemSet.icon} {itemSet.name}</span>
-                    <button type="button" onClick={() => startRename(itemSet)} disabled={busy} aria-label={`Переименовать сет ${itemSet.name}`} title="Переименовать сет" className="min-w-11 min-h-11 rounded-xl border-none grid place-items-center text-[17px] disabled:opacity-45" style={{ background: 'rgba(var(--c-gold-rgb),0.14)', color: 'var(--c-gold)' }}>✎</button>
+                    <button type="button" onClick={() => startRename(itemSet)} disabled={busy} aria-label={`Переименовать сет ${itemSet.name}`} title="Переименовать сет" className="w-8 h-8 min-w-8 min-h-8 rounded-xl border-none grid place-items-center leading-none shrink-0 disabled:opacity-45" style={{ background: 'rgba(var(--c-gold-rgb),0.16)', color: 'var(--c-gold)', fontFamily: '"Apple Color Emoji", "Segoe UI Emoji", sans-serif', fontSize: '18px', lineHeight: 1 }}>✏️</button>
                     {itemSet.is_active && <span className="shrink-0 px-[7px] py-[2px] rounded-full text-[10px] font-bold" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>Активен</span>}
                   </div>
                 )}
