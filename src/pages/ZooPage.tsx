@@ -311,6 +311,18 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     }, 'Ошибка создания сета');
   }, [runForgeAction, setSubPage]);
 
+  const handleForgeRenameSet = useCallback((setId: string, name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setMessage('Название сета не может быть пустым');
+      return;
+    }
+    void runForgeAction(async () => {
+      const itemSet = gs.item_sets.find(s => s.id === setId);
+      await apiForgeUpdateSet(setId, itemSet?.item_ids ?? [], trimmedName);
+    }, 'Ошибка переименования сета');
+  }, [gs.item_sets, runForgeAction]);
+
   const handleForgeDeleteSet = useCallback((setId: string) => {
     void runForgeAction(async () => {
       if (!(await tmaConfirm('Удалить этот сет? Предметы останутся у тебя.', 'Удалить сет?'))) return;
@@ -606,6 +618,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
           message={message}
           onApplySet={handleForgeApplySet}
           onCreateSet={handleForgeCreateSet}
+          onRenameSet={handleForgeRenameSet}
           onDeleteSet={handleForgeDeleteSet}
           onSelectItems={handleForgeSelectItems}
         />

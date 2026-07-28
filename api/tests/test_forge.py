@@ -39,3 +39,14 @@ def test_create_returns_next_price_and_inactive_sale_skips_income_scan(db, playe
 
     with get_session() as session:
         assert session.query(Item).count() == 1
+
+
+def test_default_set_name_uses_first_free_number(db, player):
+    first = forge.forge_set_create(player, ForgeSetBody())
+    second = forge.forge_set_create(player, ForgeSetBody())
+    assert first["set"]["name"] == "Сет 1"
+    assert second["set"]["name"] == "Сет 2"
+
+    forge.forge_set_delete(player, ForgeSetIdBody(set_id=first["set"]["id"]))
+    third = forge.forge_set_create(player, ForgeSetBody())
+    assert third["set"]["name"] == "Сет 1"

@@ -18,8 +18,11 @@ export const apiForgeCreateSet = (item_ids: string[] = [], name?: string) =>
     method: 'POST',
     body: JSON.stringify({ item_ids, name }),
   });
-export const apiForgeUpdateSet = (set_id: string, item_ids: string[]) =>
-  req<{ ok: boolean; set: ForgeSet }>('/forge/sets/update', { method: 'POST', body: JSON.stringify({ set_id, item_ids }) });
+export const apiForgeUpdateSet = (set_id: string, item_ids: string[], name?: string) =>
+  req<{ ok: boolean; set: ForgeSet }>('/forge/sets/update', {
+    method: 'POST',
+    body: JSON.stringify({ set_id, item_ids, ...(name ? { name } : {}) }),
+  });
 export const apiForgeDeleteSet = (set_id: string) =>
   req<{ ok: boolean }>('/forge/sets/delete', { method: 'POST', body: JSON.stringify({ set_id }) });
 export const apiForgeApplySet = (set_id: string) =>

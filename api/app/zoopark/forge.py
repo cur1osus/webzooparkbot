@@ -136,7 +136,17 @@ def forge_items(tg_id: int) -> dict:
         player = get_player(session, tg_id)
         if not player:
             raise HTTPException(404, "Нет игрока")
-        return {"items": list_items(session, player.id)}
+        creations = ledger.count_by_reason(
+            session, player.id, "forge_create", since=FORGE_CREATE_COUNTER_EPOCH
+        )
+        items = list_items(session, player.id)
+        return {
+            "items": items,
+            "next_cost_usd": forge_create_cost_usd(creations),
+            "cost_paw": FORGE_CREATE_PAW,
+            "active_item_count": sum(item["is_active"] for item in items),
+            "active_item_bonuses": active_bonus_summary(bonuses_module.load(session, player.id)),
+        }
 
 
 def forge_sets(tg_id: int) -> dict:
@@ -429,10 +439,13 @@ def forge_set_create(tg_id: int, body: ForgeSetBody) -> dict:
             raise HTTPException(404, "Нет игрока")
 
         item_ids = _owned_item_ids(session, player.id, body.unique_item_ids())
-        existing = session.scalar(select(func.count(ItemSet.id)).where(ItemSet.player_id == player.id)) or 0
+        existing_names = set(session.scalars(select(ItemSet.name).where(ItemSet.player_id == player.id)).all())
+        next_number = 1
+        while f"Сет {next_number}" in existing_names:
+            next_number += 1
         item_set = ItemSet(
             player_id=player.id,
-            name=(body.name or f"Сет {existing + 1}")[:32],
+            name=(body.name or f"Сет {next_number}")[:32],
             emoji=(body.icon or "⚒️")[:16],
         )
         session.add(item_set)

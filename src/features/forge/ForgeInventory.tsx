@@ -54,13 +54,14 @@ const ForgeInventoryItem = memo(function ForgeInventoryItem({ item }: {
   );
 });
 
-export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCreateSet, onDeleteSet, onSelectItems }: {
+export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, message, onApplySet, onCreateSet, onRenameSet, onDeleteSet, onSelectItems }: {
   items: ForgeItem[]; sets: ForgeSet[]; bonuses: ActiveItemBonus[];
   busy: boolean; message: string | null;
-  onApplySet: (id: string) => void; onCreateSet: (name?: string) => void; onDeleteSet: (id: string) => void;
+  onApplySet: (id: string) => void; onCreateSet: (name?: string) => void; onRenameSet: (id: string, name: string) => void; onDeleteSet: (id: string) => void;
   onSelectItems: (id: string) => void;
 }) {
-  const [newSetName, setNewSetName] = useState('');
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editingSetName, setEditingSetName] = useState('');
   const [visibleItemCount, setVisibleItemCount] = useState(INVENTORY_PAGE_SIZE);
   const activeItems = useMemo(() => items.filter(i => i.is_active), [items]);
   const activeSet = useMemo(() => sets.find(s => s.is_active) ?? null, [sets]);
@@ -70,6 +71,22 @@ export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, mes
   // The effective, already-capped totals from the server — the numbers the game actually
   // applies. Summing per-item labels here would overshoot the caps and mislead the player.
   const bonusEntries = bonuses;
+
+  function startRename(itemSet: ForgeSet) {
+    setEditingSetId(itemSet.id);
+    setEditingSetName(itemSet.name);
+  }
+
+  function cancelRename() {
+    setEditingSetId(null);
+    setEditingSetName('');
+  }
+
+  function saveRename() {
+    if (!editingSetId || !editingSetName.trim() || busy) return;
+    onRenameSet(editingSetId, editingSetName.trim());
+    cancelRename();
+  }
 
   return (
     <div className="px-[14px] pt-3 flex flex-col gap-3 page-enter">
@@ -142,22 +159,11 @@ export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, mes
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => { onCreateSet(newSetName.trim() || undefined); setNewSetName(''); }} disabled={busy || items.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
+        <div>
+          <button type="button" onClick={() => onCreateSet()} disabled={busy || items.length === 0} className="w-full py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>
             + Новый сет
           </button>
-          <button onClick={() => activeSet ? onSelectItems(activeSet.id) : orderedSets[0] && onApplySet(orderedSets[0].id)} disabled={busy || orderedSets.length === 0} className="py-[10px] rounded-xl border-none font-bold text-[13px] disabled:opacity-45" style={{ background: 'rgba(var(--c-green-rgb),0.16)', color: 'var(--c-green)' }}>
-            {activeSet ? 'Настроить' : 'Применить'}
-          </button>
         </div>
-        <input
-          value={newSetName}
-          onChange={event => setNewSetName(event.target.value)}
-          maxLength={32}
-          placeholder="Название нового сета, например «Дуэли»"
-          className="text-input text-[13px]"
-          aria-label="Название нового сета"
-        />
       </div>
 
       <div className="flex justify-between items-end">
@@ -187,11 +193,31 @@ export const ForgeTab = memo(function ForgeTab({ items, sets, bonuses, busy, mes
             background: itemSet.is_active ? 'rgba(var(--c-blue-rgb),0.08)' : undefined,
           }}>
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm truncate">{itemSet.icon} {itemSet.name}</span>
-                  {itemSet.is_active && <span className="px-[7px] py-[2px] rounded-full text-[10px] font-bold" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>Активен</span>}
-                </div>
+              <div className="min-w-0 flex-1">
+                {editingSetId === itemSet.id ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      value={editingSetName}
+                      onChange={event => setEditingSetName(event.target.value.slice(0, 32))}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') saveRename();
+                        if (event.key === 'Escape') cancelRename();
+                      }}
+                      maxLength={32}
+                      className="text-input min-w-0 flex-1 text-[13px]"
+                      aria-label={`Новое название сета ${itemSet.name}`}
+                    />
+                    <button type="button" onClick={saveRename} disabled={busy || !editingSetName.trim()} aria-label="Сохранить название сета" className="min-w-11 min-h-11 rounded-xl border-none text-[17px] font-bold disabled:opacity-45" style={{ background: 'rgba(var(--c-green-rgb),0.14)', color: 'var(--c-green)' }}>✓</button>
+                    <button type="button" onClick={cancelRename} disabled={busy} aria-label="Отменить переименование сета" className="min-w-11 min-h-11 rounded-xl border-none text-[17px] font-bold disabled:opacity-45" style={{ background: 'var(--surface-subtle)', color: 'var(--tg-theme-hint-color)' }}>×</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-bold text-sm truncate">{itemSet.icon} {itemSet.name}</span>
+                    <button type="button" onClick={() => startRename(itemSet)} disabled={busy} aria-label={`Переименовать сет ${itemSet.name}`} title="Переименовать сет" className="min-w-11 min-h-11 rounded-xl border-none grid place-items-center text-[17px] disabled:opacity-45" style={{ background: 'rgba(var(--c-gold-rgb),0.14)', color: 'var(--c-gold)' }}>✎</button>
+                    {itemSet.is_active && <span className="shrink-0 px-[7px] py-[2px] rounded-full text-[10px] font-bold" style={{ background: 'rgba(var(--c-blue-rgb),0.16)', color: 'var(--c-blue)' }}>Активен</span>}
+                  </div>
+                )}
                 <p className="mt-[3px] mb-0 text-xs text-tg-hint">{setItems.length}/3 слота заполнено</p>
               </div>
               <button onClick={() => onDeleteSet(itemSet.id)} disabled={busy} className="w-8 h-8 rounded-xl border-none disabled:opacity-45" style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red)' }}>×</button>
