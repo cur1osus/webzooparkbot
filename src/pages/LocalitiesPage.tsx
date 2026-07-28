@@ -262,6 +262,7 @@ function LocalityCard({ locality, unassigned, matchingCount, onAdd, onAssignMatc
           <button
             onClick={onAssignMatching}
             disabled={assigningMatching}
+            data-testid={`assign-matching-${locality.habitat}`}
             className="w-full min-h-11 rounded-xl border-none cursor-pointer font-extrabold text-[12px] disabled:opacity-55 disabled:cursor-wait"
             style={{ background: `color-mix(in srgb, ${hab.color} 16%, transparent)`, color: hab.color, border: `1px solid color-mix(in srgb, ${hab.color} 30%, transparent)` }}
           >
@@ -362,11 +363,17 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   const [buying, setBuying]       = useState(false);
   const [selHabitat, setSelHab]   = useState<Habitat | null>(null);
   const [assigningTo, setAssigning] = useState<{ localityId: number; habitat: Habitat } | null>(null);
-  const [assigningMatchingId, setAssigningMatchingId] = useState<number | null>(null);
+  // Each locality has its own in-flight request. A single global lock made the next
+  // buttons ignore clicks while the previous 11k-animal income recalculation was running.
+  const [assigningMatchingIds, setAssigningMatchingIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
+  const assigningMatchingIdsRef = useRef(new Set<number>());
 
   // Bumped by every optimistic mutation. A background reconcile only writes its result if no
   // newer mutation has landed since it started, so a slow refetch can't clobber fresher state.
   const mutationSeq = useRef(0);
+  const matchingInFlight = useRef(0);
 
   const load = async () => {
     try {
@@ -434,20 +441,33 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
   };
 
   const handleAssignMatching = async (localityId: number) => {
-    if (assigningMatchingId !== null) return;
+    if (assigningMatchingIdsRef.current.has(localityId)) return;
+    assigningMatchingIdsRef.current.add(localityId);
     setError(null);
-    const seq = ++mutationSeq.current;
+    ++mutationSeq.current;
     setInfo(prev => (prev ? regroupMatching(prev, localityId) : prev));
-    setAssigningMatchingId(localityId);
+    setAssigningMatchingIds(prev => {
+      const next = new Set(prev);
+      next.add(localityId);
+      return next;
+    });
+    matchingInFlight.current += 1;
     try {
       await apiAssignMatchingLocality(localityId);
-      onRefresh();
-      void reconcile(seq);
     } catch (e) {
       setError((e as Error).message);
-      await load();
     } finally {
-      setAssigningMatchingId(null);
+      assigningMatchingIdsRef.current.delete(localityId);
+      setAssigningMatchingIds(prev => {
+        const next = new Set(prev);
+        next.delete(localityId);
+        return next;
+      });
+      matchingInFlight.current -= 1;
+      if (matchingInFlight.current === 0) {
+        onRefresh();
+        void reconcile(mutationSeq.current);
+      }
     }
   };
 
@@ -492,7 +512,7 @@ export function LocalitiesPage({ gs, onRefresh }: { gs: GameState; onRefresh: ()
               matchingCount={matchingCountFor(info, loc)}
               onAdd={() => setAssigning({ localityId: loc.id, habitat: loc.habitat })}
               onAssignMatching={() => void handleAssignMatching(loc.id)}
-              assigningMatching={assigningMatchingId === loc.id}
+              assigningMatching={assigningMatchingIds.has(loc.id)}
               onRemove={id => void handleUnassign(id)}
             />
           ))}
