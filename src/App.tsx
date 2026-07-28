@@ -18,6 +18,7 @@ import { MerchantPage } from '@/pages/more/MerchantPage';
 import { CalculatorPage } from '@/pages/more/CalculatorPage';
 import { TopPage } from '@/pages/more/TopPage';
 import { PageHeader } from '@/components/PageHeader';
+import { Toast } from '@/components/Toast';
 import type { MaintenancePollStatus } from '@/types';
 
 const HIDDEN_RELOAD_MS = 30_000;
@@ -385,12 +386,7 @@ export default function App() {
               <OnlinePlayersIndicator data={onlinePresence} placement="inline" />
             </div>
           )}
-          {transferNotice && (
-            <div className={`transfer-claim-toast transfer-claim-toast-${transferNotice.kind}`} role="status">
-              <span>{transferNotice.kind === 'success' ? '🎉' : '⚠️'}</span>
-              <span>{transferNotice.message}</span>
-            </div>
-          )}
+          <Toast toast={transferNotice} />
           <div key={`${tab}-${tabResetSignal}`} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (

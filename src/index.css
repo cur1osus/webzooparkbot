@@ -2368,32 +2368,46 @@ button:disabled {
   .online-presence-panel { animation: none; }
 }
 
-.transfer-claim-toast {
+.toast {
   position: fixed;
   left: 50%;
   bottom: calc(var(--app-bottom-offset) + 12px);
-  z-index: 120;
+  z-index: 500;
   display: flex;
-  width: min(calc(100% - 28px), 452px);
-  align-items: center;
-  gap: 9px;
+  width: min(calc(100vw - 28px), 452px);
+  max-height: min(42vh, 320px);
+  align-items: flex-start;
+  gap: 10px;
+  overflow-y: auto;
   transform: translateX(-50%);
   padding: 12px 14px;
   border: 1px solid;
-  border-radius: 13px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.34);
   font-size: 13px;
+  line-height: 1.35;
   font-weight: 800;
-  animation: transfer-toast-in 0.25s var(--spring-smooth) both;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  animation: toast-in 0.25s var(--spring-smooth) both;
 }
 
-.transfer-claim-toast-success {
+.toast-icon {
+  flex: 0 0 auto;
+  line-height: 1.35;
+}
+
+.toast-message {
+  min-width: 0;
+}
+
+.toast-success {
   border-color: rgba(var(--c-green-rgb), 0.35);
   background: color-mix(in srgb, var(--c-green) 16%, var(--card-bg));
   color: var(--c-green);
 }
 
-.transfer-claim-toast-error {
+.toast-error {
   border-color: rgba(var(--c-red-rgb), 0.35);
   background: color-mix(in srgb, var(--c-red) 12%, var(--card-bg));
   color: var(--c-red-soft);
@@ -2424,7 +2438,7 @@ button:disabled {
   to   { transform: none; opacity: 1; }
 }
 
-@keyframes transfer-toast-in {
+@keyframes toast-in {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }

@@ -5,6 +5,7 @@ import type { Animal, GameState, GeneTier, PackInfo, PackOpenResult } from '@/ty
 import { apiGetPacksInfo, apiOpenPack } from '@/api';
 import { SPECIES_RARITY_META, GENE_META, HABITAT_INFO, PACK_TIER_META, PACK_TIER_ORDER, geneLabel, lifeLeft, type GeneKey } from '@/data/packs';
 import { AnimalArt } from '@/components/AnimalArt';
+import { Toast } from '@/components/Toast';
 import { RARITY_RANK } from '@/lib/animalQuality';
 
 // ─── Pack tiers ───────────────────────────────────────────────────────────────
@@ -387,11 +388,7 @@ function PackModal({ tierKey, isGift, batchPrices, playerId, onClose, onSuccess 
         )}
       </header>
 
-      {error && (
-        <div className="fixed left-4 right-4 z-30 rounded-2xl px-4 py-3" role="alert" style={{ top: 'calc(var(--safe-top) + 66px)', background: 'rgba(56,13,20,0.98)', border: '1px solid rgba(232,86,76,0.78)', animation: 'slide-down 0.22s var(--spring-smooth) both' }}>
-          <p className="m-0 text-[13px] leading-snug" style={{ color: 'rgba(255,255,255,0.9)' }}>{error}</p>
-        </div>
-      )}
+      <Toast toast={error ? { kind: 'error', message: error } : null} />
 
       {/* ── IDLE: full-screen pack, tap to open ── */}
       {openState === 'idle' && (

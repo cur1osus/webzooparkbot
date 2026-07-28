@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/api';
+import { Toast } from '@/components/Toast';
 import { tmaConfirm } from '@/lib/tma';
 import type { ForgeItem, ForgeSellResponse, GameState } from '@/types';
 import { fmt } from '@/utils/format';
@@ -56,7 +57,8 @@ function compareMergeProperties(parents: ForgeItem[], result: ForgeItem): Omit<M
 
 export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void }) {
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [toast, setToast] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const [mergeFirst, setMergeFirst] = useState<string | null>(null);
   const [pendingItem, setPendingItem] = useState<ForgeItem | null>(null);
   const [mergeResult, setMergeResult] = useState<MergeChanges | null>(null);
@@ -69,9 +71,17 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
   const usdCost = gs.forge_create_cost_usd;
   const pawCost = FORGE_CREATE_PAW;
 
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+  }, []);
+
   function showToast(msg: string, ok = true) {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    setToast({ kind: ok ? 'success' : 'error', message: msg });
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3500);
   }
 
   function patchSoldItem(result: ForgeSellResponse) {
@@ -200,18 +210,7 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
 
   return (
     <div className="px-[14px] pt-3 flex flex-col gap-[10px]">
-      {toast && (
-        <div
-          className="fixed top-[60px] left-1/2 z-50 px-4 py-3 rounded-xl text-sm font-semibold text-[var(--tg-theme-button-text-color)] shadow-lg"
-          style={{
-            transform: 'translateX(-50%)',
-            background: toast.ok ? 'rgba(var(--c-green-rgb),0.95)' : 'rgba(var(--c-red-rgb),0.95)',
-            maxWidth: '90vw',
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
+      <Toast toast={toast} />
 
       <div className="card flex flex-col gap-[8px]">
         <div className="flex justify-between items-center mb-[4px]">
