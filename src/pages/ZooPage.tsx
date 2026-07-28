@@ -8,11 +8,11 @@ import type { Animal, GameState, GeneTier, MaintenancePollStatus } from '@/types
 import { lifeLeft } from '@/data/packs';
 import { ExpeditionPage } from './ExpeditionPage';
 import { ExpeditionOverviewCard } from '@/features/expeditions/ExpeditionOverviewCard';
-import { apiForgeActivate, apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeSell, apiForgeUpdateSet, apiReleaseAnimal, apiReleaseAnimals, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
+import { apiForgeApplySet, apiForgeCreateSet, apiForgeDeleteSet, apiForgeUpdateSet, apiReleaseAnimal, apiReleaseAnimals, apiSetAnimalFavorite, apiSetProfileAvatar } from '@/api';
 import { setHashPath } from '@/lib/hashRoute';
 import { tmaConfirm } from '@/lib/tma';
 import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
-import { ForgeTab, ItemDetailPage, ItemSelectPage } from '@/features/forge/ForgeInventory';
+import { ForgeTab, ItemSelectPage } from '@/features/forge/ForgeInventory';
 import { VetTab } from '@/features/vet/VetTab';
 import { DevelopmentTab } from '@/features/development/DevelopmentTab';
 import { AchievementsTab } from '@/features/achievements/AchievementsTab';
@@ -32,22 +32,17 @@ type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 type SubPage =
   | { type: 'expeditions' }
   | { type: 'forge_select'; setId: string; selectedIds: string[] }
-  | { type: 'forge_item_detail'; itemId: string }
   | null;
 
 function getZooSubPageFromHash(): SubPage {
   const parts = window.location.hash.replace(/^#/, '').split('/').filter(Boolean);
   if (parts[0] !== 'zoo') return null;
   if (parts[1] === 'expeditions') return { type: 'expeditions' };
-  if (parts[1] === 'forge' && parts[2] === 'item' && parts[3]) {
-    return { type: 'forge_item_detail', itemId: decodeURIComponent(parts[3]) };
-  }
   return null;
 }
 
 function routeForSubPage(subPage: SubPage): string | null {
   if (subPage?.type === 'expeditions') return '/zoo/expeditions';
-  if (subPage?.type === 'forge_item_detail') return `/zoo/forge/item/${encodeURIComponent(subPage.itemId)}`;
   if (subPage === null) return '/zoo';
   return null;
 }
@@ -328,10 +323,6 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     setSubPage({ type: 'forge_select', setId, selectedIds: [...(itemSet?.item_ids ?? [])] });
   }, [gs.item_sets, setSubPage]);
 
-  const handleForgeItemDetail = useCallback((itemId: string) => {
-    setSubPage({ type: 'forge_item_detail', itemId });
-  }, [setSubPage]);
-
   if (subPage?.type === 'expeditions') {
     return <ExpeditionPage onRefresh={onRefresh} onBack={() => setSubPage(null)} />;
   }
@@ -353,32 +344,6 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
         }, 'Ошибка сохранения сета')} onBack={() => setSubPage(null)}
       />
     );
-  }
-
-  if (subPage?.type === 'forge_item_detail') {
-    const item = gs.items.find(i => i.id === subPage.itemId);
-    if (item) return <ItemDetailPage item={item}
-      onActivate={() => void runForgeAction(async () => {
-        await apiForgeActivate(item.id);
-        setSubPage(null);
-      }, 'Ошибка активации предмета')}
-      onSell={() => void runForgeAction(async () => {
-        if (!(await tmaConfirm(`Продать «${item.name}» за $80k?`, 'Продать предмет?'))) return;
-        const result = await apiForgeSell(item.id);
-        onPatchState({
-          items: gs.items.filter(current => current.id !== result.removed_item_id),
-          usd: result.new_usd,
-          paw_coins: result.new_paw_coins,
-          ...(result.income_rub_per_min !== undefined ? {
-            income_rub_per_min: result.income_rub_per_min,
-            upkeep_rub_per_min: result.upkeep_rub_per_min ?? gs.upkeep_rub_per_min,
-            income_synced_at: result.income_synced_at ?? gs.income_synced_at,
-            active_item_bonuses: result.active_item_bonuses ?? gs.active_item_bonuses,
-          } : {}),
-        });
-        setSubPage(null);
-      }, 'Ошибка продажи предмета', false)}
-      onBack={() => setSubPage(null)} />;
   }
 
   const netPerMin = gs.income_rub_per_min - gs.upkeep_rub_per_min;
@@ -643,7 +608,6 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
           onCreateSet={handleForgeCreateSet}
           onDeleteSet={handleForgeDeleteSet}
           onSelectItems={handleForgeSelectItems}
-          onItemDetail={handleForgeItemDetail}
         />
       )}
 

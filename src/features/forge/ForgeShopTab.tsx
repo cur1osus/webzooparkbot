@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiForgeCreate, apiForgeMerge, apiForgeSell, apiForgeUpgrade } from '@/api';
 import { tmaConfirm } from '@/lib/tma';
-import type { ForgeItem, GameState } from '@/types';
+import type { ForgeItem, ForgeSellResponse, GameState } from '@/types';
 import { fmt } from '@/utils/format';
 import { FORGE_CREATE_PAW, FORGE_MERGE_COST_USD, forgeUpgradeCostUsd, PROPERTY_ICON } from '@/data/itemProperties';
 
@@ -74,6 +74,20 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
     setTimeout(() => setToast(null), 3000);
   }
 
+  function patchSoldItem(result: ForgeSellResponse) {
+    onPatchState({
+      items: allItems.filter(item => item.id !== result.removed_item_id),
+      usd: result.new_usd,
+      paw_coins: result.new_paw_coins,
+      ...(result.income_rub_per_min !== undefined ? {
+        income_rub_per_min: result.income_rub_per_min,
+        upkeep_rub_per_min: result.upkeep_rub_per_min ?? gs.upkeep_rub_per_min,
+        income_synced_at: result.income_synced_at ?? gs.income_synced_at,
+        active_item_bonuses: result.active_item_bonuses ?? gs.active_item_bonuses,
+      } : {}),
+    });
+  }
+
   async function handleCreate(currency: 'usd' | 'paw') {
     if (busy) return;
     setBusy(true);
@@ -99,17 +113,7 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
     try {
       const r = await apiForgeSell(pendingItem.id);
       setPendingItem(null);
-      onPatchState({
-        items: allItems.filter(item => item.id !== r.removed_item_id),
-        usd: r.new_usd,
-        paw_coins: r.new_paw_coins,
-        ...(r.income_rub_per_min !== undefined ? {
-          income_rub_per_min: r.income_rub_per_min,
-          upkeep_rub_per_min: r.upkeep_rub_per_min ?? gs.upkeep_rub_per_min,
-          income_synced_at: r.income_synced_at ?? gs.income_synced_at,
-          active_item_bonuses: r.active_item_bonuses ?? gs.active_item_bonuses,
-        } : {}),
-      });
+      patchSoldItem(r);
       showToast(r.earned_paw > 0 ? `Продано за 🐾 ${fmt(r.earned_paw)}` : `Продано за $${fmt(r.earned_usd)}`);
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Ошибка', false);
@@ -120,6 +124,21 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
 
   function handlePendingKeep() {
     setPendingItem(null);
+  }
+
+  async function handleSell(item: ForgeItem) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await apiForgeSell(item.id);
+      if (mergeFirst === item.id) setMergeFirst(null);
+      patchSoldItem(r);
+      showToast(r.earned_paw > 0 ? `Продано за 🐾 ${fmt(r.earned_paw)}` : `Продано за $${fmt(r.earned_usd)}`);
+    } catch (e: unknown) {
+      showToast((e as Error).message ?? 'Ошибка', false);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleUpgrade(item: ForgeItem) {
@@ -294,7 +313,7 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
                 background: isSelected ? 'rgba(var(--c-gold-rgb),0.07)' : undefined,
               }}
             >
-              <div className="flex items-center gap-[10px]">
+              <div className="flex items-start gap-[10px]">
                 <span className="text-[30px] shrink-0">{forgeItemIcon(item)}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-[6px] flex-wrap">
@@ -313,6 +332,17 @@ export function ForgeShopTab({ gs, onRefresh, onPatchState }: { gs: GameState; o
                   </div>
                   <p className="m-0 mt-[2px] text-xs text-tg-hint">Уровень {level} / 12 · {item.properties?.length ?? 0} св-в</p>
                 </div>
+                <button
+                  type="button"
+                  aria-label={`Продать ${item.name}`}
+                  title="Продать предмет"
+                  onClick={() => void handleSell(item)}
+                  disabled={busy}
+                  className="min-w-11 min-h-11 rounded-xl border-none grid place-items-center text-[17px] shrink-0 cursor-pointer disabled:opacity-40 disabled:cursor-wait"
+                  style={{ background: 'rgba(var(--c-red-rgb),0.12)', color: 'var(--c-red)' }}
+                >
+                  🗑️
+                </button>
               </div>
 
               <div className="flex flex-col gap-[3px]">
