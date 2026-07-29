@@ -6,8 +6,9 @@ let motionVisibilityListening = false;
 
 type NavigatorWithMemory = Navigator & { deviceMemory?: number };
 
+/** Preserve the authored TGS cadence, including on constrained devices. */
 export function preferredTgsFps(): number {
-  return document.documentElement.classList.contains(LOW_MOTION_CLASS) ? 20 : 30;
+  return 60;
 }
 
 /**

@@ -74,8 +74,8 @@ var RLottie = (function () {
         }
       }
     }
-    // The source gifts are 60fps, but a tiny avatar is visually identical at 30fps.
-    // When every player is paused/off-screen, wake only four times a second.
+    // Keep the authored frame rate while a sticker is visible. When every
+    // player is paused/off-screen, wake only four times a second.
     var delay = renderedAny || (lastRenderDate && now - lastRenderDate < 100) ? activeDelay : 250;
     if (delay < 20 && isRAF) {
       mainLoopAf = requestAnimationFrame(mainLoop)
@@ -205,6 +205,8 @@ var RLottie = (function () {
     if (!el.rlPlayer) return;
     var rlPlayer = el.rlPlayer;
     delete rlottie.players[rlPlayer.reqId];
+    delete el.dataset.tgsSourceFps;
+    delete el.dataset.tgsPlaybackFps;
     delete rlPlayer;
     setupMainLoop();
   }
@@ -352,15 +354,13 @@ var RLottie = (function () {
     rlPlayer.context = rlPlayer.canvas.getContext('2d');
 
     rlPlayer.fps = fps;
-    // One-shot rewards must visit their authored final frame so tg:pause resolves exactly.
-    // Only perpetual decorative loops are frame-skipped.
-    var requestedMaxFps = rlPlayer.options.playOnce || rlPlayer.options.playUntilEnd
-      ? fps
-      : (Number(rlPlayer.options.maxFps) || 30);
+    var requestedMaxFps = Number(rlPlayer.options.maxFps) || fps;
     var maxFps = Math.max(1, Math.min(fps, requestedMaxFps));
     rlPlayer.frameStep = Math.max(1, Math.round(fps / maxFps));
     rlPlayer.playbackFps = fps / rlPlayer.frameStep;
     rlPlayer.frameInterval = 1000 / rlPlayer.playbackFps;
+    rlPlayer.el.dataset.tgsSourceFps = String(fps);
+    rlPlayer.el.dataset.tgsPlaybackFps = String(rlPlayer.playbackFps);
     rlPlayer.frameThen = Date.now();
     rlPlayer.frameCount = frameCount;
     rlPlayer.forceRender = true;

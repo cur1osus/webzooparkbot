@@ -6,12 +6,12 @@ import { preferredTgsFps } from './motion';
 afterEach(() => document.documentElement.classList.remove('motion-quality-low'));
 
 describe('preferredTgsFps', () => {
-  it('caps normal decorative stickers at 30fps', () => {
-    expect(preferredTgsFps()).toBe(30);
+  it('keeps TGS animations at their full authored cadence', () => {
+    expect(preferredTgsFps()).toBe(60);
   });
 
-  it('uses a lower cadence on constrained devices without disabling the visual', () => {
+  it('does not reduce TGS cadence on constrained devices', () => {
     document.documentElement.classList.add('motion-quality-low');
-    expect(preferredTgsFps()).toBe(20);
+    expect(preferredTgsFps()).toBe(60);
   });
 });

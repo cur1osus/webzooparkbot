@@ -136,7 +136,6 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; lo
     if (pictureRef.current !== picture || sourceRef.current !== source) return;
     const playbackOptions = {
       ...(loop ? {} : { playUntilEnd: true }),
-      maxDeviceRatio: document.documentElement.classList.contains('motion-quality-low') ? 1.5 : 2,
       maxFps: preferredTgsFps(),
     };
     window.RLottie!.init(picture, playbackOptions);
