@@ -57,7 +57,7 @@ function MoreSectionLayer({ title, onBack, children }: { title: string; onBack: 
       style={{ top: topOffset, bottom: 'var(--app-bottom-offset)' }}
     >
       <div className="h-full flex flex-col" style={{ paddingTop: 'var(--safe-top)' }}>
-        <div className="px-[14px] pt-[14px] pb-[10px] flex items-center gap-3 border-b bg-tg-bg/95 backdrop-blur-xl shrink-0" style={{ borderColor: 'var(--surface-overlay-border)' }}>
+        <div className="px-[14px] pt-[14px] pb-[10px] flex items-center gap-3 border-b bg-tg-bg shrink-0" style={{ borderColor: 'var(--surface-overlay-border)' }}>
           <button
             onClick={onBack}
             className="flex items-center gap-1 px-3 py-[6px] rounded-lg border bg-transparent text-tg-text cursor-pointer text-[13px] shrink-0"

@@ -3,7 +3,6 @@ import { useZooStore } from '@/store';
 import { TabBar } from '@/components/TabBar';
 import { PageSkeleton, Skeleton } from '@/components/Skeleton';
 import { ApiError, apiClaimTransfer, apiMaintenanceStatus, setDevUserId } from '@/api';
-import { useLiveGameState } from '@/hooks/useLiveGameState';
 import { useHashTab } from '@/lib/hashRoute';
 import { inTma, hapticImpact, readyTma, setAppThemeChrome } from '@/lib/tma';
 import { getTelegramStartParam } from '@/lib/tmaEnv';
@@ -20,9 +19,10 @@ import { TopPage } from '@/pages/more/TopPage';
 import { PageHeader } from '@/components/PageHeader';
 import { Toast } from '@/components/Toast';
 import type { MaintenancePollStatus } from '@/types';
+import { initAdaptiveMotion } from '@/lib/motion';
 
 const HIDDEN_RELOAD_MS = 30_000;
-const MAINTENANCE_POLL_MS = 5_000;
+const MAINTENANCE_POLL_MS = 30_000;
 const TRANSFER_HANDLED_STORAGE_KEY = 'zoopark_transfer_claims_v1';
 
 function getTransferCode(): string | null {
@@ -126,7 +126,6 @@ function MaintenanceScreen({ message, endsAt, onRefresh }: { message: string; en
 
 export default function App() {
   const { state, loading, error, errorStatus, loadFromServer, setGameState, patchState } = useZooStore();
-  const displayState = useLiveGameState(state);
   const [tab, setTab] = useHashTab();
   const [tabResetSignal, setTabResetSignal] = useState(0);
   const [transferCode] = useState<string | null>(() => getTransferCode());
@@ -142,7 +141,7 @@ export default function App() {
   });
   const hiddenAtRef = useRef<number | null>(null);
   const showDevBar = import.meta.env.DEV || !inTma;
-  const appTheme = displayState?.theme ?? 'dusk';
+  const appTheme = state?.theme ?? 'dusk';
 
   const reloadFromServer = useCallback(() => {
     void loadFromServer();
@@ -150,6 +149,8 @@ export default function App() {
 
   // Initial load
   useEffect(() => { void loadFromServer(); }, [loadFromServer]);
+
+  useEffect(() => initAdaptiveMotion(), []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -385,7 +386,7 @@ export default function App() {
       )}
 
       {/* Main app */}
-      {state && displayState && (!state.maintenance?.active || state.is_admin) && (
+      {state && (!state.maintenance?.active || state.is_admin) && (
         <div
           className={`app-shell max-w-[480px] mx-auto relative ${showDevBar ? 'pt-[60px]' : ''}`}
           style={inTma && !showDevBar ? { paddingTop: 'var(--safe-top)' } : undefined}
@@ -399,28 +400,28 @@ export default function App() {
           <div key={`${tab}-${tabResetSignal}`} className="page-enter page-scroll-area">
             <Suspense fallback={<PageFallback />}>
               {tab === 'zoo' && (
-                <ZooPage gs={displayState} onRefresh={reloadFromServer} onPatchState={patchState} onlinePresence={onlinePresence} />
+                <ZooPage gs={state} onRefresh={reloadFromServer} onPatchState={patchState} onlinePresence={onlinePresence} />
               )}
               {tab === 'shop' && (
                 <ShopPage
-                  gs={displayState}
+                  gs={state}
                   onRefresh={reloadFromServer}
                   onPatchState={patchState}
                 />
               )}
               {tab === 'lab' && (
-                <LabPage gs={displayState} onRefresh={reloadFromServer} onPatchState={patchState} />
+                <LabPage gs={state} onRefresh={reloadFromServer} onPatchState={patchState} />
               )}
               {tab === 'games' && (
                 <GamesPage onRefresh={reloadFromServer} />
               )}
               {tab === 'more' && (
-                <MorePage gs={displayState} onRefresh={reloadFromServer} />
+                <MorePage gs={state} onRefresh={reloadFromServer} />
               )}
-              {tab === 'bank' && <QuickPage emoji="🏦" title="Банк"><BankPage gs={displayState} onRefresh={reloadFromServer} /></QuickPage>}
+              {tab === 'bank' && <QuickPage emoji="🏦" title="Банк"><BankPage gs={state} onRefresh={reloadFromServer} /></QuickPage>}
               {tab === 'bonus' && <QuickPage emoji="🎁" title="Ежедневный бонус"><BonusPage onClaim={reloadFromServer} /></QuickPage>}
-              {tab === 'calc' && <QuickPage emoji="🧮" title="Калькулятор дохода"><CalculatorPage gs={displayState} /></QuickPage>}
-              {tab === 'merchant' && <QuickPage emoji="🧙" title="Случайный торговец"><MerchantPage gs={displayState} onBuy={reloadFromServer} /></QuickPage>}
+              {tab === 'calc' && <QuickPage emoji="🧮" title="Калькулятор дохода"><CalculatorPage gs={state} /></QuickPage>}
+              {tab === 'merchant' && <QuickPage emoji="🧙" title="Случайный торговец"><MerchantPage gs={state} onBuy={reloadFromServer} /></QuickPage>}
               {tab === 'top' && <QuickPage emoji="📊" title="Таблица лидеров"><TopPage /></QuickPage>}
             </Suspense>
           </div>

@@ -4,6 +4,8 @@ const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+const NUMBER_ANIMATION_FPS = 20;
+
 /**
  * Count-up display: whenever `value` changes, the shown number rolls from the
  * current value to the new one. Paired with the per-second income ticker this
@@ -30,28 +32,30 @@ export function AnimatedNumber({
     const from = displayRef.current;
     const to = value;
     if (from === to) return;
+    let timer = 0;
     if (prefersReducedMotion()) {
-      const raf = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
         displayRef.current = to;
         setDisplayValue(to);
-      });
-      return () => cancelAnimationFrame(raf);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
-    let raf = 0;
     const start = performance.now();
-    const step = (now: number) => {
+    const frameMs = 1_000 / NUMBER_ANIMATION_FPS;
+    const step = () => {
+      const now = performance.now();
       const t = Math.min(1, (now - start) / durationMs);
       const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
       displayRef.current = from + (to - from) * eased;
       setDisplayValue(displayRef.current);
-      if (t < 1) raf = requestAnimationFrame(step);
+      if (t < 1) timer = window.setTimeout(step, frameMs);
       else {
         displayRef.current = to;
         setDisplayValue(to);
       }
     };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
+    timer = window.setTimeout(step, frameMs);
+    return () => window.clearTimeout(timer);
   }, [value, durationMs]);
 
   return (

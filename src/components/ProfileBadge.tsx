@@ -1,9 +1,10 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { ACHIEVEMENT_TGS, customAchievementImage, PROFILE_ACHIEVEMENT_PREFIX } from '@/data/achievements';
 import { getDefaultProfileAnimal } from '@/data/profileAnimals';
 import { profileFrameClass } from '@/data/profileFrames';
 import { TgsPlayer } from '@/components/TgsPlayer';
 import { AnimalArt } from '@/components/AnimalArt';
+import { observeMotionElement } from '@/lib/motion';
 
 export type ProfileBadgeTone = 'default' | 'gold' | 'silver' | 'bronze' | 'blue';
 
@@ -24,6 +25,7 @@ interface ProfileBadgeProps {
  * a Telegram/custom emoji, or the neutral zoo mark until more cosmetics are added.
  */
 export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', className = '', frame, fallbackTgId }: ProfileBadgeProps) {
+  const motionRef = useRef<HTMLDivElement>(null);
   const achievementId = profileEmoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? profileEmoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
@@ -31,9 +33,17 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
   const achievementImage = achievementId ? customAchievementImage(achievementId) : null;
   const fallbackAnimal = fallbackTgId === undefined ? null : getDefaultProfileAnimal(fallbackTgId);
   const toneClass = `profile-badge-${tone}`;
+  const frameClass = profileFrameClass(frame);
+
+  useEffect(() => {
+    const element = motionRef.current;
+    if (!element || (!achievementTgs && !frameClass)) return;
+    return observeMotionElement(element);
+  }, [achievementTgs, frameClass]);
 
   const badge = (
     <div
+      ref={!frameClass ? motionRef : undefined}
       className={`profile-badge ${toneClass} ${className}`}
       style={{
         width: size,
@@ -55,7 +65,6 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
     </div>
   );
 
-  const frameClass = profileFrameClass(frame);
   if (!frameClass) return badge;
 
   // The ring is drawn on top of the badge rim (not around it), so equipping a frame
@@ -63,7 +72,7 @@ export function ProfileBadge({ profileEmoji, size = 44, tone = 'default', classN
   // with the badge so it reads the same on a 42px row and an 86px card.
   const ringWidth = Math.max(2, Math.round(size * 0.075));
   return (
-    <div className={`profile-badge-frame ${frameClass}`} style={{ '--frame-w': `${ringWidth}px` } as CSSProperties}>
+    <div ref={motionRef} className={`profile-badge-frame ${frameClass}`} style={{ '--frame-w': `${ringWidth}px` } as CSSProperties}>
       {badge}
     </div>
   );

@@ -256,7 +256,6 @@ button, input, select, textarea { font: inherit; }
   border: 1px solid var(--card-border);
   box-shadow: inset 0 1px 0 var(--card-highlight);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s var(--spring-smooth);
-  will-change: transform;
 }
 
 .card:hover {
@@ -919,9 +918,7 @@ button, input, select, textarea { font: inherit; }
 
 /* ─── Glass morphism ────────────────────────────────────────────────────────── */
 .glass {
-  background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 70%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--tg-theme-secondary-bg-color) 94%, var(--tg-theme-bg-color));
   border: 1px solid color-mix(in srgb, var(--tg-theme-hint-color) 15%, transparent);
 }
 
@@ -929,9 +926,10 @@ button, input, select, textarea { font: inherit; }
 button {
   cursor: pointer;
   transition: transform 0.15s var(--spring-smooth), opacity 0.18s ease, box-shadow 0.2s ease, background 0.2s ease;
-  will-change: transform;
   -webkit-tap-highlight-color: transparent;
 }
+
+.animal-card { contain: layout style; }
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
@@ -1868,7 +1866,7 @@ button:disabled {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer 3s linear infinite;
+  animation: shimmer 3s steps(48, end) infinite;
 }
 
 .text-shimmer-green {
@@ -1877,7 +1875,7 @@ button:disabled {
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: shimmer 4s linear infinite;
+  animation: shimmer 4s steps(48, end) infinite;
 }
 
 /* ─── Income pulse ──────────────────────────────────────────────────────────── */
@@ -1892,6 +1890,12 @@ button:disabled {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: nickname-color-flow 2.8s ease-in-out infinite alternate;
+}
+
+.nickname-color-aurora,
+.nickname-color-embers,
+.nickname-color-spectrum {
+  animation-timing-function: steps(48, end);
 }
 /* Aurora = a cool northern-lights ribbon: only teals, greens and blue, no warm hues.
    Kept a narrow cool band so it never reads as the full-rainbow "spectrum". */
@@ -1962,7 +1966,7 @@ button:disabled {
   color: transparent;
   -webkit-text-fill-color: transparent;
   text-shadow: inherit;
-  animation: nickname-shimmer 3s linear infinite;
+  animation: nickname-shimmer 3s steps(48, end) infinite;
 }
 @keyframes nickname-shimmer {
   to { background-position: -200% center; }
@@ -2052,7 +2056,7 @@ button:disabled {
 [class*="nickname-preview-"] {
   border-radius: 16px;
   background-size: 260% 260%;
-  animation: nickname-preview-flow 3.5s ease-in-out infinite alternate;
+  animation: nickname-preview-flow 3.5s steps(48, end) infinite alternate;
 }
 .nickname-preview-aurora {
   background-image: linear-gradient(125deg, rgba(22, 224, 160, 0.3), rgba(35, 198, 230, 0.24), rgba(75, 240, 166, 0.2), var(--tg-theme-secondary-bg-color) 76%);
@@ -2093,7 +2097,7 @@ button:disabled {
 [class*="nickname-swatch-"] {
   border-radius: 9999px;
   background-size: 220% auto;
-  animation: nickname-color-flow 1.4s ease-in-out infinite alternate;
+  animation: nickname-color-flow 1.4s steps(36, end) infinite alternate;
 }
 .nickname-swatch-aurora { background-image: linear-gradient(90deg, #16e0a0, #23c6e6, #4bf0a6, #16e0a0); }
 .nickname-swatch-embers { background-image: linear-gradient(90deg, #ffcf6b, #ff7148, #ff77b4, #ffcf6b); }
@@ -2112,6 +2116,34 @@ button:disabled {
 }
 @keyframes nickname-preview-flow {
   to { background-position: 100% 100%; }
+}
+
+/* Off-screen and background visuals keep their exact frame but stop consuming paint time. */
+[data-motion-state="paused"],
+[data-motion-state="paused"] *,
+[data-motion-state="paused"]::before,
+[data-motion-state="paused"]::after,
+[data-motion-state="paused"] *::before,
+[data-motion-state="paused"] *::after,
+html.motion-page-hidden *,
+html.motion-page-hidden *::before,
+html.motion-page-hidden *::after {
+  animation-play-state: paused !important;
+}
+
+/* Constrained devices retain every effect, sampled at a cheaper paint cadence. */
+html.motion-quality-low .text-shimmer-gold,
+html.motion-quality-low .text-shimmer-green,
+html.motion-quality-low .nickname-color-aurora,
+html.motion-quality-low .nickname-color-embers,
+html.motion-quality-low .nickname-color-spectrum,
+html.motion-quality-low .shimmer-text,
+html.motion-quality-low [class*="nickname-preview-"] {
+  animation-timing-function: steps(24, end) !important;
+}
+
+html.motion-quality-low [class*="nickname-swatch-"] {
+  animation-timing-function: steps(18, end) !important;
 }
 .income-glow {
   text-shadow: 0 0 12px rgba(var(--c-green-rgb),0.55);
@@ -2278,8 +2310,6 @@ button:disabled {
   box-shadow: 0 7px 20px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06);
   color: var(--tg-theme-text-color);
   cursor: pointer;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
 .online-presence-toggle:not(.online-presence-toggle-active) {
@@ -2316,8 +2346,6 @@ button:disabled {
   border-radius: 16px;
   background: color-mix(in srgb, var(--card-bg) 94%, var(--c-green));
   box-shadow: 0 16px 34px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.06);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
   animation: online-presence-in 0.18s var(--spring-smooth) both;
 }
 

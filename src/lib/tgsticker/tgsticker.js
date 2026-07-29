@@ -53,23 +53,30 @@ var RLottie = (function () {
   function mainLoop() {
     var key, rlPlayer, delta, rendered;
     var isEmpty = true;
+    var renderedAny = false;
+    var activeDelay = 250;
     var now = +Date.now();
     var checkViewport = !checkViewportDate || (now - checkViewportDate) > 1000;
     for (key in rlottie.players) {
       rlPlayer = rlottie.players[key];
       if (rlPlayer &&
           rlPlayer.frameCount) {
+        if (!rlPlayer.paused && rlPlayer.isVisible && rlPlayer.isInViewport !== false) {
+          activeDelay = Math.min(activeDelay, Math.ceil(rlPlayer.frameInterval));
+        }
         delta = now - rlPlayer.frameThen;
-        if (delta > rlPlayer.frameInterval) {
+        if (delta >= rlPlayer.frameInterval) {
           rendered = render(rlPlayer, checkViewport);
           if (rendered) {
             lastRenderDate = now;
+            renderedAny = true;
           }
         }
       }
     }
-    // var delay = !lastRenderDate || now - lastRenderDate < 100 ? 16 : 500;
-    var delay = 16;
+    // The source gifts are 60fps, but a tiny avatar is visually identical at 30fps.
+    // When every player is paused/off-screen, wake only four times a second.
+    var delay = renderedAny || (lastRenderDate && now - lastRenderDate < 100) ? activeDelay : 250;
     if (delay < 20 && isRAF) {
       mainLoopAf = requestAnimationFrame(mainLoop)
     } else {
@@ -304,7 +311,9 @@ var RLottie = (function () {
         (!frameNo || (rlPlayer.options.cachingModulo && ((reqId + frameNo) % rlPlayer.options.cachingModulo)))) {
       rlPlayer.frames[frameNo] = new Uint8ClampedArray(frame)
     }
-    var prevNo = frameNo > 0 ? frameNo - 1 : rlPlayer.frameCount - 1;
+    var frameStep = rlPlayer.frameStep || 1;
+    var prevNo = frameNo - frameStep;
+    while (prevNo < 0) prevNo += rlPlayer.frameCount;
     var lastQueueFrame = rlPlayer.frameQueue.last();
     if (lastQueueFrame &&
         lastQueueFrame.no != prevNo) {
@@ -314,9 +323,9 @@ var RLottie = (function () {
       no: frameNo,
       frame: frame
     });
-    var nextFrameNo = ++frameNo;
+    var nextFrameNo = frameNo + frameStep;
     if (nextFrameNo >= rlPlayer.frameCount) {
-      nextFrameNo = 0;
+      nextFrameNo = nextFrameNo % rlPlayer.frameCount;
       if (rlPlayer.times.length) {
         // var avg = 0;
         // for (var i = 0; i < rlPlayer.times.length; i++) {
@@ -343,11 +352,19 @@ var RLottie = (function () {
     rlPlayer.context = rlPlayer.canvas.getContext('2d');
 
     rlPlayer.fps = fps;
-    rlPlayer.frameInterval = 1000 / rlPlayer.fps;
+    // One-shot rewards must visit their authored final frame so tg:pause resolves exactly.
+    // Only perpetual decorative loops are frame-skipped.
+    var requestedMaxFps = rlPlayer.options.playOnce || rlPlayer.options.playUntilEnd
+      ? fps
+      : (Number(rlPlayer.options.maxFps) || 30);
+    var maxFps = Math.max(1, Math.min(fps, requestedMaxFps));
+    rlPlayer.frameStep = Math.max(1, Math.round(fps / maxFps));
+    rlPlayer.playbackFps = fps / rlPlayer.frameStep;
+    rlPlayer.frameInterval = 1000 / rlPlayer.playbackFps;
     rlPlayer.frameThen = Date.now();
     rlPlayer.frameCount = frameCount;
     rlPlayer.forceRender = true;
-    rlPlayer.frameQueue = new FrameQueue(fps / 4);
+    rlPlayer.frameQueue = new FrameQueue(rlPlayer.playbackFps / 4);
     setupMainLoop();
     requestFrame(reqId, 0);
     triggerEvent(rlPlayer.el, 'tg:load');

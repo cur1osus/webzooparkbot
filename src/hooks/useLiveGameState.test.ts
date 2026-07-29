@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GameState } from '@/types';
-import { calculateLiveRubBalance, netRubPerMin } from './useLiveGameState';
+import { calculateLiveRubBalance, calculateLiveRubBalanceAt, netRubPerMin } from './useLiveGameState';
 
 const baseState: GameState = {
   tg_id: 1,
@@ -58,5 +58,15 @@ describe('calculateLiveRubBalance', () => {
   it('does not allow a negative displayed balance', () => {
     const drowning = { ...baseState, rub: 5, income_rub_per_min: 0, upkeep_rub_per_min: 60 };
     expect(calculateLiveRubBalance(drowning, 60_000)).toBe(0);
+  });
+});
+
+describe('calculateLiveRubBalanceAt', () => {
+  it('derives elapsed time from the server sync timestamp', () => {
+    expect(calculateLiveRubBalanceAt(baseState, Date.parse(baseState.income_synced_at) + 180_000)).toBe(160);
+  });
+
+  it('does not accrue backwards when the client clock is behind', () => {
+    expect(calculateLiveRubBalanceAt(baseState, Date.parse(baseState.income_synced_at) - 10_000)).toBe(100);
   });
 });

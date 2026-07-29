@@ -4,7 +4,7 @@ import { clearDevUserId, isDevMode } from '@/api';
 export function DevBar({ onLogin }: { onLogin: (id: string) => void }) {
   const [val, setVal] = useState('');
   return (
-    <div className="surface-overlay fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[200] px-3 py-2 flex gap-2 items-center backdrop-blur-xl">
+    <div className="surface-overlay fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[200] px-3 py-2 flex gap-2 items-center">
       <input
         value={val}
         onChange={e => setVal(e.target.value)}

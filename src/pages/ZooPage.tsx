@@ -23,6 +23,9 @@ import { OnlinePlayersIndicator } from '@/components/OnlinePlayersIndicator';
 import { getDefaultProfileAnimal, type ProfileAnimal } from '@/data/profileAnimals';
 import { SPECIES_RARITY_META } from '@/data/packs';
 import { useStoredChoice } from '@/hooks/useStoredChoice';
+import { getVirtualGridWindow } from '@/lib/virtualGrid';
+import { useLiveRubBalance } from '@/hooks/useLiveGameState';
+import { observeMotionElement } from '@/lib/motion';
 
 type ZooTab = 'overview' | 'development' | 'forge' | 'vet' | 'medals';
 
@@ -79,12 +82,11 @@ const GENE_TIER_COLORS: Record<GeneTier, string> = {
   high: '#55c936',
 };
 
-// The overview grid lists every animal a player owns. A large zoo (thousands of animals)
-// would otherwise mount thousands of DOM cards at once, making the page slow to open and
-// laggy to scroll. Reveal the list in chunks as the player nears the end, so the page opens
-// instantly and stays smooth no matter the collection size.
-const ANIMAL_GRID_INITIAL = 60;
-const ANIMAL_GRID_STEP = 60;
+const ANIMAL_GRID_COLUMNS = 2;
+const ANIMAL_CARD_HEIGHT = 82;
+const ANIMAL_GRID_GAP = 8;
+const ANIMAL_GRID_ROW_STRIDE = ANIMAL_CARD_HEIGHT + ANIMAL_GRID_GAP;
+const ANIMAL_GRID_OVERSCAN_ROWS = 4;
 
 export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: GameState; onRefresh: () => void; onPatchState: (patch: Partial<GameState>) => void; onlinePresence: MaintenancePollStatus }) {
   const [tab, setTab] = useState<ZooTab>('overview');
@@ -105,10 +107,17 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
   const [animalsLoading, setAnimalsLoading] = useState(false);
   const animalsRequestRef = useRef(0);
   const animalsLoadingRef = useRef(false);
+  const profileMotionRef = useRef<HTMLDivElement | null>(null);
 
   const profileAchievementId = gs.profile_emoji?.startsWith(PROFILE_ACHIEVEMENT_PREFIX)
     ? gs.profile_emoji.slice(PROFILE_ACHIEVEMENT_PREFIX.length)
     : null;
+
+  useEffect(() => {
+    const element = profileMotionRef.current;
+    if (!element) return;
+    return observeMotionElement(element);
+  }, []);
   const baseSortedAnimals = animals;
   const sortedAnimals = useMemo(() => {
     const favorites: Animal[] = [];
@@ -124,7 +133,6 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     animalsLoadingRef.current = true;
     setAnimalsLoading(true);
     setNextAnimalsOffset(0);
-    setVisibleAnimalCount(ANIMAL_GRID_INITIAL);
     void apiGetZooAnimals(0, 120, animalSort)
       .then(result => {
         if (animalsRequestRef.current !== requestId) return;
@@ -170,22 +178,18 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
       });
   }, [animalSort, nextAnimalsOffset]);
 
-  // Windowed reveal of the animal grid — see ANIMAL_GRID_INITIAL for the reasoning.
-  const [visibleAnimalCount, setVisibleAnimalCount] = useState(ANIMAL_GRID_INITIAL);
+  const animalGridRef = useRef<HTMLDivElement | null>(null);
   const animalSentinelRef = useRef<HTMLDivElement | null>(null);
+  const [animalWindow, setAnimalWindow] = useState(() => getVirtualGridWindow({
+    itemCount: 0,
+    columns: ANIMAL_GRID_COLUMNS,
+    rowStride: ANIMAL_GRID_ROW_STRIDE,
+    viewportTop: 0,
+    viewportHeight: 844,
+    overscanRows: ANIMAL_GRID_OVERSCAN_ROWS,
+  }));
 
-  // Changing the sort presents a fresh ordering the player wants to read from the top,
-  // so collapse back to the first chunk. A background refresh keeps the current window.
-  useEffect(() => {
-    setVisibleAnimalCount(ANIMAL_GRID_INITIAL);
-  }, [animalSort]);
-
-  const visibleAnimals = useMemo(
-    () => sortedAnimals.slice(0, visibleAnimalCount),
-    [sortedAnimals, visibleAnimalCount],
-  );
-
-  const hasMoreAnimals = visibleAnimalCount < sortedAnimals.length || nextAnimalsOffset !== null;
+  const hasMoreAnimals = nextAnimalsOffset !== null;
 
   const openAnimal = useCallback((animal: Animal) => {
     setSelectedAnimal(animal);
@@ -208,8 +212,52 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     });
   }, []);
 
-  // Grow the window as the sentinel near the end of the list scrolls into view. The
-  // scroll container is the page shell, so observe against it rather than the viewport.
+  // Keep a real virtual window over the loaded animals. The spacer preserves native scroll
+  // geometry, but cards outside the viewport are unmounted, so a long browse never grows
+  // into tens of thousands of DOM nodes and compositor candidates.
+  useEffect(() => {
+    const grid = animalGridRef.current;
+    if (!grid || tab !== 'overview' || subPage !== null) return;
+    const root = grid.closest('.page-scroll-area') as HTMLElement | null;
+    if (!root) return;
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const rootRect = root.getBoundingClientRect();
+      const gridRect = grid.getBoundingClientRect();
+      const next = getVirtualGridWindow({
+        itemCount: sortedAnimals.length,
+        columns: ANIMAL_GRID_COLUMNS,
+        rowStride: ANIMAL_GRID_ROW_STRIDE,
+        viewportTop: Math.max(0, rootRect.top - gridRect.top),
+        viewportHeight: rootRect.height,
+        overscanRows: ANIMAL_GRID_OVERSCAN_ROWS,
+      });
+      setAnimalWindow(previous => previous.start === next.start
+        && previous.end === next.end
+        && previous.totalHeight === next.totalHeight
+        ? previous
+        : next);
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+
+    update();
+    root.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    const resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(root);
+    return () => {
+      root.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      resizeObserver.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [sortedAnimals.length, subPage, tab]);
+
+  // Fetch the next compact page only when the end of the loaded virtual spacer approaches.
   useEffect(() => {
     const sentinel = animalSentinelRef.current;
     if (!sentinel || !hasMoreAnimals) return;
@@ -217,39 +265,48 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
     const observer = new IntersectionObserver(
       entries => {
         if (entries.some(entry => entry.isIntersecting)) {
-          if (visibleAnimalCount < sortedAnimals.length) {
-            setVisibleAnimalCount(count => Math.min(count + ANIMAL_GRID_STEP, sortedAnimals.length));
-          } else {
-            loadMoreAnimals();
-          }
+          loadMoreAnimals();
         }
       },
       { root, rootMargin: '600px 0px' },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMoreAnimals, loadMoreAnimals, sortedAnimals.length, subPage, tab, visibleAnimalCount]);
+  }, [hasMoreAnimals, loadMoreAnimals, sortedAnimals.length, subPage, tab]);
 
-  // Build the grid element only when the visible slice or favourite marks actually change.
-  // The live-balance ticker replaces `gs` every second; without this the whole list would
-  // reconcile on every tick even though nothing about the cards changed.
+  // Rebuild only the bounded virtual window or card state that actually changed.
   const animalGrid = useMemo(
     () => (
-      <div className="grid grid-cols-2 gap-2">
-        {visibleAnimals.map(a => (
-          <AnimalCard
-            key={a.id}
-            animal={a}
-            isFavorite={favoriteOverrides.get(a.id) ?? a.is_favorite}
-            selectionMode={selectionMode}
-            isSelected={selectedAnimalIds.has(a.id)}
-            onSelect={openAnimal}
-            onToggleSelect={toggleSelectedAnimal}
-          />
-        ))}
+      <div
+        ref={animalGridRef}
+        className="relative w-full"
+        style={{ height: Math.max(0, animalWindow.totalHeight - ANIMAL_GRID_GAP) }}
+      >
+        {sortedAnimals.slice(animalWindow.start, animalWindow.end).map((a, localIndex) => {
+          const index = animalWindow.start + localIndex;
+          const column = index % ANIMAL_GRID_COLUMNS;
+          return (
+            <AnimalCard
+              key={a.id}
+              animal={a}
+              isFavorite={favoriteOverrides.get(a.id) ?? a.is_favorite}
+              selectionMode={selectionMode}
+              isSelected={selectedAnimalIds.has(a.id)}
+              onSelect={openAnimal}
+              onToggleSelect={toggleSelectedAnimal}
+              style={{
+                position: 'absolute',
+                top: Math.floor(index / ANIMAL_GRID_COLUMNS) * ANIMAL_GRID_ROW_STRIDE,
+                left: column === 0 ? 0 : 'calc(50% + 4px)',
+                width: 'calc(50% - 4px)',
+                height: ANIMAL_CARD_HEIGHT,
+              }}
+            />
+          );
+        })}
       </div>
     ),
-    [visibleAnimals, favoriteOverrides, selectionMode, selectedAnimalIds, openAnimal, toggleSelectedAnimal],
+    [animalWindow, sortedAnimals, favoriteOverrides, selectionMode, selectedAnimalIds, openAnimal, toggleSelectedAnimal],
   );
 
   async function toggleFavorite(animal: Animal) {
@@ -456,7 +513,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
         {/* Identity row: avatar + name (left), premium currencies (right) */}
         <div className="relative z-[1] px-[14px] flex items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className={`profile-badge-frame shrink-0 ${profileFrameClass(gs.profile_frame)}`} style={{ '--frame-w': '3px' } as CSSProperties}>
+            <div ref={profileMotionRef} className={`profile-badge-frame shrink-0 ${profileFrameClass(gs.profile_frame)}`} style={{ '--frame-w': '3px' } as CSSProperties}>
               <div className="w-10 h-10 rounded-full overflow-hidden"
                 style={{ background: 'linear-gradient(150deg,rgba(var(--c-gold-rgb),0.26),rgba(var(--c-orange-rgb),0.16))', border: '1.5px solid color-mix(in srgb, var(--c-gold) 30%, transparent)' }}>
                 {profileAchievementId && (ACHIEVEMENT_TGS[profileAchievementId] || customAchievementImage(profileAchievementId)) ? (
@@ -507,7 +564,7 @@ export function ZooPage({ gs, onRefresh, onPatchState, onlinePresence }: { gs: G
           </p>
           <p className="font-display m-0 mt-[3px] text-[28px] leading-none tabular-nums">
             <span className="text-[19px] font-bold" style={{ color: 'var(--tg-theme-hint-color)' }}>₽ </span>
-            <AnimatedNumber value={gs.rub} format={fmtBalance} durationMs={850} />
+            <ZooCashBalance gs={gs} />
           </p>
           <div className="m-0 mt-[7px] flex items-center justify-between gap-3 text-[13px] font-extrabold tabular-nums">
             <span className="text-[11px] font-bold text-tg-hint">Чистый доход</span>
@@ -760,6 +817,7 @@ const AnimalCard = memo(function AnimalCard({
   isSelected,
   onSelect,
   onToggleSelect,
+  style,
 }: {
   animal: Animal;
   isFavorite: boolean;
@@ -767,6 +825,7 @@ const AnimalCard = memo(function AnimalCard({
   isSelected: boolean;
   onSelect: (animal: Animal) => void;
   onToggleSelect: (animalId: number) => void;
+  style?: CSSProperties;
 }) {
   const life = lifeLeft(animal.dies_at);
   const rarityColor = SPECIES_RARITY_META[animal.species_rarity].color;
@@ -783,9 +842,9 @@ const AnimalCard = memo(function AnimalCard({
           else onSelect(animal);
         }
       }}
-      className="card card-pressable text-left border-none w-full"
+      className="animal-card card card-pressable text-left border-none w-full"
       style={{
-        position: 'relative',
+        ...style,
         padding: '10px 12px',
         border: isSelected ? '1.5px solid var(--c-gold)' : isFavorite ? '1.5px solid #f3b53f' : `1px solid color-mix(in srgb, ${rarityColor} 55%, var(--card-border))`,
         boxShadow: isFavorite ? '0 0 14px rgba(243, 181, 63, 0.3)' : `0 0 12px color-mix(in srgb, ${rarityColor} 13%, transparent)`,
@@ -820,6 +879,11 @@ const AnimalCard = memo(function AnimalCard({
       </div>
     </div>
   );
+});
+
+const ZooCashBalance = memo(function ZooCashBalance({ gs }: { gs: GameState }) {
+  const liveRub = useLiveRubBalance(gs) ?? gs.rub;
+  return <AnimatedNumber value={liveRub} format={fmtBalance} durationMs={850} />;
 });
 
 function GeneDots({ animal }: { animal: Animal }) {

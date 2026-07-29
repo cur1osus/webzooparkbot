@@ -50,10 +50,10 @@ export function TabBar({
   return (
     <nav
       ref={navRef}
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] backdrop-blur-xl z-[100]"
+      className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-[100]"
       style={{
         paddingBottom: 'var(--safe-bottom)',
-        background: 'color-mix(in srgb, var(--tg-theme-bottom-bar-bg-color) 94%, transparent)',
+        background: 'color-mix(in srgb, var(--tg-theme-bottom-bar-bg-color) 98%, var(--tg-theme-bg-color))',
         // No top border — a hairline here reads as a stray line across the screen. The soft
         // shadow alone lifts the bar off the content.
         boxShadow: '0 -8px 26px rgba(0,0,0,0.38)',

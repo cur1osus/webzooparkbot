@@ -4,12 +4,15 @@ import tgstickerUrl from '../lib/tgsticker/tgsticker.js?url';
 import rlottieRuntimeUrl from '../lib/tgsticker/rlottie-wasm.js?url';
 import rlottieWasmUrl from '../lib/tgsticker/rlottie-wasm.wasm?url';
 import tgstickerWorkerUrl from '../lib/tgsticker/tgsticker-worker.js?url';
+import { preferredTgsFps } from '@/lib/motion';
 
 declare global {
   interface Window {
     RLottie?: {
       init: (el: HTMLElement, opts?: Record<string, unknown>) => void;
       destroy: (el: HTMLElement) => void;
+      play: (el: HTMLElement, reset?: boolean) => void;
+      pause: (el: HTMLElement) => void;
       destroyWorkers?: () => void;
     };
     RLottieWorkerUrl?: string;
@@ -111,8 +114,9 @@ function waitForCanvas(picture: HTMLPictureElement, timeoutMs = 1200): Promise<b
 }
 
 export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; loop?: boolean }>(({ size, src, loop = false }, ref) => {
-  const pictureRef = useRef<HTMLPictureElement>(null);
+  const pictureRef = useRef<TgsPictureElement>(null);
   const sourceRef = useRef<HTMLSourceElement>(null);
+  const playbackAllowedRef = useRef(true);
 
   const playAnimation = useCallback(async (src: string): Promise<void> => {
     await loadRLottie();
@@ -130,15 +134,21 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; lo
     // frame and retry once if no canvas appears.
     await nextFrame();
     if (pictureRef.current !== picture || sourceRef.current !== source) return;
-    window.RLottie!.init(picture, loop ? {} : { playUntilEnd: true });
+    const playbackOptions = {
+      ...(loop ? {} : { playUntilEnd: true }),
+      maxDeviceRatio: document.documentElement.classList.contains('motion-quality-low') ? 1.5 : 2,
+      maxFps: preferredTgsFps(),
+    };
+    window.RLottie!.init(picture, playbackOptions);
     if (!(await waitForCanvas(picture))) {
       resetPlayer(picture);
       source.setAttribute('srcset', src);
       await nextFrame();
       if (pictureRef.current !== picture || sourceRef.current !== source) return;
-      window.RLottie!.init(picture, loop ? {} : { playUntilEnd: true });
+      window.RLottie!.init(picture, playbackOptions);
       await waitForCanvas(picture);
     }
+    if (loop && !playbackAllowedRef.current) window.RLottie.pause(picture);
     if (animationEnd) await animationEnd;
   }, [loop]);
 
@@ -176,6 +186,33 @@ export const TgsPlayer = forwardRef<TgsHandle, { size?: number; src?: string; lo
       if (mountedTgsPlayers === 0) window.RLottie?.destroyWorkers?.();
     };
   }, []);
+
+  useEffect(() => {
+    const picture = pictureRef.current;
+    if (!picture || !loop) return;
+    let inViewport = true;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    const syncPlayback = () => {
+      const allowed = inViewport && !document.hidden && !reducedMotion?.matches;
+      playbackAllowedRef.current = allowed;
+      if (!picture.rlPlayer || !window.RLottie) return;
+      if (allowed) window.RLottie.play(picture);
+      else window.RLottie.pause(picture);
+    };
+    const observer = new IntersectionObserver(entries => {
+      inViewport = entries.some(entry => entry.isIntersecting);
+      syncPlayback();
+    }, { rootMargin: '80px' });
+    observer.observe(picture);
+    document.addEventListener('visibilitychange', syncPlayback);
+    reducedMotion?.addEventListener?.('change', syncPlayback);
+    syncPlayback();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', syncPlayback);
+      reducedMotion?.removeEventListener?.('change', syncPlayback);
+    };
+  }, [loop]);
 
   return (
     <picture

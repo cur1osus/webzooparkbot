@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Nickname } from '@/components/NicknameEffects';
 import { ProfileBadge } from '@/components/ProfileBadge';
 import type { MaintenancePollStatus } from '@/types';
+import { observeMotionElement } from '@/lib/motion';
 
 const MAX_VISIBLE_PLAYERS = 15;
 
@@ -15,12 +16,19 @@ export function OnlinePlayersIndicator({
   placement?: 'floating' | 'inline';
 }) {
   const [expanded, setExpanded] = useState(false);
+  const motionRef = useRef<HTMLDivElement>(null);
   const players = data.online_players.slice(0, MAX_VISIBLE_PLAYERS);
 
   const expandedForDisplay = expanded && data.online_count > 0;
 
+  useEffect(() => {
+    const element = motionRef.current;
+    if (!element) return;
+    return observeMotionElement(element);
+  }, []);
+
   return (
-    <div className={`online-presence${placement === 'inline' ? ' online-presence-inline' : ''}${devBarVisible ? ' online-presence-dev' : ''}`}>
+    <div ref={motionRef} className={`online-presence${placement === 'inline' ? ' online-presence-inline' : ''}${devBarVisible ? ' online-presence-dev' : ''}`}>
       {expandedForDisplay && (
         <div className="online-presence-panel" role="dialog" aria-label="Игроки онлайн">
           <div className="online-presence-heading">

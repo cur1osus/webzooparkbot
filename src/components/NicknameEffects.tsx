@@ -1,6 +1,7 @@
-import type { CSSProperties, ElementType } from 'react';
+import { useEffect, useRef, type CSSProperties, type ElementType, type Ref } from 'react';
 import type { NicknameColor } from '@/types';
 import { nicknameColorClass, nicknameColorValue } from '@/data/nicknameColors';
+import { observeMotionElement } from '@/lib/motion';
 
 export function TextWave({ text }: { text: string }) {
   return (
@@ -64,8 +65,15 @@ export function Nickname({
   style?: CSSProperties;
 }) {
   const colorClass = nicknameColorClass(color);
+  const motionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = motionRef.current;
+    if (!element || !colorClass) return;
+    return observeMotionElement(element);
+  }, [colorClass]);
   return (
     <Tag
+      ref={motionRef as Ref<HTMLElement>}
       className={`nickname ${colorClass} ${className}`.replace(/\s+/g, ' ').trim()}
       style={{ color: nicknameColorValue(color), ...style }}
     >
